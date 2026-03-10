@@ -268,6 +268,25 @@ const Index = () => {
               {user && <Notifications userId={user.id} />}
               <Button
                 variant="outline"
+                size="icon"
+                onClick={() => setIsSettingsOpen(true)}
+                title="Settings"
+              >
+                <Settings className="w-5 h-5 text-muted-foreground" />
+              </Button>
+              <Button
+                variant="outline"
+                size="icon"
+                className="sm:hidden"
+                onClick={handleSignOut}
+                data-testid="button-signout"
+                title="Sign Out"
+              >
+                <LogOut className="w-4 h-4" />
+              </Button>
+              <Button
+                variant="outline"
+                className="hidden sm:flex"
                 onClick={handleSignOut}
                 data-testid="button-signout"
               >
@@ -283,23 +302,23 @@ const Index = () => {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="mb-6 space-y-4">
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <TabsList>
+              <TabsList className="overflow-x-auto flex-nowrap w-full sm:w-auto">
                 <TabsTrigger value="list" data-testid="tab-list">My List</TabsTrigger>
                 <TabsTrigger value="radar" data-testid="tab-radar">
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Radar
+                  <Sparkles className="w-4 h-4 mr-1" />
+                  <span className="hidden sm:inline">Radar</span>
                 </TabsTrigger>
                 <TabsTrigger value="ranking" data-testid="tab-ranking">
-                  <Trophy className="w-4 h-4 mr-2" />
-                  Rankings
+                  <Trophy className="w-4 h-4 mr-1" />
+                  <span className="hidden sm:inline">Rankings</span>
                 </TabsTrigger>
                 <TabsTrigger value="analytics" data-testid="tab-analytics">
-                  <PieChart className="w-4 h-4 mr-2" />
-                  Analytics
+                  <PieChart className="w-4 h-4 mr-1" />
+                  <span className="hidden sm:inline">Analytics</span>
                 </TabsTrigger>
                 <TabsTrigger value="friends" data-testid="tab-friends">
-                  <Users className="w-4 h-4 mr-2" />
-                  Friends
+                  <Users className="w-4 h-4 mr-1" />
+                  <span className="hidden sm:inline">Friends</span>
                 </TabsTrigger>
               </TabsList>
             </div>

@@ -44,13 +44,13 @@ const Friends = ({ currentUserId }: FriendsProps) => {
   const [pendingRequests, setPendingRequests] = useState<Friend[]>([]);
   const [searchShortId, setSearchShortId] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  
+
   const [friendAnimeList, setFriendAnimeList] = useState<Anime[]>([]);
   const [filteredFriendAnimeList, setFilteredFriendAnimeList] = useState<Anime[]>([]);
   const [selectedFriendForList, setSelectedFriendForList] = useState<string>("");
   const [friendSearchQuery, setFriendSearchQuery] = useState("");
   const [friendStatusFilter, setFriendStatusFilter] = useState<string>("all");
-  const [friendHentaiFilter, setFriendHentaiFilter] = useState<string>("show");
+  const [friendHentaiFilter, setFriendHentaiFilter] = useState<string>("hide");
   const [friendRankingFilter, setFriendRankingFilter] = useState<string>("all");
 
   const fetchFriendsData = async () => {
@@ -139,22 +139,30 @@ const Friends = ({ currentUserId }: FriendsProps) => {
       toast.error("Please enter a valid 5-character User ID");
       return;
     }
+    if (searchShortId.toUpperCase().trim() === user?.shortId?.toUpperCase()) {
+      toast.error("You can't add yourself!");
+      return;
+    }
 
     setIsLoading(true);
     try {
       const profile = await getProfileByShortId(searchShortId.toUpperCase().trim());
       if (!profile) {
-        toast.error("User not found");
+        toast.error("No user found with that ID. Check the ID and try again.");
         return;
       }
       await sendFriendRequest(profile.id);
-      toast.success("Friend request sent!");
+      toast.success(`Friend request sent to ${profile.name || "user"}!`);
       setSearchShortId("");
       fetchFriendsData();
       fetchFriendRequestsData();
     } catch (error: any) {
       console.error("Error sending friend request:", error);
-      toast.error(error.message || "Failed to send friend request");
+      if (error.message?.includes('duplicate') || error.code === '23505') {
+        toast.error("You already sent a request to this user, or you're already friends.");
+      } else {
+        toast.error(error.message || "Failed to send friend request");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -185,7 +193,7 @@ const Friends = ({ currentUserId }: FriendsProps) => {
 
   const copyShortId = () => {
     if (user?.shortId) {
-      navigator.clipboard.writeText(user.shortId);
+      navigator.clipboard.writeText(user.shortId.toUpperCase());
       toast.success("Your User ID copied to clipboard!");
     }
   };
@@ -299,8 +307,8 @@ const Friends = ({ currentUserId }: FriendsProps) => {
                             rating: s.rating,
                             notes: s.notes || "",
                           }))}
-                          onEdit={() => {}}
-                          onDelete={() => {}}
+                          onEdit={() => { }}
+                          onDelete={() => { }}
                           readOnly
                         />
                       ))}
@@ -407,12 +415,18 @@ const Friends = ({ currentUserId }: FriendsProps) => {
                   Share this ID with friends so they can add you
                 </p>
                 <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="text-lg font-mono px-4 py-2">
-                    {user?.shortId || "Loading..."}
-                  </Badge>
-                  <Button variant="outline" size="icon" onClick={copyShortId} data-testid="button-copy-id">
-                    <Copy className="h-4 w-4" />
-                  </Button>
+                  {user?.shortId ? (
+                    <>
+                      <Badge variant="secondary" className="text-lg font-mono px-4 py-2 tracking-widest">
+                        {user.shortId.toUpperCase()}
+                      </Badge>
+                      <Button variant="outline" size="icon" onClick={copyShortId} data-testid="button-copy-id">
+                        <Copy className="h-4 w-4" />
+                      </Button>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground italic">Loading your User ID... (try refreshing if this persists)</p>
+                  )}
                 </div>
               </div>
 

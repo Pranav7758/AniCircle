@@ -142,7 +142,7 @@ export async function getFriends(): Promise<FriendData[]> {
     const otherUserId = friend.user_id === user.id ? friend.friend_id : friend.user_id;
     const { data: profile } = await supabase
       .from('profiles')
-      .select('name')
+      .select('username')
       .eq('id', otherUserId)
       .single();
 
@@ -151,7 +151,7 @@ export async function getFriends(): Promise<FriendData[]> {
       userId: friend.user_id,
       friendId: friend.friend_id,
       status: friend.status,
-      friendName: profile?.name || 'Friend',
+      friendName: profile?.username || 'User',
     };
   }));
 
@@ -173,7 +173,7 @@ export async function getFriendRequests(): Promise<FriendData[]> {
   const requestsWithNames = await Promise.all((data || []).map(async (friend) => {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('name')
+      .select('username')
       .eq('id', friend.user_id)
       .single();
 
@@ -182,7 +182,7 @@ export async function getFriendRequests(): Promise<FriendData[]> {
       userId: friend.user_id,
       friendId: friend.friend_id,
       status: friend.status,
-      friendName: profile?.name || 'Friend',
+      friendName: profile?.username || 'User',
     };
   }));
 
@@ -284,10 +284,10 @@ export async function markAllNotificationsRead(): Promise<void> {
 export async function getProfileByShortId(shortId: string): Promise<{ id: string; name: string } | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, name')
-    .eq('short_id', shortId.toUpperCase())
+    .select('id, username')
+    .eq('short_id', shortId.toLowerCase())
     .single();
 
   if (error) return null;
-  return data;
+  return data ? { id: data.id, name: data.username || 'User' } : null;
 }
