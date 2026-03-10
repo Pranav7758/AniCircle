@@ -1,0 +1,48 @@
+modules = ["nodejs-20", "web"]
+[nix]
+channel = "stable-25_05"
+packages = ["unzip"]
+
+[agent]
+expertMode = true
+
+[userenv]
+
+[userenv.shared]
+VITE_SUPABASE_URL = "https://qakolgnkvrtbbmjfalzv.supabase.co"
+VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFha29sZ25rdnJ0YmJtamZhbHp2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM4Nzk3NTUsImV4cCI6MjA3OTQ1NTc1NX0.CYVGl8bEmfY17eLlRNeE2Iru3i11HLv0930FblayxQg"
+SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFha29sZ25rdnJ0YmJtamZhbHp2Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2Mzg3OTc1NSwiZXhwIjoyMDc5NDU1NzU1fQ.QkdtQwzVwPJyvT-q7VumajOzQjx8r0wdb4S1zWd1lrc"
+SUPABASE_DATABASE_URL = "postgresql://postgres.qakolgnkvrtbbmjfalzv:Pranav123%40gmail.com@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run dev"
+waitForPort = 5000
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["node", "./dist/index.cjs"]
+build = ["npm", "run", "build"]
