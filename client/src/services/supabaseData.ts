@@ -11,6 +11,7 @@ export interface AnimeData {
   coverImage: string | null;
   seasonNumber: number;
   malId: number | null;
+  anilistId: number | null;
   ranking: number | null;
   isHentai: boolean | null;
 }
@@ -38,7 +39,7 @@ function snakeToCamel(obj: any): any {
   if (obj === null || obj === undefined) return obj;
   if (Array.isArray(obj)) return obj.map(snakeToCamel);
   if (typeof obj !== 'object') return obj;
-  
+
   const result: any = {};
   for (const key in obj) {
     const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
@@ -51,7 +52,7 @@ function camelToSnake(obj: any): any {
   if (obj === null || obj === undefined) return obj;
   if (Array.isArray(obj)) return obj.map(camelToSnake);
   if (typeof obj !== 'object') return obj;
-  
+
   const result: any = {};
   for (const key in obj) {
     const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
@@ -136,7 +137,7 @@ export async function getFriends(): Promise<FriendData[]> {
     .eq('status', 'accepted');
 
   if (error) throw error;
-  
+
   const friendsWithNames = await Promise.all((data || []).map(async (friend) => {
     const otherUserId = friend.user_id === user.id ? friend.friend_id : friend.user_id;
     const { data: profile } = await supabase
@@ -144,7 +145,7 @@ export async function getFriends(): Promise<FriendData[]> {
       .select('name')
       .eq('id', otherUserId)
       .single();
-    
+
     return {
       id: friend.id,
       userId: friend.user_id,
@@ -153,7 +154,7 @@ export async function getFriends(): Promise<FriendData[]> {
       friendName: profile?.name || 'Friend',
     };
   }));
-  
+
   return friendsWithNames;
 }
 
@@ -168,14 +169,14 @@ export async function getFriendRequests(): Promise<FriendData[]> {
     .eq('status', 'pending');
 
   if (error) throw error;
-  
+
   const requestsWithNames = await Promise.all((data || []).map(async (friend) => {
     const { data: profile } = await supabase
       .from('profiles')
       .select('name')
       .eq('id', friend.user_id)
       .single();
-    
+
     return {
       id: friend.id,
       userId: friend.user_id,
@@ -184,7 +185,7 @@ export async function getFriendRequests(): Promise<FriendData[]> {
       friendName: profile?.name || 'Friend',
     };
   }));
-  
+
   return requestsWithNames;
 }
 

@@ -38,6 +38,7 @@ interface AddAnimeDialogProps {
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: AnimeFormData) => Promise<void>;
   initialData?: AnimeFormData & { id?: string };
+  initialSearchQuery?: string;
   isEditing?: boolean;
 }
 
@@ -68,7 +69,7 @@ export interface AnimeFormData {
   isHentai?: boolean; // Manual flag to mark anime as hentai
 }
 
-const AddAnimeDialog = ({ open, onOpenChange, onSubmit, initialData, isEditing = false }: AddAnimeDialogProps) => {
+const AddAnimeDialog = ({ open, onOpenChange, onSubmit, initialData, initialSearchQuery, isEditing = false }: AddAnimeDialogProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
@@ -132,11 +133,11 @@ const AddAnimeDialog = ({ open, onOpenChange, onSubmit, initialData, isEditing =
         });
         setShowSearch(true);
       }
-      setSearchQuery("");
+      setSearchQuery(initialSearchQuery || "");
       setSearchResults([]);
       setIsFetchingSeasons(false);
     }
-  }, [open, initialData, isEditing]);
+  }, [open, initialData, initialSearchQuery, isEditing]);
 
   // Debounced search effect
   useEffect(() => {
@@ -248,7 +249,7 @@ const AddAnimeDialog = ({ open, onOpenChange, onSubmit, initialData, isEditing =
         relations.edges.forEach((rel: any) => {
           // Include ALL Sequel, Prequel, and Season relations
           if (rel.relationType === "SEQUEL" || rel.relationType === "PREQUEL" || rel.relationType === "ALTERNATIVE") {
-            if (rel.node && rel.node.format === "TV") {
+            if (rel.node && (rel.node.format === "TV" || rel.node.format === "TV_SHORT" || rel.node.format === "MOVIE" || rel.node.format === "ONA")) {
               relatedIds.add(rel.node.id);
             }
           }

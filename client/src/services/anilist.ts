@@ -4,60 +4,60 @@ const ANILIST_API_URL = "https://graphql.anilist.co";
 
 // Simple in-memory cache configuration
 interface CacheEntry<T> {
-    data: T;
-    timestamp: number;
+  data: T;
+  timestamp: number;
 }
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const queryCache = new Map<string, CacheEntry<any>>();
 
 export async function fetchAniList<T = any>(
-    query: string,
-    variables: Record<string, any> = {},
-    useCache: boolean = true
+  query: string,
+  variables: Record<string, any> = {},
+  useCache: boolean = true
 ): Promise<T> {
-    const cacheKey = JSON.stringify({ query, variables });
+  const cacheKey = JSON.stringify({ query, variables });
 
-    if (useCache && queryCache.has(cacheKey)) {
-        const cached = queryCache.get(cacheKey)!;
-        if (Date.now() - cached.timestamp < CACHE_TTL_MS) {
-            return cached.data as T;
-        }
+  if (useCache && queryCache.has(cacheKey)) {
+    const cached = queryCache.get(cacheKey)!;
+    if (Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      return cached.data as T;
     }
+  }
 
-    const response = await fetch(ANILIST_API_URL, {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
-        body: JSON.stringify({
-            query,
-            variables,
-        }),
+  const response = await fetch(ANILIST_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+    },
+    body: JSON.stringify({
+      query,
+      variables,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`AniList API error: ${response.status} ${response.statusText} - ${errorText}`);
+  }
+
+  const json = await response.json();
+
+  if (json.errors) {
+    console.error("AniList GraphQL Errors:", json.errors);
+    throw new Error(`GraphQL Error: ${json.errors[0]?.message || "Unknown error"}`);
+  }
+
+  const data = json.data as T;
+
+  if (useCache) {
+    queryCache.set(cacheKey, {
+      data,
+      timestamp: Date.now(),
     });
+  }
 
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`AniList API error: ${response.status} ${response.statusText} - ${errorText}`);
-    }
-
-    const json = await response.json();
-
-    if (json.errors) {
-        console.error("AniList GraphQL Errors:", json.errors);
-        throw new Error(`GraphQL Error: ${json.errors[0]?.message || "Unknown error"}`);
-    }
-
-    const data = json.data as T;
-
-    if (useCache) {
-        queryCache.set(cacheKey, {
-            data,
-            timestamp: Date.now(),
-        });
-    }
-
-    return data;
+  return data;
 }
 
 // Pre-defined Queries
@@ -138,6 +138,101 @@ export const GET_ANIME_DETAILS_QUERY = `
       description
       format
       seasonYear
+    }
+  }
+`;
+
+export const GET_AIRING_SCHEDULE_QUERY = `
+  query ($ids: [Int]) {
+    Page(page: 1, perPage: 50) {
+      media(id_in: $ids, type: ANIME) {
+        id
+        idMal
+        title {
+          romaji
+          english
+        }
+        coverImage {
+          medium
+          large
+        }
+        nextAiringEpisode {
+          airingAt
+          timeUntilAiring
+          episode
+        }
+        status
+        episodes
+      }
+    }
+  }
+`;
+
+export const GET_SEQUELS_QUERY = `
+  query ($ids: [Int]) {
+    Page(page: 1, perPage: 50) {
+      media(id_in: $ids, type: ANIME) {
+        id
+        title {
+          romaji
+          english
+        }
+        relations {
+          edges {
+            relationType
+            node {
+              id
+              idMal
+              type
+              format
+              status
+              episodes
+              coverImage {
+                large
+              }
+              title {
+                romaji
+                english
+              }
+              startDate {
+                year
+                month
+                day
+              }
+              nextAiringEpisode {
+                airingAt
+                timeUntilAiring
+                episode
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+export const GET_ANALYTICS_QUERY = `
+  query ($ids: [Int]) {
+    Page(page: 1, perPage: 50) {
+      media(id_in: $ids, type: ANIME) {
+        id
+        idMal
+        format
+        duration
+        episodes
+        genres
+        seasonYear
+        title {
+          english
+          romaji
+        }
+        studios(isMain: true) {
+          nodes {
+            name
+          }
+        }
+      }
     }
   }
 `;

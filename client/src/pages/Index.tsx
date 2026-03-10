@@ -5,16 +5,18 @@ import { getAnimeList, createAnime, updateAnime, deleteAnime } from "@/services/
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LogOut, Plus, Search, Trophy, Users } from "lucide-react";
+import { LogOut, Plus, Search, Sparkles, Trophy, Users, Settings, PieChart } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import AnimeRanking from "@/components/AnimeRanking";
 import Friends from "@/components/Friends";
 import { toast } from "sonner";
 import AnimeGroupCard from "@/components/AnimeGroupCard";
 import AddAnimeDialog, { AnimeFormData } from "@/components/AddAnimeDialog";
 import Notifications from "@/components/Notifications";
-import Footer from "@/components/Footer";
 import NewEpisodesBanner from "@/components/NewEpisodesBanner";
+import Radar from "@/components/Radar";
+import AnalyticsDashboard from "@/components/AnalyticsDashboard";
 import { Loader2 } from "lucide-react";
 
 interface Anime {
@@ -40,10 +42,12 @@ const Index = () => {
   const [filteredAnimeList, setFilteredAnimeList] = useState<Anime[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [hentaiFilter, setHentaiFilter] = useState<string>("show");
+  const [hentaiFilter, setHentaiFilter] = useState<string>("hide");
   const [rankingFilter, setRankingFilter] = useState<string>("all");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [editingAnime, setEditingAnime] = useState<(Anime & AnimeFormData) | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [prefilledSearchQuery, setPrefilledSearchQuery] = useState("");
+  const [editingAnime, setEditingAnime] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("list");
   const [gridSize, setGridSize] = useState<string>(() => {
@@ -251,12 +255,15 @@ const Index = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="sticky top-0 z-10 border-b border-border/50 bg-background/80 backdrop-blur-lg">
-        <div className="container mx-auto px-4 py-4">
+      <header className="sticky top-0 z-10 border-b border-border/50 glass bg-glow">
+        <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between gap-2">
-            <h2 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-primary via-primary/80 to-primary/60 bg-clip-text text-transparent">
-              AniCircle
-            </h2>
+            <div className="flex items-center gap-3">
+              <img src="/logo.png" alt="AniCircle" className="h-9 w-9 rounded-full shadow-neon" />
+              <h2 className="text-xl sm:text-2xl font-bold text-gradient">
+                AniCircle
+              </h2>
+            </div>
             <div className="flex items-center gap-2">
               {user && <Notifications userId={user.id} />}
               <Button
@@ -278,9 +285,17 @@ const Index = () => {
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <TabsList>
                 <TabsTrigger value="list" data-testid="tab-list">My List</TabsTrigger>
+                <TabsTrigger value="radar" data-testid="tab-radar">
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  Radar
+                </TabsTrigger>
                 <TabsTrigger value="ranking" data-testid="tab-ranking">
                   <Trophy className="w-4 h-4 mr-2" />
                   Rankings
+                </TabsTrigger>
+                <TabsTrigger value="analytics" data-testid="tab-analytics">
+                  <PieChart className="w-4 h-4 mr-2" />
+                  Analytics
                 </TabsTrigger>
                 <TabsTrigger value="friends" data-testid="tab-friends">
                   <Users className="w-4 h-4 mr-2" />
@@ -305,6 +320,15 @@ const Index = () => {
                     <SelectItem value="extra-large">Extra Large (3 per row)</SelectItem>
                   </SelectContent>
                 </Select>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setIsSettingsOpen(true)}
+                  className="hidden sm:flex"
+                  title="Settings"
+                >
+                  <Settings className="w-5 h-5 text-muted-foreground" />
+                </Button>
                 <Button
                   onClick={() => setIsAddDialogOpen(true)}
                   className="w-full sm:w-auto gradient-primary hover:opacity-90 transition-smooth shadow-glow"
@@ -342,16 +366,6 @@ const Index = () => {
                     <SelectItem value="plan_to_watch">Plan to Watch</SelectItem>
                     <SelectItem value="on_hold">On Hold</SelectItem>
                     <SelectItem value="dropped">Dropped</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={hentaiFilter} onValueChange={setHentaiFilter}>
-                  <SelectTrigger className="w-full md:w-48" data-testid="select-hentai-filter">
-                    <SelectValue placeholder="Hentai filter" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="show">Show All</SelectItem>
-                    <SelectItem value="hide">Hide Hentai</SelectItem>
-                    <SelectItem value="only">Hentai Only</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={rankingFilter} onValueChange={setRankingFilter}>
@@ -400,9 +414,23 @@ const Index = () => {
                     }))}
                     onEdit={openEditDialog}
                     onDelete={handleDeleteAnime}
+                    onAddSeason={(title) => {
+                      setPrefilledSearchQuery(title);
+                      setIsAddDialogOpen(true);
+                    }}
                   />
                 ))}
               </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="radar" className="pt-2">
+            {user && (
+              <Radar
+                userId={user.id}
+                animeList={animeList}
+                onAddAnime={handleAddAnime}
+              />
             )}
           </TabsContent>
 
@@ -419,13 +447,21 @@ const Index = () => {
           <TabsContent value="friends" className="space-y-4">
             {user && <Friends currentUserId={user.id} />}
           </TabsContent>
+
+          <TabsContent value="analytics" className="space-y-4 pt-4">
+            <AnalyticsDashboard />
+          </TabsContent>
         </Tabs>
       </main>
 
       <AddAnimeDialog
         open={isAddDialogOpen}
-        onOpenChange={setIsAddDialogOpen}
+        onOpenChange={(open) => {
+          setIsAddDialogOpen(open);
+          if (!open) setPrefilledSearchQuery("");
+        }}
         onSubmit={handleAddAnime}
+        initialSearchQuery={prefilledSearchQuery}
       />
 
       {editingAnime && (
@@ -437,7 +473,63 @@ const Index = () => {
           isEditing
         />
       )}
-      <Footer />
+
+      <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+        <DialogContent className="sm:max-w-md bg-card/95 backdrop-blur-xl border-border/50 shadow-neon">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="w-5 h-5 text-primary" />
+              Settings & Preferences
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-6 py-4 animate-fade-in">
+            <div className="space-y-4">
+              <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Content Filters</h4>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-border/50 bg-background/50 holo-glass">
+                <div className="space-y-1">
+                  <span className="text-sm font-semibold text-foreground block">Mature Content</span>
+                  <span className="text-xs text-muted-foreground block leading-relaxed">Toggle visibility of adult/18+ anime in your dashboard lists</span>
+                </div>
+                <Select value={hentaiFilter} onValueChange={setHentaiFilter}>
+                  <SelectTrigger className="w-[140px] shrink-0" data-testid="select-hentai-filter">
+                    <SelectValue placeholder="Filter" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="hide">Hide (Default)</SelectItem>
+                    <SelectItem value="show">Show All</SelectItem>
+                    <SelectItem value="only">Only Mature</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Display</h4>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-border/50 bg-background/50 holo-glass">
+                <div className="space-y-1">
+                  <span className="text-sm font-semibold text-foreground block">Card Grid Size</span>
+                  <span className="text-xs text-muted-foreground block leading-relaxed">Customize how dense your anime library list appears</span>
+                </div>
+                <Select value={gridSize} onValueChange={(value) => {
+                  setGridSize(value);
+                  localStorage.setItem("animeGridSize", value);
+                }}>
+                  <SelectTrigger className="w-[140px] shrink-0" data-testid="select-grid-size-settings">
+                    <SelectValue placeholder="View size" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="compact">Compact</SelectItem>
+                    <SelectItem value="small">Small</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="large">Large</SelectItem>
+                    <SelectItem value="extra-large">Extra Large</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -2,7 +2,7 @@ import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Pencil, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { Pencil, Trash2, ChevronDown, ChevronUp, Plus } from "lucide-react";
 import { useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
@@ -22,6 +22,7 @@ interface AnimeGroupCardProps {
   seasons: Season[];
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
+  onAddSeason?: (title: string) => void;
 }
 
 const statusColors = {
@@ -46,6 +47,7 @@ const AnimeGroupCard = ({
   seasons,
   onEdit,
   onDelete,
+  onAddSeason,
 }: AnimeGroupCardProps) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -53,22 +55,23 @@ const AnimeGroupCard = ({
   const totalEpisodesWatched = seasons.reduce((sum, s) => sum + s.episodesWatched, 0);
   const totalEpisodes = seasons.reduce((sum, s) => sum + (s.totalEpisodes || 0), 0);
   const overallProgress = totalEpisodes > 0 ? (totalEpisodesWatched / totalEpisodes) * 100 : 0;
-  const avgRating = seasons.filter(s => s.rating).length > 0 
+  const avgRating = seasons.filter(s => s.rating).length > 0
     ? Math.round(seasons.reduce((sum, s) => sum + (s.rating || 0), 0) / seasons.filter(s => s.rating).length)
     : null;
 
   // Get primary status (most recent or completed)
-  const primaryStatus = seasons.find(s => s.status === "watching")?.status || 
-                       seasons.find(s => s.status === "completed")?.status || 
-                       seasons[0]?.status || "watching";
+  const primaryStatus = seasons.find(s => s.status === "watching")?.status ||
+    seasons.find(s => s.status === "completed")?.status ||
+    seasons[0]?.status || "watching";
 
   return (
-    <Card className="anime-card-hover border-border/50 gradient-card overflow-hidden group">
-      <CardHeader className="p-0 relative">
-        <div className="aspect-[3/4] bg-muted relative overflow-hidden">
+    <Card className="card-3d-hover perspective-1000 transform-3d border-border/50 glass overflow-visible group">
+      <CardHeader className="p-0 relative transform-3d border-b border-white/5">
+        <div className="aspect-[3/4] bg-muted relative overflow-hidden rounded-t-xl">
+          <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent z-10 pointer-events-none" />
           {coverImage ? (
-            <img 
-              src={coverImage} 
+            <img
+              src={coverImage}
               alt={title}
               className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
             />
@@ -85,9 +88,9 @@ const AnimeGroupCard = ({
           </div>
         </div>
       </CardHeader>
-      <CardContent className="p-2 sm:p-3 space-y-2">
-        <h3 className="font-bold text-sm sm:text-base line-clamp-2 text-foreground">{title}</h3>
-        
+      <CardContent className="p-3 sm:p-4 space-y-3 relative z-20 bg-background/40 backdrop-blur-md">
+        <h3 className="font-bold text-sm sm:text-base line-clamp-2 text-gradient-accent drop-shadow-md">{title}</h3>
+
         <div className="space-y-1.5">
           <div className="flex justify-between text-xs sm:text-sm">
             <span className="text-muted-foreground">Progress</span>
@@ -121,7 +124,7 @@ const AnimeGroupCard = ({
             {seasons.sort((a, b) => a.seasonNumber - b.seasonNumber).map((season) => {
               const progress = season.totalEpisodes ? (season.episodesWatched / season.totalEpisodes) * 100 : 0;
               return (
-                <div key={season.id} className="border border-border/50 rounded-lg p-2 sm:p-3 space-y-2 bg-card/50">
+                <div key={season.id} className="border border-primary/20 rounded-lg p-2 sm:p-3 space-y-2 holo-glass">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0">
                       <span className="font-semibold text-foreground text-xs sm:text-base whitespace-nowrap">Season {season.seasonNumber}</span>
@@ -168,8 +171,22 @@ const AnimeGroupCard = ({
           </CollapsibleContent>
         </Collapsible>
       </CardContent>
-      <CardFooter className="p-2 sm:p-3 pt-0">
-        <p className="text-[10px] sm:text-xs text-muted-foreground">Expand to edit seasons</p>
+      <CardFooter className="p-3 sm:p-4 pt-0 flex justify-between items-center bg-background/40 rounded-b-xl border-t border-white/5">
+        <p className="text-[10px] sm:text-xs text-muted-foreground font-medium">Expand to edit seasons</p>
+        {onAddSeason && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-[10px] sm:text-xs h-6 px-2 hover:bg-primary/10 hover:text-primary transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddSeason(title);
+            }}
+          >
+            <Plus className="w-3 h-3 mr-1" />
+            Add Season
+          </Button>
+        )}
       </CardFooter>
     </Card>
   );

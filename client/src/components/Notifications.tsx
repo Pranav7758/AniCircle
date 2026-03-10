@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
+import { usePushNotifications } from "@/hooks/use-push-notifications";
 
 interface Notification {
   id: string;
@@ -31,6 +32,7 @@ const Notifications = ({ userId }: NotificationsProps) => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const { isSupported, permission, isSubscribed, isSubscribing, subscribe, triggerLocalTestNotification } = usePushNotifications();
 
   const fetchNotificationsData = async () => {
     if (!userId) return;
@@ -108,6 +110,31 @@ const Notifications = ({ userId }: NotificationsProps) => {
             </Button>
           )}
         </div>
+
+        {isSupported && !isSubscribed && permission !== 'denied' && (
+          <div className="bg-primary/10 border-b border-primary/20 p-3 flex flex-col gap-2">
+            <p className="text-xs text-primary font-medium flex items-center gap-1">
+              <Bell className="w-3 h-3" /> Get instant alerts for new episodes!
+            </p>
+            <Button
+              size="sm"
+              variant="default"
+              className="w-full text-xs h-7 bg-primary hover:bg-primary/90 shadow-[0_0_10px_rgba(139,92,246,0.5)]"
+              onClick={subscribe}
+              disabled={isSubscribing}
+            >
+              {isSubscribing ? "Enabling..." : "Enable Push Notifications"}
+            </Button>
+          </div>
+        )}
+
+        {isSubscribed && (
+          <div className="bg-muted/30 border-b border-border/50 p-2 flex justify-between items-center">
+            <span className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">Push Enabled</span>
+            <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={triggerLocalTestNotification}>Test Alert</Button>
+          </div>
+        )}
+
         <ScrollArea className="h-[400px]">
           {isLoading ? (
             <div className="p-4 text-center text-sm text-muted-foreground">
@@ -122,9 +149,8 @@ const Notifications = ({ userId }: NotificationsProps) => {
               {notifications.map((notification) => (
                 <div
                   key={notification.id}
-                  className={`p-4 hover:bg-accent/50 transition-colors ${
-                    !notification.read ? "bg-accent/30" : ""
-                  }`}
+                  className={`p-4 hover:bg-accent/50 transition-colors ${!notification.read ? "bg-accent/30" : ""
+                    }`}
                   data-testid={`notification-${notification.id}`}
                 >
                   <div className="flex items-start justify-between gap-2">
