@@ -191,12 +191,21 @@ export const GET_AIRING_SCHEDULE_QUERY = `
         }
         status
         episodes
+        season
+        seasonYear
+        airingSchedule(notYetAired: true, page: 1, perPage: 3) {
+          nodes {
+            episode
+            airingAt
+          }
+        }
       }
     }
   }
 `;
 
-export const GET_SEQUELS_QUERY = `
+// Deep relation traversal query — fetches SEQUEL + SIDE_STORY + ALTERNATIVE_SETTING relations
+export const GET_RELATIONS_DEEP_QUERY = `
   query ($ids: [Int]) {
     Page(page: 1, perPage: 50) {
       media(id_in: $ids, type: ANIME) {
@@ -215,8 +224,11 @@ export const GET_SEQUELS_QUERY = `
               format
               status
               episodes
+              season
+              seasonYear
               coverImage {
                 large
+                medium
               }
               title {
                 romaji
@@ -227,11 +239,15 @@ export const GET_SEQUELS_QUERY = `
                 month
                 day
               }
+              endDate {
+                year
+              }
               nextAiringEpisode {
                 airingAt
                 timeUntilAiring
                 episode
               }
+              averageScore
             }
           }
         }
@@ -239,6 +255,8 @@ export const GET_SEQUELS_QUERY = `
     }
   }
 `;
+
+export const GET_SEQUELS_QUERY = GET_RELATIONS_DEEP_QUERY;
 
 export const GET_ANALYTICS_QUERY = `
   query ($ids: [Int]) {
