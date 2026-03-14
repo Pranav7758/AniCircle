@@ -52,6 +52,10 @@ export default function Radar({ userId, animeList, onAddAnime }: RadarProps) {
     const [behindShows, setBehindShows] = useState<any[]>([]);
     const [loadingSchedule, setLoadingSchedule] = useState(true);
     const [loadingSequels, setLoadingSequels] = useState(true);
+    const [airingError, setAiringError] = useState<string | null>(null);
+    const [sequelError, setSequelError] = useState<string | null>(null);
+    const [scheduleRetry, setScheduleRetry] = useState(0);
+    const [sequelRetry, setSequelRetry] = useState(0);
 
     // Only "watching" anime with anilistId for the airing schedule
     const watchingIds = animeList
@@ -69,6 +73,8 @@ export default function Radar({ userId, animeList, onAddAnime }: RadarProps) {
     useEffect(() => {
         async function loadAiringSchedule() {
             if (watchingIds.length === 0) { setLoadingSchedule(false); return; }
+            setLoadingSchedule(true);
+            setAiringError(null);
             try {
                 const chunkSize = 50;
                 let allAiring: any[] = [];
@@ -77,7 +83,8 @@ export default function Radar({ userId, animeList, onAddAnime }: RadarProps) {
                     if (data?.Page?.media) allAiring = [...allAiring, ...data.Page.media];
                 }
 
-                // Sort by nearest airing
+                // Filter out any without airing data first, then sort by nearest
+                allAiring = allAiring.filter((m: any) => m.nextAiringEpisode);
                 allAiring.sort((a: any, b: any) => a.nextAiringEpisode.airingAt - b.nextAiringEpisode.airingAt);
 
                 const enriched = allAiring
@@ -103,18 +110,21 @@ export default function Radar({ userId, animeList, onAddAnime }: RadarProps) {
                     .sort((a, b) => b.epsBehind - a.epsBehind);
 
                 setBehindShows(behind);
-            } catch (err) {
-                console.error("Failed to fetch airing schedule:", err);
+            } catch (err: any) {
+                console.error("Airing schedule fetch failed:", err?.message || err);
+                setAiringError(err?.message || "Failed to fetch airing schedule");
             } finally {
                 setLoadingSchedule(false);
             }
         }
         loadAiringSchedule();
-    }, [JSON.stringify(watchingIds)]);
+    }, [JSON.stringify(watchingIds), scheduleRetry]);
 
     useEffect(() => {
         async function loadMissingSequels() {
             if (completedOrWatchingIds.length === 0) { setLoadingSequels(false); return; }
+            setLoadingSequels(true);
+            setSequelError(null);
             try {
                 const chunkSize = 50;
                 const newSequelsMap = new Map();
@@ -199,14 +209,15 @@ export default function Radar({ userId, animeList, onAddAnime }: RadarProps) {
                 });
 
                 setMissingSequels(filtered);
-            } catch (err) {
-                console.error("Failed to fetch sequels:", err);
+            } catch (err: any) {
+                console.error("Sequel fetch failed:", err?.message || err);
+                setSequelError(err?.message || "Failed to fetch sequels");
             } finally {
                 setLoadingSequels(false);
             }
         }
         loadMissingSequels();
-    }, [JSON.stringify(completedOrWatchingIds), animeList.length]);
+    }, [JSON.stringify(completedOrWatchingIds), animeList.length, sequelRetry]);
 
     const handleQuickAdd = async (sequelNode: any) => {
         try {
@@ -248,12 +259,31 @@ export default function Radar({ userId, animeList, onAddAnime }: RadarProps) {
 
                 {loadingSchedule ? (
                     <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin opacity-50" /></div>
+                ) : airingError ? (
+                    <Card className="bg-muted/30 border-dashed border-orange-500/30">
+                        <CardContent className="flex flex-col items-center justify-center p-10 text-center gap-3">
+                            <AlertTriangle className="h-10 w-10 mb-1 text-orange-400 opacity-70" />
+                            <p className="font-medium text-foreground">Couldn't load airing schedule</p>
+                            <p className="text-xs text-muted-foreground max-w-xs">{airingError.includes("rate_limit") ? "AniList API is rate-limited. Wait a moment and retry." : airingError}</p>
+                            <Button size="sm" variant="outline" onClick={() => setScheduleRetry(r => r + 1)} className="mt-1 gap-1.5">
+                                <Loader2 className="w-3.5 h-3.5" /> Retry
+                            </Button>
+                        </CardContent>
+                    </Card>
+                ) : watchingIds.length === 0 ? (
+                    <Card className="bg-muted/30 border-dashed">
+                        <CardContent className="flex flex-col items-center justify-center p-10 text-center text-muted-foreground gap-2">
+                            <Tv className="h-10 w-10 mb-1 opacity-20" />
+                            <p className="font-medium">No watching anime with AniList IDs</p>
+                            <p className="text-xs">Add anime via search (not manual) to get airing schedule data.</p>
+                        </CardContent>
+                    </Card>
                 ) : airingSchedule.length === 0 ? (
                     <Card className="bg-muted/30 border-dashed">
                         <CardContent className="flex flex-col items-center justify-center p-10 text-center text-muted-foreground gap-2">
                             <Tv className="h-10 w-10 mb-1 opacity-20" />
-                            <p className="font-medium">No airing shows found</p>
-                            <p className="text-xs">None of your "Watching" anime are currently airing new episodes.</p>
+                            <p className="font-medium">All caught up for now</p>
+                            <p className="text-xs">None of your "Watching" anime have a next episode scheduled yet.</p>
                         </CardContent>
                     </Card>
                 ) : (
@@ -362,6 +392,17 @@ export default function Radar({ userId, animeList, onAddAnime }: RadarProps) {
 
                 {loadingSequels ? (
                     <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin opacity-50" /></div>
+                ) : sequelError ? (
+                    <Card className="bg-muted/30 border-dashed border-orange-500/30">
+                        <CardContent className="flex flex-col items-center justify-center p-10 text-center gap-3">
+                            <AlertTriangle className="h-10 w-10 mb-1 text-orange-400 opacity-70" />
+                            <p className="font-medium text-foreground">Couldn't load sequel data</p>
+                            <p className="text-xs text-muted-foreground max-w-xs">{sequelError.includes("rate_limit") ? "AniList API is rate-limited. Wait a moment and retry." : sequelError}</p>
+                            <Button size="sm" variant="outline" onClick={() => setSequelRetry(r => r + 1)} className="mt-1 gap-1.5">
+                                <Loader2 className="w-3.5 h-3.5" /> Retry
+                            </Button>
+                        </CardContent>
+                    </Card>
                 ) : missingSequels.length === 0 ? (
                     <Card className="bg-muted/30 border-dashed">
                         <CardContent className="flex flex-col items-center justify-center p-10 text-center text-muted-foreground gap-2">

@@ -10,6 +10,41 @@ interface CacheEntry<T> {
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const queryCache = new Map<string, CacheEntry<any>>();
 
+async function doFetch<T>(query: string, variables: Record<string, any>): Promise<T> {
+  const response = await fetch(ANILIST_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+    },
+    body: JSON.stringify({ query, variables }),
+  });
+
+  // Rate-limited — read Retry-After header and surface it
+  if (response.status === 429) {
+    const retryAfter = Number(response.headers.get("Retry-After") || "10");
+    throw Object.assign(new Error(`rate_limit`), { retryAfter });
+  }
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`AniList API error: ${response.status} ${response.statusText} - ${errorText}`);
+  }
+
+  const json = await response.json();
+
+  if (json.errors) {
+    // AniList sometimes returns 200 with errors array — treat same as rate limit if it's a throttle
+    const msg = json.errors[0]?.message || "Unknown error";
+    if (msg.toLowerCase().includes("throttl") || msg.toLowerCase().includes("rate")) {
+      throw Object.assign(new Error("rate_limit"), { retryAfter: 10 });
+    }
+    throw new Error(`GraphQL Error: ${msg}`);
+  }
+
+  return json.data as T;
+}
+
 export async function fetchAniList<T = any>(
   query: string,
   variables: Record<string, any> = {},
@@ -24,40 +59,33 @@ export async function fetchAniList<T = any>(
     }
   }
 
-  const response = await fetch(ANILIST_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Accept": "application/json",
-    },
-    body: JSON.stringify({
-      query,
-      variables,
-    }),
-  });
+  // Retry up to 3 times on rate limit, with back-off
+  const MAX_RETRIES = 3;
+  let lastError: any;
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`AniList API error: ${response.status} ${response.statusText} - ${errorText}`);
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      const data = await doFetch<T>(query, variables);
+
+      if (useCache) {
+        queryCache.set(cacheKey, { data, timestamp: Date.now() });
+      }
+
+      return data;
+    } catch (err: any) {
+      lastError = err;
+      if (err.message === "rate_limit") {
+        const wait = (err.retryAfter || 10) * 1000 + attempt * 2000;
+        console.warn(`AniList rate limited — retrying in ${wait / 1000}s (attempt ${attempt + 1}/${MAX_RETRIES})`);
+        await new Promise(res => setTimeout(res, wait));
+      } else {
+        // Non-rate-limit error — don't retry
+        break;
+      }
+    }
   }
 
-  const json = await response.json();
-
-  if (json.errors) {
-    console.error("AniList GraphQL Errors:", json.errors);
-    throw new Error(`GraphQL Error: ${json.errors[0]?.message || "Unknown error"}`);
-  }
-
-  const data = json.data as T;
-
-  if (useCache) {
-    queryCache.set(cacheKey, {
-      data,
-      timestamp: Date.now(),
-    });
-  }
-
-  return data;
+  throw lastError;
 }
 
 // Pre-defined Queries
