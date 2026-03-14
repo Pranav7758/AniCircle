@@ -53,7 +53,7 @@ const StatsBar = ({ animeList }: { animeList: Anime[] }) => {
   const stats = [
     { icon: Play, label: "Watching", value: watching, color: "text-primary" },
     { icon: CheckCircle2, label: "Completed", value: completed, color: "text-emerald-400" },
-    { icon: Trophy, label: "Total Titles", value: uniqueTitles, color: "text-amber-400" },
+    { icon: Trophy, label: "Total Shows", value: uniqueTitles, color: "text-amber-400" },
     { icon: Clock, label: "Episodes", value: totalEps.toLocaleString(), color: "text-blue-400" },
   ];
 
