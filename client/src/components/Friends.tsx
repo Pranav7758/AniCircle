@@ -6,9 +6,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { UserPlus, Check, X, Users, UserSearch, Search, Copy } from "lucide-react";
+import { UserPlus, Check, X, Users, Search, Copy, Swords } from "lucide-react";
 import { toast } from "sonner";
 import AnimeGroupCard from "./AnimeGroupCard";
+import FriendCompare from "./FriendCompare";
 import { useAuth } from "@/hooks/use-auth";
 
 interface Friend {
@@ -201,8 +202,11 @@ const Friends = ({ currentUserId }: FriendsProps) => {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="friends" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="friends" data-testid="tab-my-friends">My Friends</TabsTrigger>
+          <TabsTrigger value="compare" data-testid="tab-compare" className="gap-1">
+            <Swords className="w-3.5 h-3.5" /> Compare
+          </TabsTrigger>
           <TabsTrigger value="requests" data-testid="tab-requests">Requests</TabsTrigger>
           <TabsTrigger value="find" data-testid="tab-find-friends">Find Friends</TabsTrigger>
         </TabsList>
@@ -353,6 +357,14 @@ const Friends = ({ currentUserId }: FriendsProps) => {
               </div>
             </div>
           </div>
+        </TabsContent>
+
+        <TabsContent value="compare" className="space-y-4 pt-2">
+          <FriendCompare
+            currentUserId={currentUserId}
+            myUsername={user?.username || user?.email?.split("@")[0] || "You"}
+            friends={friends}
+          />
         </TabsContent>
 
         <TabsContent value="requests" className="space-y-4">

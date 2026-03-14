@@ -1,11 +1,12 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { getAnimeList, createAnime, updateAnime, deleteAnime } from "@/services/supabaseData";
+import { fetchAniList, GET_ANALYTICS_QUERY } from "@/services/anilist";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LogOut, Plus, Search, Sparkles, Trophy, Users, Settings, PieChart, Play, CheckCircle2, Clock, ArrowUpDown } from "lucide-react";
+import { LogOut, Plus, Search, Sparkles, Trophy, Users, Settings, PieChart, Play, CheckCircle2, Clock, ArrowUpDown, Tag } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import AnimeRanking from "@/components/AnimeRanking";
@@ -82,6 +83,9 @@ const Index = () => {
   const [hentaiFilter, setHentaiFilter] = useState<string>("hide");
   const [rankingFilter, setRankingFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<string>(() => localStorage.getItem("animeSortBy") || "default");
+  const [genreFilter, setGenreFilter] = useState<string>("all");
+  const [genreMap, setGenreMap] = useState<Map<number, string[]>>(new Map());
+  const genreFetchRef = useRef<string>("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [prefilledSearchQuery, setPrefilledSearchQuery] = useState("");
@@ -109,7 +113,30 @@ const Index = () => {
 
   useEffect(() => {
     filterAnimeList();
-  }, [searchQuery, statusFilter, hentaiFilter, rankingFilter, animeList]);
+  }, [searchQuery, statusFilter, hentaiFilter, rankingFilter, genreFilter, animeList, genreMap]);
+
+  // Fetch genres from AniList for all anime that have anilistIds
+  useEffect(() => {
+    const anilistIds = animeList.map(a => a.anilistId).filter(Boolean) as number[];
+    if (anilistIds.length === 0) return;
+    const key = anilistIds.sort().join(",");
+    if (genreFetchRef.current === key) return;
+    genreFetchRef.current = key;
+
+    async function fetchGenres() {
+      const newMap = new Map<number, string[]>();
+      for (let i = 0; i < anilistIds.length; i += 50) {
+        try {
+          const data = await fetchAniList(GET_ANALYTICS_QUERY, { ids: anilistIds.slice(i, i + 50) });
+          for (const media of data?.Page?.media || []) {
+            if (media.genres?.length) newMap.set(media.id, media.genres);
+          }
+        } catch { /* silent — genres are a nice-to-have */ }
+      }
+      setGenreMap(newMap);
+    }
+    fetchGenres();
+  }, [animeList]);
 
   const fetchAnimeList = async () => {
     if (!user) return;
@@ -149,8 +176,26 @@ const Index = () => {
       filtered = filtered.filter((anime) => anime.ranking === null);
     }
 
+    if (genreFilter !== "all") {
+      filtered = filtered.filter((anime) => {
+        if (!anime.anilistId) return false;
+        const genres = genreMap.get(anime.anilistId) || [];
+        return genres.includes(genreFilter);
+      });
+    }
+
     setFilteredAnimeList(filtered);
   };
+
+  const allGenres = useMemo(() => {
+    const genreSet = new Set<string>();
+    for (const anime of animeList) {
+      if (!anime.anilistId) continue;
+      const genres = genreMap.get(anime.anilistId) || [];
+      for (const g of genres) genreSet.add(g);
+    }
+    return [...genreSet].sort();
+  }, [animeList, genreMap]);
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -526,6 +571,18 @@ const Index = () => {
                     <SelectItem value="title-desc">Title Z → A</SelectItem>
                     <SelectItem value="rating-desc">Highest Rated</SelectItem>
                     <SelectItem value="progress-desc">Most Watched</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={genreFilter} onValueChange={setGenreFilter}>
+                  <SelectTrigger className="h-10 w-full md:w-44 rounded-xl border-border/50 bg-muted/30 text-sm" data-testid="select-genre">
+                    <Tag className="w-3.5 h-3.5 mr-1.5 text-muted-foreground/60" />
+                    <SelectValue placeholder="Genre" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Genres</SelectItem>
+                    {allGenres.map(g => (
+                      <SelectItem key={g} value={g}>{g}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
