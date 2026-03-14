@@ -1,8 +1,6 @@
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Pencil, Trash2, ChevronDown, ChevronUp, Plus } from "lucide-react";
+import { Pencil, Trash2, ChevronDown, ChevronUp, Plus, Star } from "lucide-react";
 import { useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
@@ -25,21 +23,33 @@ interface AnimeGroupCardProps {
   onAddSeason?: (title: string) => void;
 }
 
-const statusColors = {
-  watching: "bg-primary text-primary-foreground",
-  completed: "bg-secondary text-secondary-foreground",
-  plan_to_watch: "bg-muted text-muted-foreground",
-  dropped: "bg-destructive text-destructive-foreground",
-  on_hold: "bg-accent text-accent-foreground",
+const statusConfig: Record<string, { label: string; dotClass: string; badgeClass: string }> = {
+  watching:     { label: "Watching",      dotClass: "status-dot-watching",      badgeClass: "badge-watching" },
+  completed:    { label: "Completed",     dotClass: "status-dot-completed",     badgeClass: "badge-completed" },
+  plan_to_watch:{ label: "Plan to Watch", dotClass: "status-dot-plan_to_watch", badgeClass: "badge-plan_to_watch" },
+  dropped:      { label: "Dropped",       dotClass: "status-dot-dropped",       badgeClass: "badge-dropped" },
+  on_hold:      { label: "On Hold",       dotClass: "status-dot-on_hold",       badgeClass: "badge-on_hold" },
 };
 
-const statusLabels = {
-  watching: "Watching",
-  completed: "Completed",
-  plan_to_watch: "Plan to Watch",
-  dropped: "Dropped",
-  on_hold: "On Hold",
+const statusNeonClass: Record<string, string> = {
+  watching:      "neon-watching",
+  completed:     "neon-completed",
+  plan_to_watch: "neon-plan_to_watch",
+  dropped:       "neon-dropped",
+  on_hold:       "neon-on_hold",
 };
+
+const StarRating = ({ rating }: { rating: number }) => (
+  <div className="flex items-center gap-0.5">
+    {[1, 2, 3, 4, 5].map((i) => (
+      <Star
+        key={i}
+        className={`w-2.5 h-2.5 ${i <= Math.round(rating / 2) ? "text-amber-400 fill-amber-400" : "text-muted-foreground/30"}`}
+      />
+    ))}
+    <span className="text-[10px] text-muted-foreground ml-1">{rating}/10</span>
+  </div>
+);
 
 const AnimeGroupCard = ({
   title,
@@ -51,7 +61,6 @@ const AnimeGroupCard = ({
 }: AnimeGroupCardProps) => {
   const [isOpen, setIsOpen] = useState(false);
 
-  // Calculate overall stats
   const totalEpisodesWatched = seasons.reduce((sum, s) => sum + s.episodesWatched, 0);
   const totalEpisodes = seasons.reduce((sum, s) => sum + (s.totalEpisodes || 0), 0);
   const overallProgress = totalEpisodes > 0 ? (totalEpisodesWatched / totalEpisodes) * 100 : 0;
@@ -59,136 +68,146 @@ const AnimeGroupCard = ({
     ? Math.round(seasons.reduce((sum, s) => sum + (s.rating || 0), 0) / seasons.filter(s => s.rating).length)
     : null;
 
-  // Get primary status (most recent or completed)
   const primaryStatus = seasons.find(s => s.status === "watching")?.status ||
     seasons.find(s => s.status === "completed")?.status ||
     seasons[0]?.status || "watching";
 
+  const cfg = statusConfig[primaryStatus] || statusConfig.watching;
+  const neon = statusNeonClass[primaryStatus] || "";
+
   return (
-    <Card className="card-3d-hover perspective-1000 transform-3d border-border/50 glass overflow-visible group">
-      <CardHeader className="p-0 relative transform-3d border-b border-white/5">
-        <div className="aspect-[3/4] bg-muted relative overflow-hidden rounded-t-xl">
-          <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/20 to-transparent z-10 pointer-events-none" />
-          {coverImage ? (
-            <img
-              src={coverImage}
-              alt={title}
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center gradient-hero">
-              <span className="text-4xl sm:text-6xl opacity-20">📺</span>
-            </div>
-          )}
-          <div className="absolute top-1 right-1 sm:top-2 sm:right-2 flex gap-1 sm:gap-2">
-            <Badge className={`${statusColors[primaryStatus as keyof typeof statusColors]} text-[10px] sm:text-xs px-1 sm:px-2 py-0`}>
-              {statusLabels[primaryStatus as keyof typeof statusLabels]}
-            </Badge>
-            <Badge variant="secondary" className="text-[10px] sm:text-xs px-1 sm:px-2 py-0">{seasons.length} S</Badge>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="p-3 sm:p-4 space-y-3 relative z-20 bg-background/40 backdrop-blur-md">
-        <h3 className="font-bold text-sm sm:text-base line-clamp-2 text-gradient-accent drop-shadow-md">{title}</h3>
+    <div className={`group relative flex flex-col rounded-2xl overflow-hidden border border-border/40 bg-card transition-all duration-400 cursor-default perspective-1000 card-3d-hover ${neon}`}>
 
-        <div className="space-y-1.5">
-          <div className="flex justify-between text-xs sm:text-sm">
-            <span className="text-muted-foreground">Progress</span>
-            <span className="font-semibold text-foreground text-xs sm:text-sm">
-              {totalEpisodesWatched}{totalEpisodes > 0 ? `/${totalEpisodes}` : ""}
-            </span>
-          </div>
-          {totalEpisodes > 0 && (
-            <Progress value={overallProgress} className="h-1.5 sm:h-2 bg-muted" />
-          )}
-        </div>
-
-        {avgRating && (
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs sm:text-sm text-muted-foreground">Rating:</span>
-            <div className="flex items-center gap-1">
-              <span className="text-sm sm:text-base font-bold text-primary">⭐</span>
-              <span className="font-semibold text-foreground text-xs sm:text-sm">{avgRating}/10</span>
-            </div>
+      {/* ── Cover art ── */}
+      <div className="aspect-[3/4] relative overflow-hidden">
+        {coverImage ? (
+          <img
+            src={coverImage}
+            alt={title}
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center gradient-hero">
+            <span className="text-5xl opacity-10">📺</span>
           </div>
         )}
 
+        {/* Gradient overlay */}
+        <div className="absolute inset-0 poster-overlay" />
+
+        {/* Top badges */}
+        <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-1 z-10">
+          <span className={`inline-flex items-center gap-1.5 text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full font-semibold backdrop-blur-sm ${cfg.badgeClass}`}>
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cfg.dotClass}`} />
+            {cfg.label}
+          </span>
+          {seasons.length > 1 && (
+            <span className="text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full font-bold bg-black/50 text-white/80 backdrop-blur-sm border border-white/10">
+              {seasons.length}S
+            </span>
+          )}
+        </div>
+
+        {/* Bottom info overlay */}
+        <div className="absolute bottom-0 left-0 right-0 z-10 p-2.5 sm:p-3">
+          <h3 className="font-bold text-[11px] sm:text-sm text-white leading-tight line-clamp-2 drop-shadow-lg mb-1.5">
+            {title}
+          </h3>
+
+          {avgRating && <StarRating rating={avgRating} />}
+
+          {totalEpisodes > 0 && (
+            <div className="mt-1.5">
+              <div className="flex justify-between text-[9px] text-white/60 mb-1">
+                <span>{totalEpisodesWatched} ep watched</span>
+                <span>{Math.round(overallProgress)}%</span>
+              </div>
+              <div className="w-full h-0.5 sm:h-1 rounded-full bg-white/10 overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{
+                    width: `${overallProgress}%`,
+                    background: 'linear-gradient(90deg, hsl(268 88% 62%), hsl(215 90% 58%))',
+                    boxShadow: '0 0 6px hsl(268 88% 62% / 0.6)',
+                  }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Expandable seasons ── */}
+      <div className="bg-card/95 backdrop-blur-sm">
         <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-          <CollapsibleTrigger asChild>
-            <Button variant="outline" size="sm" className="w-full text-xs sm:text-sm h-7 sm:h-9">
-              {isOpen ? <ChevronUp className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" /> : <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />}
-              {isOpen ? "Hide" : "Show"} Seasons
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="mt-3 space-y-2">
-            {seasons.sort((a, b) => a.seasonNumber - b.seasonNumber).map((season) => {
-              const progress = season.totalEpisodes ? (season.episodesWatched / season.totalEpisodes) * 100 : 0;
-              return (
-                <div key={season.id} className="border border-primary/20 rounded-lg p-2 sm:p-3 space-y-2 holo-glass">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 sm:gap-2 flex-1 min-w-0">
-                      <span className="font-semibold text-foreground text-xs sm:text-base whitespace-nowrap">Season {season.seasonNumber}</span>
+          <div className="flex items-center border-t border-border/30">
+            <CollapsibleTrigger asChild>
+              <button className="flex-1 flex items-center justify-between px-3 py-2 text-[10px] sm:text-xs text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors">
+                <span className="font-medium">{isOpen ? "Hide" : "View"} {seasons.length === 1 ? "Season" : `${seasons.length} Seasons`}</span>
+                {isOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+              </button>
+            </CollapsibleTrigger>
+            {onAddSeason && (
+              <button
+                className="text-[9px] sm:text-[10px] px-2 py-2 border-l border-border/30 text-primary/70 hover:text-primary hover:bg-primary/10 transition-colors font-semibold"
+                onClick={(e) => { e.stopPropagation(); onAddSeason(title); }}
+              >
+                +S
+              </button>
+            )}
+          </div>
+
+          <CollapsibleContent>
+            <div className="border-t border-border/20 divide-y divide-border/20">
+              {seasons.sort((a, b) => a.seasonNumber - b.seasonNumber).map((season) => {
+                const prog = season.totalEpisodes ? (season.episodesWatched / season.totalEpisodes) * 100 : 0;
+                const sCfg = statusConfig[season.status] || statusConfig.watching;
+                return (
+                  <div key={season.id} className="px-3 py-2.5 space-y-2 hover:bg-muted/20 transition-colors">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${sCfg.dotClass}`} />
+                        <span className="text-xs font-semibold text-foreground whitespace-nowrap">S{season.seasonNumber}</span>
+                        <span className={`text-[9px] px-1.5 py-0 rounded-full font-medium ${sCfg.badgeClass}`}>{sCfg.label}</span>
+                      </div>
+                      <div className="flex items-center gap-0.5 shrink-0">
+                        <Button variant="ghost" size="sm" onClick={() => onEdit(season.id)}
+                          className="h-6 w-6 p-0 hover:bg-primary/10 hover:text-primary rounded-lg">
+                          <Pencil className="w-3 h-3" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => onDelete(season.id)}
+                          className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive rounded-lg">
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex gap-1 flex-shrink-0">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onEdit(season.id)}
-                        className="h-7 w-7 sm:h-7 sm:w-7 p-0 z-10 relative flex-shrink-0"
-                      >
-                        <Pencil className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onDelete(season.id)}
-                        className="h-7 w-7 sm:h-7 sm:w-7 p-0 hover:bg-destructive/10 z-10 relative flex-shrink-0"
-                      >
-                        <Trash2 className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
-                      </Button>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] text-muted-foreground">
+                        <span>{season.episodesWatched}{season.totalEpisodes ? ` / ${season.totalEpisodes}` : ""} eps</span>
+                        {season.rating && (
+                          <span className="flex items-center gap-0.5 text-amber-400">
+                            <Star className="w-2.5 h-2.5 fill-amber-400" /> {season.rating}/10
+                          </span>
+                        )}
+                      </div>
+                      {season.totalEpisodes && (
+                        <div className="w-full h-0.5 rounded-full bg-muted/50 overflow-hidden">
+                          <div className="h-full rounded-full" style={{
+                            width: `${prog}%`,
+                            background: 'linear-gradient(90deg, hsl(268 88% 62%), hsl(215 90% 58%))',
+                          }} />
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div className="space-y-1">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">Progress</span>
-                      <span className="font-medium text-foreground">
-                        {season.episodesWatched}{season.totalEpisodes ? ` / ${season.totalEpisodes}` : ""} eps
-                      </span>
-                    </div>
-                    {season.totalEpisodes && (
-                      <Progress value={progress} className="h-1 bg-muted" />
-                    )}
-                  </div>
-                  {season.rating && (
-                    <div className="flex items-center gap-1 text-xs">
-                      <span className="text-primary">⭐</span>
-                      <span className="font-medium text-foreground">{season.rating}/10</span>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </CollapsibleContent>
         </Collapsible>
-      </CardContent>
-      <CardFooter className="p-3 sm:p-4 pt-0 flex justify-between items-center bg-background/40 rounded-b-xl border-t border-white/5">
-        <p className="text-[10px] sm:text-xs text-muted-foreground font-medium">Expand to edit seasons</p>
-        {onAddSeason && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-[10px] sm:text-xs h-6 px-2 hover:bg-primary/10 hover:text-primary transition-colors"
-            onClick={(e) => {
-              e.stopPropagation();
-              onAddSeason(title);
-            }}
-          >
-            <Plus className="w-3 h-3 mr-1" />
-            Add Season
-          </Button>
-        )}
-      </CardFooter>
-    </Card>
+      </div>
+    </div>
   );
 };
 

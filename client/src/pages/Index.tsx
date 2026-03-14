@@ -244,40 +244,59 @@ const Index = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto" />
-          <p className="text-muted-foreground">Loading your anime collection...</p>
+      <div className="min-h-screen flex items-center justify-center bg-background aurora-bg">
+        <div className="text-center space-y-5 animate-fade-in">
+          <div className="relative mx-auto w-20 h-20">
+            <div className="absolute inset-0 rounded-full border-2 border-primary/20 animate-spin-slow" />
+            <div className="absolute inset-2 rounded-full border border-primary/40 animate-spin-slow" style={{ animationDirection: 'reverse', animationDuration: '4s' }} />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <img src="/logo.png" alt="AniCircle" className="h-12 w-12 rounded-full shadow-neon" />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <p className="text-lg font-bold text-gradient">AniCircle</p>
+            <p className="text-sm text-muted-foreground animate-pulse">Loading your anime universe...</p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="sticky top-0 z-10 border-b border-border/50 glass bg-glow">
-        <div className="container mx-auto px-4 py-3">
+    <div className="min-h-screen flex flex-col bg-background">
+      <header className="sticky top-0 z-50 border-b border-border/40 glass bg-glow">
+        <div className="header-accent-strip" />
+        <div className="container mx-auto px-4 py-2.5">
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-3">
-              <img src="/logo.png" alt="AniCircle" className="h-9 w-9 rounded-full shadow-neon" />
-              <h2 className="text-xl sm:text-2xl font-bold text-gradient">
-                AniCircle
-              </h2>
+            <div className="flex items-center gap-2.5">
+              <div className="relative">
+                <div className="absolute inset-0 rounded-full bg-primary/25 blur-md animate-glow-pulse" />
+                <img src="/logo.png" alt="AniCircle" className="relative h-8 w-8 sm:h-9 sm:w-9 rounded-full shadow-neon" />
+              </div>
+              <div className="flex items-baseline gap-2">
+                <h2 className="text-lg sm:text-xl font-black text-gradient">AniCircle</h2>
+                {user?.email && (
+                  <span className="hidden md:inline text-[10px] text-muted-foreground/50 font-normal">
+                    {user.email.split("@")[0]}
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               {user && <Notifications userId={user.id} />}
               <Button
-                variant="outline"
+                variant="ghost"
                 size="icon"
                 onClick={() => setIsSettingsOpen(true)}
                 title="Settings"
+                className="h-8 w-8 hover:bg-muted/50 text-muted-foreground hover:text-foreground rounded-xl"
               >
-                <Settings className="w-5 h-5 text-muted-foreground" />
+                <Settings className="w-4 h-4" />
               </Button>
               <Button
-                variant="outline"
+                variant="ghost"
                 size="icon"
-                className="sm:hidden"
+                className="sm:hidden h-8 w-8 hover:bg-muted/50 text-muted-foreground hover:text-foreground rounded-xl"
                 onClick={handleSignOut}
                 data-testid="button-signout"
                 title="Sign Out"
@@ -285,12 +304,12 @@ const Index = () => {
                 <LogOut className="w-4 h-4" />
               </Button>
               <Button
-                variant="outline"
-                className="hidden sm:flex"
+                variant="ghost"
+                className="hidden sm:flex h-8 px-3 text-sm hover:bg-muted/50 text-muted-foreground hover:text-foreground rounded-xl gap-1.5"
                 onClick={handleSignOut}
                 data-testid="button-signout"
               >
-                <LogOut className="w-4 h-4 mr-2" />
+                <LogOut className="w-3.5 h-3.5" />
                 Sign Out
               </Button>
             </div>
@@ -301,81 +320,80 @@ const Index = () => {
       <main className="container mx-auto px-4 pt-8 pb-8 flex-1">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="mb-6 space-y-4">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <TabsList className="overflow-x-auto flex-nowrap w-full sm:w-auto">
-                <TabsTrigger value="list" data-testid="tab-list">My List</TabsTrigger>
-                <TabsTrigger value="radar" data-testid="tab-radar">
-                  <Sparkles className="w-4 h-4 mr-1" />
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <TabsList className="h-10 bg-muted/40 border border-border/40 rounded-xl p-1 gap-0.5 overflow-x-auto flex-nowrap">
+                <TabsTrigger value="list" data-testid="tab-list"
+                  className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium">
+                  My List
+                </TabsTrigger>
+                <TabsTrigger value="radar" data-testid="tab-radar"
+                  className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium gap-1">
+                  <Sparkles className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Radar</span>
                 </TabsTrigger>
-                <TabsTrigger value="ranking" data-testid="tab-ranking">
-                  <Trophy className="w-4 h-4 mr-1" />
+                <TabsTrigger value="ranking" data-testid="tab-ranking"
+                  className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium gap-1">
+                  <Trophy className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Rankings</span>
                 </TabsTrigger>
-                <TabsTrigger value="analytics" data-testid="tab-analytics">
-                  <PieChart className="w-4 h-4 mr-1" />
+                <TabsTrigger value="analytics" data-testid="tab-analytics"
+                  className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium gap-1">
+                  <PieChart className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Analytics</span>
                 </TabsTrigger>
-                <TabsTrigger value="friends" data-testid="tab-friends">
-                  <Users className="w-4 h-4 mr-1" />
+                <TabsTrigger value="friends" data-testid="tab-friends"
+                  className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium gap-1">
+                  <Users className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Friends</span>
                 </TabsTrigger>
               </TabsList>
+
+              {activeTab === "list" && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Select value={gridSize} onValueChange={(value) => {
+                    setGridSize(value);
+                    localStorage.setItem("animeGridSize", value);
+                  }}>
+                    <SelectTrigger className="h-9 w-36 sm:w-40 text-xs rounded-xl border-border/50 bg-muted/30" data-testid="select-grid-size">
+                      <SelectValue placeholder="View size" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="compact">Compact (7/row)</SelectItem>
+                      <SelectItem value="small">Small (6/row)</SelectItem>
+                      <SelectItem value="medium">Medium (5/row)</SelectItem>
+                      <SelectItem value="large">Large (4/row)</SelectItem>
+                      <SelectItem value="extra-large">Extra Large (3/row)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    onClick={() => setIsAddDialogOpen(true)}
+                    className="h-9 gradient-primary hover:opacity-90 transition-smooth shadow-neon rounded-xl text-sm font-semibold px-4"
+                    data-testid="button-add-anime"
+                  >
+                    <Plus className="w-4 h-4 mr-1.5" />
+                    Add Anime
+                  </Button>
+                </div>
+              )}
             </div>
-            {activeTab === "list" && (
-              <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-                <Select value={gridSize} onValueChange={(value) => {
-                  setGridSize(value);
-                  localStorage.setItem("animeGridSize", value);
-                }}>
-                  <SelectTrigger className="w-full sm:w-40" data-testid="select-grid-size">
-                    <SelectValue placeholder="View size" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="compact">Compact (7 per row)</SelectItem>
-                    <SelectItem value="small">Small (6 per row)</SelectItem>
-                    <SelectItem value="medium">Medium (5 per row)</SelectItem>
-                    <SelectItem value="large">Large (4 per row)</SelectItem>
-                    <SelectItem value="extra-large">Extra Large (3 per row)</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setIsSettingsOpen(true)}
-                  className="hidden sm:flex"
-                  title="Settings"
-                >
-                  <Settings className="w-5 h-5 text-muted-foreground" />
-                </Button>
-                <Button
-                  onClick={() => setIsAddDialogOpen(true)}
-                  className="w-full sm:w-auto gradient-primary hover:opacity-90 transition-smooth shadow-glow"
-                  data-testid="button-add-anime"
-                >
-                  <Plus className="w-5 h-5 mr-2" />
-                  Add Anime
-                </Button>
-              </div>
-            )}
           </div>
 
           <TabsContent value="list" className="space-y-4">
             {user && <NewEpisodesBanner userId={user.id} />}
-            <div className="mb-4 space-y-4">
-              <div className="flex flex-col md:flex-row gap-4">
+            <div className="mb-4">
+              <div className="flex flex-col md:flex-row gap-3">
                 <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
                   <Input
-                    placeholder="Search anime..."
+                    placeholder="Search your anime..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
+                    className="pl-9 h-10 rounded-xl border-border/50 bg-muted/30 text-sm focus:border-primary/40"
                     data-testid="input-search"
                   />
                 </div>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="w-full md:w-48" data-testid="select-status-filter">
+                  <SelectTrigger className="h-10 w-full md:w-44 rounded-xl border-border/50 bg-muted/30 text-sm" data-testid="select-status-filter">
                     <SelectValue placeholder="Filter by status" />
                   </SelectTrigger>
                   <SelectContent>
@@ -388,7 +406,7 @@ const Index = () => {
                   </SelectContent>
                 </Select>
                 <Select value={rankingFilter} onValueChange={setRankingFilter}>
-                  <SelectTrigger className="w-full md:w-48" data-testid="select-ranking-filter">
+                  <SelectTrigger className="h-10 w-full md:w-44 rounded-xl border-border/50 bg-muted/30 text-sm" data-testid="select-ranking-filter">
                     <SelectValue placeholder="Ranking filter" />
                   </SelectTrigger>
                   <SelectContent>
@@ -401,14 +419,31 @@ const Index = () => {
             </div>
 
             {filteredAnimeList.length === 0 ? (
-              <div className="text-center py-20 space-y-4">
-                <Loader2 className="h-16 w-16 mx-auto opacity-20" />
-                <h2 className="text-2xl font-bold text-foreground">No anime found</h2>
-                <p className="text-muted-foreground">
-                  {searchQuery || statusFilter !== "all" || hentaiFilter !== "show" || rankingFilter !== "all"
-                    ? "Try adjusting your filters"
-                    : "Start by adding your first anime!"}
-                </p>
+              <div className="flex flex-col items-center justify-center py-24 gap-5 animate-fade-in">
+                <div className="relative">
+                  <div className="w-24 h-24 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
+                    <span className="text-4xl opacity-60">📺</span>
+                  </div>
+                  <div className="absolute -top-1 -right-1 w-7 h-7 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center">
+                    <Sparkles className="w-3.5 h-3.5 text-primary" />
+                  </div>
+                </div>
+                <div className="text-center space-y-2 max-w-xs">
+                  <h2 className="text-xl font-bold text-foreground">
+                    {searchQuery || statusFilter !== "all" || rankingFilter !== "all" ? "No results found" : "Your list is empty"}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    {searchQuery || statusFilter !== "all" || rankingFilter !== "all"
+                      ? "Try adjusting your search or filters"
+                      : "Start building your anime collection — add your first title!"}
+                  </p>
+                </div>
+                {!searchQuery && statusFilter === "all" && rankingFilter === "all" && (
+                  <Button onClick={() => setIsAddDialogOpen(true)}
+                    className="gradient-primary shadow-neon rounded-xl text-sm font-semibold px-6">
+                    <Plus className="w-4 h-4 mr-2" /> Add Your First Anime
+                  </Button>
+                )}
               </div>
             ) : (
               <div className={`grid gap-3 sm:gap-4 animate-fade-in ${gridSize === "compact" ? "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7" :
@@ -454,11 +489,12 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="ranking" className="space-y-4">
-            <div className="mb-4">
-              <h2 className="text-2xl font-bold mb-2">My Anime Rankings</h2>
-              <p className="text-muted-foreground">
-                Rank your favorite anime! Use the arrows to reorder your list.
-              </p>
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-1">
+                <Trophy className="w-5 h-5 text-amber-400" />
+                <h2 className="text-2xl font-black text-gradient">My Rankings</h2>
+              </div>
+              <p className="text-sm text-muted-foreground">Drag to reorder your all-time favourite anime.</p>
             </div>
             {user && <AnimeRanking userId={user.id} isOwnProfile={true} />}
           </TabsContent>

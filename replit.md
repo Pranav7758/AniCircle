@@ -69,7 +69,28 @@ Authentication is handled by Supabase Auth on the client side. The server valida
 The application runs via the "Start application" workflow which executes `npm run dev`.
 This starts the Express server on port 5000 with Vite middleware for the frontend.
 
-## Recent Changes (December 2025)
+## Key Features
+- **AniList Integration**: Fetches anime metadata (cover, episodes, airing info) via AniList GraphQL API with exponential backoff retry (3 attempts) for 429 rate limiting
+- **Radar**: Airing schedule for "Watching" anime + sequel scanner for "Completed/Watching" list — only SEQUEL relations, with error states and retry buttons
+- **Analytics Dashboard**: Rich stats including Format Breakdown donut, Genre DNA radar, Seasonal Preferences bars, Otaku Persona, Studio breakdown
+- **AnimeGroupCard**: Poster-style cards grouped by title, with season collapsible, star ratings, neon status glow, and gradient progress bar
+
+## Design System (Cinematic Anime OS Theme)
+- **Font**: Outfit (headings) + Inter (body) via Google Fonts
+- **Theme**: Deep dark (#0a0a0f) with neon purple (#8B5CF6) primary and blue (#3B82F6) secondary
+- **Effects**: Aurora background, floating orbs, holo-glass glassmorphism, status-specific neon glows per status (watching/completed/plan/dropped/hold), animated 3D card hover
+- **Auth page**: Split two-panel cinematic layout — left panel has decorative rings, orbiting dot, feature pills; right panel has the glass form card
+- **Scrollbar**: Custom gradient purple-to-blue narrow scrollbar
+- **CSS classes**: `.holo-glass`, `.card-3d-hover`, `.aurora-bg`, `.orb`, `.gradient-primary`, `.text-gradient`, `.neon-watching/completed/plan_to_watch/dropped/on_hold`, `.badge-*`, `.status-dot-*`, `.poster-overlay`, `.header-accent-strip`
+
+## Recent Changes (March 2026)
+- **Major UI overhaul**: Cinematic anime-inspired redesign across Auth, AnimeGroupCard, header, tabs, and index CSS
+- **Auth page**: Two-panel layout with animated orbiting rings, floating orbs, aurora background, feature pills
+- **AnimeGroupCard**: Poster-style with status-specific neon glow border, star ratings, gradient neon progress bar, cinematic cover overlay
+- **Index header**: Gradient accent strip at top, pulsing logo glow, glass header with username display
+- **Tabs**: Pill-style with gradient purple active state and neon shadow
+- **Radar**: Fixed null `nextAiringEpisode` crash; error states with retry buttons for both airing and sequel sections
+- **Airing schedule**: Filter null entries before sort (was crashing on `airingAt` access)
 - Connected to Supabase database at qakolgnkvrtbbmjfalzv.supabase.co
 - Fixed folder structure (moved files from anime-watchlist-logbook to root)
 - Updated server routes to use Supabase JWT authentication
