@@ -222,7 +222,10 @@ export const GET_ANALYTICS_QUERY = `
         duration
         episodes
         genres
+        season
         seasonYear
+        averageScore
+        source
         title {
           english
           romaji

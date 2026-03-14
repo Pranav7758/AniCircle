@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, differenceInHours } from "date-fns";
 import { fetchAniList, GET_AIRING_SCHEDULE_QUERY, GET_SEQUELS_QUERY } from "@/services/anilist";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Clock, Plus, Loader2, Sparkles, Tv, AlertCircle } from "lucide-react";
+import { Clock, Plus, Loader2, Sparkles, Tv, AlertTriangle, Play, CalendarDays, Flame } from "lucide-react";
 
 interface Anime {
     id: string;
@@ -26,169 +26,189 @@ interface RadarProps {
     onAddAnime: (animeData: any) => Promise<void>;
 }
 
+function getSeasonLabel(season: string | null, year: number | null) {
+    if (!season || !year) return null;
+    const icons: Record<string, string> = { WINTER: '❄️', SPRING: '🌸', SUMMER: '☀️', FALL: '🍂' };
+    return `${icons[season] || ''} ${season.charAt(0) + season.slice(1).toLowerCase()} ${year}`;
+}
+
+function AiringCountdown({ airingAt }: { airingAt: number }) {
+    const releaseDate = new Date(airingAt * 1000);
+    const now = new Date();
+    const hoursUntil = differenceInHours(releaseDate, now);
+
+    if (hoursUntil < 0) return <span className="text-emerald-400 font-semibold text-xs">🟢 Aired!</span>;
+    if (hoursUntil < 24) return (
+        <span className="text-orange-400 font-semibold text-xs animate-pulse">
+            🔴 In {hoursUntil}h {Math.floor(((airingAt * 1000 - now.getTime()) % 3600000) / 60000)}m
+        </span>
+    );
+    return <span className="text-primary text-xs font-medium">{formatDistanceToNow(releaseDate, { addSuffix: true })}</span>;
+}
+
 export default function Radar({ userId, animeList, onAddAnime }: RadarProps) {
     const [airingSchedule, setAiringSchedule] = useState<any[]>([]);
     const [missingSequels, setMissingSequels] = useState<any[]>([]);
+    const [behindShows, setBehindShows] = useState<any[]>([]);
     const [loadingSchedule, setLoadingSchedule] = useState(true);
     const [loadingSequels, setLoadingSequels] = useState(true);
 
-    // Derive target subset for Airing Schedule ("watching" anime)
+    // Only "watching" anime with anilistId for the airing schedule
     const watchingIds = animeList
         .filter((a) => a.status === "watching" && a.anilistId)
         .map((a) => a.anilistId as number);
 
-    // Derive target subset for Sequel Scanner ("completed" or "watching" anime)
-    const completedIds = animeList
+    // "completed" or "watching" anime for sequel scanning
+    const completedOrWatchingIds = animeList
         .filter((a) => (a.status === "completed" || a.status === "watching") && a.anilistId)
         .map((a) => a.anilistId as number);
 
+    // All known anilist IDs in user's list (for dedup)
+    const allKnownAnilistIds = new Set(animeList.map(a => a.anilistId).filter(Boolean));
+
     useEffect(() => {
         async function loadAiringSchedule() {
-            if (watchingIds.length === 0) {
-                setLoadingSchedule(false);
-                return;
-            }
-
+            if (watchingIds.length === 0) { setLoadingSchedule(false); return; }
             try {
-                // AniList limits to 50 items per page, so we must chunk large lists
                 const chunkSize = 50;
                 let allAiring: any[] = [];
-
                 for (let i = 0; i < watchingIds.length; i += chunkSize) {
-                    const chunk = watchingIds.slice(i, i + chunkSize);
-                    const data = await fetchAniList(GET_AIRING_SCHEDULE_QUERY, { ids: chunk });
-
-                    if (data?.Page?.media) {
-                        const airing = data.Page.media.filter((m: any) => m.nextAiringEpisode);
-                        allAiring = [...allAiring, ...airing];
-                    }
+                    const data = await fetchAniList(GET_AIRING_SCHEDULE_QUERY, { ids: watchingIds.slice(i, i + chunkSize) });
+                    if (data?.Page?.media) allAiring = [...allAiring, ...data.Page.media];
                 }
 
-                // Sort by nearest airing episode
+                // Sort by nearest airing
                 allAiring.sort((a: any, b: any) => a.nextAiringEpisode.airingAt - b.nextAiringEpisode.airingAt);
 
-                // Map DB ID to the AniList media so we can interact with it later if needed
-                const enriched = allAiring.map((m: any) => {
-                    const dbMatch = animeList.find((a) => a.anilistId === m.id && a.status === "watching");
-                    return { ...m, dbAnime: dbMatch };
-                });
+                const enriched = allAiring
+                    .filter((m: any) => m.nextAiringEpisode)
+                    .map((m: any) => {
+                        const dbMatch = animeList.find((a) => a.anilistId === m.id);
+                        return { ...m, dbAnime: dbMatch };
+                    });
 
                 setAiringSchedule(enriched);
+
+                // Build "behind" list: currently airing shows where user's watched < (nextEp - 1)
+                const behind = allAiring
+                    .filter((m: any) => m.nextAiringEpisode && m.nextAiringEpisode.episode > 1)
+                    .map((m: any) => {
+                        const dbMatch = animeList.find((a) => a.anilistId === m.id);
+                        const latestAiredEp = m.nextAiringEpisode.episode - 1;
+                        const watched = dbMatch?.episodesWatched || 0;
+                        const epsBehind = latestAiredEp - watched;
+                        return { ...m, dbAnime: dbMatch, latestAiredEp, watched, epsBehind };
+                    })
+                    .filter(m => m.epsBehind > 0)
+                    .sort((a, b) => b.epsBehind - a.epsBehind);
+
+                setBehindShows(behind);
             } catch (err) {
                 console.error("Failed to fetch airing schedule:", err);
             } finally {
                 setLoadingSchedule(false);
             }
         }
-
         loadAiringSchedule();
     }, [JSON.stringify(watchingIds)]);
 
     useEffect(() => {
         async function loadMissingSequels() {
-            if (completedIds.length === 0) {
-                setLoadingSequels(false);
-                return;
-            }
-
+            if (completedOrWatchingIds.length === 0) { setLoadingSequels(false); return; }
             try {
                 const chunkSize = 50;
                 const newSequelsMap = new Map();
 
-                for (let i = 0; i < completedIds.length; i += chunkSize) {
-                    const chunk = completedIds.slice(i, i + chunkSize);
+                for (let i = 0; i < completedOrWatchingIds.length; i += chunkSize) {
+                    const chunk = completedOrWatchingIds.slice(i, i + chunkSize);
                     const data = await fetchAniList(GET_SEQUELS_QUERY, { ids: chunk });
 
                     if (data?.Page?.media) {
                         data.Page.media.forEach((media: any) => {
                             if (!media.relations?.edges) return;
 
+                            // ONLY follow SEQUEL relations — never PREQUEL (that would show what came before)
                             const sequels = media.relations.edges
                                 .filter((rel: any) =>
-                                    (rel.relationType === "SEQUEL" || rel.relationType === "PREQUEL") &&
+                                    rel.relationType === "SEQUEL" &&
                                     (rel.node.format === "TV" || rel.node.format === "TV_SHORT" || rel.node.format === "MOVIE" || rel.node.format === "ONA")
                                 )
                                 .map((rel: any) => rel.node);
 
                             sequels.forEach((seq: any) => {
-                                // Check if user already has this sequel added
-                                const alreadyHas = animeList.some((a) => a.anilistId === seq.id);
-                                if (!alreadyHas) {
-                                    newSequelsMap.set(seq.id, seq);
+                                // Skip if user already has this in their list (check by anilist ID)
+                                if (allKnownAnilistIds.has(seq.id)) return;
+                                if (!newSequelsMap.has(seq.id)) {
+                                    newSequelsMap.set(seq.id, { ...seq, sourceAnime: media });
                                 }
                             });
                         });
                     }
                 }
 
-                const sequelsArray = Array.from(newSequelsMap.values());
+                let sequelsArray = Array.from(newSequelsMap.values());
 
-                // Sort chronologically by start date or next airing date
+                // Sort: upcoming first, then recently aired, then unknown
                 sequelsArray.sort((a: any, b: any) => {
-                    const getSortDate = (anime: any) => {
+                    const getDate = (anime: any) => {
                         if (anime.nextAiringEpisode) return anime.nextAiringEpisode.airingAt * 1000;
                         if (anime.startDate?.year) {
-                            return new Date(anime.startDate.year, anime.startDate.month ? anime.startDate.month - 1 : 0, anime.startDate.day || 1).getTime();
+                            return new Date(
+                                anime.startDate.year,
+                                anime.startDate.month ? anime.startDate.month - 1 : 0,
+                                anime.startDate.day || 1
+                            ).getTime();
                         }
-                        return 9999999999999; // Unknown dates at the end
+                        return 9999999999999;
                     };
-                    return getSortDate(a) - getSortDate(b);
+                    return getDate(a) - getDate(b);
                 });
 
-                // Deduplicate by franchise: only show the *earliest* unwatched season for a franchise
-                // Example: If user hasn't watched AoT S2, S3, S4... only show S2.
-                const dedupedSequels = [];
-                const franchiseSet = new Set();
-
+                // Deduplicate franchises: only show the earliest unwatched season
+                const seen = new Set<string>();
+                const deduped: any[] = [];
                 for (const seq of sequelsArray) {
-                    const title = (seq.title.english || seq.title.romaji || "").toLowerCase();
-                    // Heuristic: The text before a colon, hyphen, or just the first 4 words
-                    let coreName = title.split(':')[0].split('-')[0].trim();
-                    if (coreName.split(' ').length > 4) {
-                        coreName = coreName.split(' ').slice(0, 4).join(' ');
-                    }
-
-                    if (!franchiseSet.has(coreName)) {
-                        franchiseSet.add(coreName);
-                        dedupedSequels.push(seq);
+                    const baseTitle = (seq.title.english || seq.title.romaji || "")
+                        .toLowerCase()
+                        .split(':')[0]
+                        .split(' season')[0]
+                        .trim()
+                        .split(' ').slice(0, 3).join(' ');
+                    if (!seen.has(baseTitle)) {
+                        seen.add(baseTitle);
+                        deduped.push(seq);
                     }
                 }
 
-                // Filter out ANY anime that aired too long ago (e.g., more than 1.5 years ago).
-                // The Sequel Radar should prioritize *upcoming* or *recently released* news, not 2018 anime.
-                const oneYearAgo = new Date();
-                oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-                const oneYearAgoTime = oneYearAgo.getTime();
+                // Filter: keep upcoming/currently airing, and only recently-aired (within 18 months)
+                const cutoffDate = new Date();
+                cutoffDate.setMonth(cutoffDate.getMonth() - 18);
+                const cutoff = cutoffDate.getTime();
 
-                const freshSequels = dedupedSequels.filter((seq: any) => {
-                    // Always show upcoming unreleased stuff
-                    if (seq.status === "NOT_YET_RELEASED" || seq.nextAiringEpisode) return true;
-
-                    // If it has a start date, only show it if it started recently
+                const filtered = deduped.filter((seq: any) => {
+                    if (seq.status === "NOT_YET_RELEASED" || seq.status === "RELEASING" || seq.nextAiringEpisode) return true;
                     if (seq.startDate?.year) {
-                        const startDate = new Date(seq.startDate.year, seq.startDate.month ? seq.startDate.month - 1 : 0, seq.startDate.day || 1);
-                        return startDate.getTime() >= oneYearAgoTime;
+                        const d = new Date(
+                            seq.startDate.year,
+                            seq.startDate.month ? seq.startDate.month - 1 : 0,
+                            seq.startDate.day || 1
+                        );
+                        return d.getTime() >= cutoff;
                     }
-
-                    // If we have literally no idea when it aired, it's safer to hide it to prevent clutter
                     return false;
                 });
 
-                setMissingSequels(freshSequels);
+                setMissingSequels(filtered);
             } catch (err) {
                 console.error("Failed to fetch sequels:", err);
             } finally {
                 setLoadingSequels(false);
             }
         }
-
         loadMissingSequels();
-    }, [JSON.stringify(completedIds), animeList.length]);
+    }, [JSON.stringify(completedOrWatchingIds), animeList.length]);
 
     const handleQuickAdd = async (sequelNode: any) => {
-        const parentAnime = animeList.find(a => a.title.toLowerCase().includes(sequelNode.title.english?.toLowerCase()?.split(' ')?.[0] || 'xyzxyz'));
-        const nextSeason = parentAnime ? parentAnime.seasonNumber + 1 : 1;
-
         try {
             await onAddAnime({
                 title: sequelNode.title.english || sequelNode.title.romaji,
@@ -198,71 +218,85 @@ export default function Radar({ userId, animeList, onAddAnime }: RadarProps) {
                 rating: null,
                 notes: "",
                 coverImage: sequelNode.coverImage?.large,
-                seasonNumber: nextSeason,
+                seasonNumber: 1,
                 anilistId: sequelNode.id,
                 malId: sequelNode.idMal,
                 isHentai: false,
             });
-            // Remove from missing list directly for quick UI response
             setMissingSequels((prev) => prev.filter((s) => s.id !== sequelNode.id));
         } catch (err) {
             console.error("Quick add failed", err);
         }
     };
 
+    const isCurrentlyAiring = (anime: any) => !!anime.nextAiringEpisode;
+    const isUpcoming = (anime: any) => anime.status === "NOT_YET_RELEASED";
+
     return (
-        <div className="space-y-6">
-            {/* Airing Schedule Section */}
+        <div className="space-y-8">
+
+            {/* ── Airing Schedule ── */}
             <section>
-                <div className="flex items-center gap-2 mb-4">
-                    <Clock className="h-5 w-5 text-primary" />
+                <div className="flex items-center gap-2.5 mb-1">
+                    <Clock className="h-5 w-5 text-primary drop-shadow-[0_0_8px_rgba(139,92,246,0.7)]" />
                     <h2 className="text-2xl font-bold">Airing Schedule</h2>
+                    {airingSchedule.length > 0 && (
+                        <span className="ml-auto text-xs bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full text-muted-foreground">{airingSchedule.length} shows</span>
+                    )}
                 </div>
-                <p className="text-muted-foreground mb-4">
-                    Keep track of exact release times for the anime you are currently watching.
-                </p>
+                <p className="text-muted-foreground text-sm mb-4">Next episode release times for anime you're currently watching.</p>
 
                 {loadingSchedule ? (
                     <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin opacity-50" /></div>
                 ) : airingSchedule.length === 0 ? (
-                    <Card className="bg-muted/50 border-dashed">
-                        <CardContent className="flex flex-col items-center justify-center p-10 text-center text-muted-foreground">
-                            <Tv className="h-10 w-10 mb-2 opacity-20" />
-                            <p>None of your "Watching" anime are currently airing new episodes.</p>
+                    <Card className="bg-muted/30 border-dashed">
+                        <CardContent className="flex flex-col items-center justify-center p-10 text-center text-muted-foreground gap-2">
+                            <Tv className="h-10 w-10 mb-1 opacity-20" />
+                            <p className="font-medium">No airing shows found</p>
+                            <p className="text-xs">None of your "Watching" anime are currently airing new episodes.</p>
                         </CardContent>
                     </Card>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {airingSchedule.map((anime) => {
-                            const releaseDate = new Date(anime.nextAiringEpisode.airingAt * 1000);
-                            const timeString = formatDistanceToNow(releaseDate, { addSuffix: true });
+                            const dbAnime = anime.dbAnime as Anime | undefined;
+                            const epsBehind = anime.nextAiringEpisode.episode - 1 - (dbAnime?.episodesWatched || 0);
                             return (
-                                <Card key={anime.id} className="card-3d-hover perspective-1000 transform-3d border-border/50 holo-glass overflow-hidden group">
-                                    <div className="flex h-32 relative z-10 bg-background/40">
-                                        {/* Cover Image */}
+                                <Card key={anime.id} className="card-3d-hover border-border/50 holo-glass overflow-hidden group">
+                                    <div className="flex h-36 relative z-10">
                                         <div className="w-24 shrink-0 overflow-hidden relative">
                                             <div className="absolute inset-0 bg-gradient-to-r from-transparent to-background/90 z-10" />
                                             <img
-                                                src={anime.coverImage.large || anime.coverImage.medium}
+                                                src={anime.coverImage?.large || anime.coverImage?.medium}
                                                 alt="Cover"
                                                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
                                             />
                                         </div>
-                                        {/* Content */}
                                         <div className="flex-1 p-3 flex flex-col justify-between min-w-0">
                                             <div>
-                                                <h4 className="font-semibold text-sm truncate" title={anime.title.english || anime.title.romaji}>
+                                                <h4 className="font-semibold text-sm line-clamp-2 leading-tight" title={anime.title.english || anime.title.romaji}>
                                                     {anime.title.english || anime.title.romaji}
                                                 </h4>
-                                                <div className="mt-1 flex items-center gap-2">
-                                                    <Badge variant="default" className="text-[10px] px-1.5 py-0 h-4 uppercase">
-                                                        Ep {anime.nextAiringEpisode.episode}
+                                                <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                                                    <Badge className="text-[10px] px-1.5 py-0 h-4">
+                                                        Ep {anime.nextAiringEpisode.episode} next
                                                     </Badge>
+                                                    {dbAnime && (
+                                                        <span className="text-[10px] text-muted-foreground">
+                                                            You: {dbAnime.episodesWatched}/{anime.nextAiringEpisode.episode - 1} watched
+                                                        </span>
+                                                    )}
                                                 </div>
+                                                {epsBehind > 0 && (
+                                                    <div className="mt-1 flex items-center gap-1">
+                                                        <AlertTriangle className="w-3 h-3 text-orange-400" />
+                                                        <span className="text-[10px] text-orange-400 font-medium">{epsBehind} ep{epsBehind > 1 ? 's' : ''} behind</span>
+                                                    </div>
+                                                )}
                                             </div>
-                                            <div className="mt-auto pt-2 text-xs text-primary font-medium flex items-center gap-1">
-                                                <Clock className="w-3 h-3" />
-                                                Releases {timeString}
+                                            <div className="mt-auto flex items-center gap-1">
+                                                <Clock className="w-3 h-3 text-primary shrink-0" />
+                                                <AiringCountdown airingAt={anime.nextAiringEpisode.airingAt} />
                                             </div>
                                         </div>
                                     </div>
@@ -273,77 +307,142 @@ export default function Radar({ userId, animeList, onAddAnime }: RadarProps) {
                 )}
             </section>
 
-            {/* Sequel Scanner Section */}
-            <section className="pt-4 border-t border-border/50">
-                <div className="flex items-center gap-2 mb-4">
-                    <Sparkles className="h-5 w-5 text-yellow-500" />
+            {/* ── Episodes Behind ── */}
+            {!loadingSchedule && behindShows.length > 0 && (
+                <section className="pt-2 border-t border-border/40">
+                    <div className="flex items-center gap-2.5 mb-1">
+                        <Flame className="h-5 w-5 text-orange-400" />
+                        <h2 className="text-2xl font-bold">Catching Up</h2>
+                        <span className="ml-auto text-xs bg-orange-500/10 border border-orange-500/20 px-2 py-0.5 rounded-full text-orange-400">{behindShows.length} shows</span>
+                    </div>
+                    <p className="text-muted-foreground text-sm mb-4">Currently airing shows where you have episodes waiting.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {behindShows.slice(0, 6).map((anime) => (
+                            <Card key={anime.id} className="card-3d-hover border-orange-500/20 holo-glass overflow-hidden group">
+                                <div className="flex h-28 relative z-10">
+                                    <div className="w-20 shrink-0 overflow-hidden relative">
+                                        <div className="absolute inset-0 bg-gradient-to-r from-transparent to-background/90 z-10" />
+                                        <img
+                                            src={anime.coverImage?.large || anime.coverImage?.medium}
+                                            alt="Cover"
+                                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                                        />
+                                    </div>
+                                    <div className="flex-1 p-3 flex flex-col justify-between min-w-0">
+                                        <h4 className="font-semibold text-xs line-clamp-2 leading-tight">{anime.title.english || anime.title.romaji}</h4>
+                                        <div className="space-y-1">
+                                            <div className="w-full bg-muted/40 rounded-full h-1.5 overflow-hidden">
+                                                <div className="h-1.5 rounded-full bg-orange-500 transition-all" style={{ width: `${Math.min(100, (anime.watched / anime.latestAiredEp) * 100)}%` }} />
+                                            </div>
+                                            <div className="flex justify-between text-[10px] text-muted-foreground">
+                                                <span>{anime.watched} watched</span>
+                                                <span className="text-orange-400 font-semibold">{anime.epsBehind} ep{anime.epsBehind > 1 ? 's' : ''} to go</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </Card>
+                        ))}
+                    </div>
+                </section>
+            )}
+
+            {/* ── Sequel Radar ── */}
+            <section className="pt-2 border-t border-border/40">
+                <div className="flex items-center gap-2.5 mb-1">
+                    <Sparkles className="h-5 w-5 text-yellow-400 drop-shadow-[0_0_8px_rgba(234,179,8,0.7)]" />
                     <h2 className="text-2xl font-bold">Sequel Radar</h2>
+                    {missingSequels.length > 0 && (
+                        <span className="ml-auto text-xs bg-yellow-500/10 border border-yellow-500/20 px-2 py-0.5 rounded-full text-yellow-400">{missingSequels.length} found</span>
+                    )}
                 </div>
-                <p className="text-muted-foreground mb-4">
-                    We scanned your "Completed" and "Watching" lists. Here are released direct sequels you haven't added yet!
+                <p className="text-muted-foreground text-sm mb-4">
+                    Direct sequels of your completed &amp; watching anime that aren't in your list yet.
                 </p>
 
                 {loadingSequels ? (
                     <div className="flex justify-center p-8"><Loader2 className="h-8 w-8 animate-spin opacity-50" /></div>
                 ) : missingSequels.length === 0 ? (
-                    <Card className="bg-muted/50 border-dashed">
-                        <CardContent className="flex flex-col items-center justify-center p-10 text-center text-muted-foreground">
-                            <Sparkles className="h-10 w-10 mb-2 opacity-20" />
-                            <p>You're completely caught up on all sequels!</p>
+                    <Card className="bg-muted/30 border-dashed">
+                        <CardContent className="flex flex-col items-center justify-center p-10 text-center text-muted-foreground gap-2">
+                            <Sparkles className="h-10 w-10 mb-1 opacity-20" />
+                            <p className="font-medium">You're all caught up!</p>
+                            <p className="text-xs">No missing direct sequels found — impressive!</p>
                         </CardContent>
                     </Card>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {missingSequels.map((anime) => (
-                            <Card key={anime.id} className="card-3d-hover perspective-1000 transform-3d border-primary/20 holo-glass border-b-primary/40 overflow-hidden group">
-                                <div className="flex h-32 relative z-10 bg-background/40">
-                                    {/* Cover Image */}
-                                    <div className="w-24 shrink-0 overflow-hidden relative">
-                                        <div className="absolute inset-0 bg-gradient-to-r from-transparent to-background/90 z-10" />
-                                        <img
-                                            src={anime.coverImage.large}
-                                            alt="Cover"
-                                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                                        />
-                                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent flex items-end p-1 z-20">
-                                            <span className={`text-[10px] font-bold text-white uppercase tracking-wider w-full text-center truncate ${anime.status === 'NOT_YET_RELEASED' ? 'text-primary drop-shadow-[0_0_5px_rgba(124,58,237,0.8)]' : ''}`}>
-                                                {anime.status === 'NOT_YET_RELEASED' ? 'UPCOMING NEWS' : 'NEW SEASON'}
-                                            </span>
+                        {missingSequels.map((anime) => {
+                            const title = anime.title.english || anime.title.romaji;
+                            const season = getSeasonLabel(anime.season, anime.seasonYear);
+                            const isAiring = isCurrentlyAiring(anime);
+                            const upcoming = isUpcoming(anime);
+
+                            return (
+                                <Card key={anime.id} className="card-3d-hover border-primary/20 holo-glass overflow-hidden group flex flex-col">
+                                    <div className="flex h-32 relative z-10">
+                                        <div className="w-24 shrink-0 overflow-hidden relative">
+                                            <div className="absolute inset-0 bg-gradient-to-r from-transparent to-background/90 z-10" />
+                                            <img
+                                                src={anime.coverImage?.large}
+                                                alt="Cover"
+                                                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                                            />
+                                            <div className="absolute top-1.5 left-1.5 z-20">
+                                                {isAiring ? (
+                                                    <span className="text-[9px] font-bold bg-emerald-500 text-white px-1.5 py-0.5 rounded-full uppercase tracking-wide">Airing</span>
+                                                ) : upcoming ? (
+                                                    <span className="text-[9px] font-bold bg-primary text-white px-1.5 py-0.5 rounded-full uppercase tracking-wide">Upcoming</span>
+                                                ) : (
+                                                    <span className="text-[9px] font-bold bg-blue-600 text-white px-1.5 py-0.5 rounded-full uppercase tracking-wide">New</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex-1 p-3 flex flex-col justify-between min-w-0">
+                                            <div>
+                                                <h4 className="font-semibold text-sm line-clamp-2 leading-tight" title={title}>{title}</h4>
+                                                <div className="flex flex-wrap gap-1 mt-1.5">
+                                                    <span className="text-[10px] text-muted-foreground bg-muted/40 px-1.5 py-0.5 rounded-full">
+                                                        {anime.format?.replace(/_/g, " ") || 'TV'}
+                                                    </span>
+                                                    {anime.episodes && (
+                                                        <span className="text-[10px] text-muted-foreground bg-muted/40 px-1.5 py-0.5 rounded-full">
+                                                            {anime.episodes} eps
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="mt-1.5 flex items-center gap-1 text-[10px]">
+                                                    <CalendarDays className="w-3 h-3 text-primary/60 shrink-0" />
+                                                    <span className="text-primary/80 truncate">
+                                                        {anime.nextAiringEpisode
+                                                            ? <>Ep {anime.nextAiringEpisode.episode} <AiringCountdown airingAt={anime.nextAiringEpisode.airingAt} /></>
+                                                            : season
+                                                            ? season
+                                                            : anime.startDate?.year
+                                                            ? `${anime.startDate.year}`
+                                                            : "Date TBA"}
+                                                    </span>
+                                                </div>
+                                                {anime.sourceAnime && (
+                                                    <p className="text-[10px] text-muted-foreground/60 mt-0.5 truncate">
+                                                        Sequel of: {anime.sourceAnime.title?.english || anime.sourceAnime.title?.romaji}
+                                                    </p>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
-                                    {/* Content */}
-                                    <div className="flex-1 p-3 flex flex-col justify-between min-w-0">
-                                        <div>
-                                            <h4 className="font-semibold text-sm line-clamp-2" title={anime.title.english || anime.title.romaji}>
-                                                {anime.title.english || anime.title.romaji}
-                                            </h4>
-                                            <p className="text-xs text-muted-foreground mt-1 capitalize truncate">
-                                                {anime.format?.replace(/_/g, " ") || 'TV'} • {anime.episodes ? `${anime.episodes} Eps` : 'TBA'}
-                                            </p>
-                                            <p className="text-xs text-primary/80 mt-0.5 mt-auto">
-                                                {(() => {
-                                                    if (anime.nextAiringEpisode) {
-                                                        const d = new Date(anime.nextAiringEpisode.airingAt * 1000);
-                                                        return `Releasing: ${d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}`;
-                                                    } else if (anime.startDate?.year) {
-                                                        const d = new Date(anime.startDate.year, anime.startDate.month ? anime.startDate.month - 1 : 0, anime.startDate.day || 1);
-                                                        return d > new Date() ? `Expected: ${d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}` : `Aired: ${d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}`;
-                                                    }
-                                                    return "Release date unknown";
-                                                })()}
-                                            </p>
-                                        </div>
+                                    <div className="px-3 pb-3">
                                         <Button
                                             size="sm"
-                                            className="mt-2 w-full h-7 text-xs gap-1 gradient-primary hover:opacity-90 transition-smooth shadow-glow text-white border-0"
+                                            className="w-full h-7 text-xs gap-1 gradient-primary hover:opacity-90 transition-smooth shadow-glow text-white border-0"
                                             onClick={() => handleQuickAdd(anime)}
                                         >
-                                            <Plus className="w-3 h-3" /> Add to List
+                                            <Plus className="w-3 h-3" /> Add to Plan to Watch
                                         </Button>
                                     </div>
-                                </div>
-                            </Card>
-                        ))}
+                                </Card>
+                            );
+                        })}
                     </div>
                 )}
             </section>
