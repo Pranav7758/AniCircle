@@ -128,12 +128,17 @@ const Index = () => {
       for (let i = 0; i < anilistIds.length; i += 50) {
         try {
           const data = await fetchAniList(GET_ANALYTICS_QUERY, { ids: anilistIds.slice(i, i + 50) });
+          const ALLOWED_TAG_CATEGORIES = new Set(["Theme", "Setting", "Demographic"]);
           for (const media of data?.Page?.media || []) {
             const genres: string[] = [...(media.genres || [])];
-            // Add non-spoiler tags with rank >= 60 (well-represented in the anime)
+            // Only add well-known theme/setting/demographic tags ranked 75+
             if (media.tags) {
               for (const tag of media.tags) {
-                if (!tag.isMediaSpoiler && tag.rank >= 60) {
+                if (
+                  !tag.isMediaSpoiler &&
+                  tag.rank >= 75 &&
+                  ALLOWED_TAG_CATEGORIES.has(tag.category)
+                ) {
                   genres.push(tag.name);
                 }
               }
