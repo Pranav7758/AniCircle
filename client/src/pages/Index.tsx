@@ -129,7 +129,16 @@ const Index = () => {
         try {
           const data = await fetchAniList(GET_ANALYTICS_QUERY, { ids: anilistIds.slice(i, i + 50) });
           for (const media of data?.Page?.media || []) {
-            if (media.genres?.length) newMap.set(media.id, media.genres);
+            const genres: string[] = [...(media.genres || [])];
+            // Add non-spoiler tags with rank >= 60 (well-represented in the anime)
+            if (media.tags) {
+              for (const tag of media.tags) {
+                if (!tag.isMediaSpoiler && tag.rank >= 60) {
+                  genres.push(tag.name);
+                }
+              }
+            }
+            if (genres.length) newMap.set(media.id, genres);
           }
         } catch { /* silent — genres are a nice-to-have */ }
       }

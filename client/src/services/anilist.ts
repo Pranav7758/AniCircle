@@ -268,6 +268,12 @@ export const GET_ANALYTICS_QUERY = `
         duration
         episodes
         genres
+        tags {
+          name
+          category
+          rank
+          isMediaSpoiler
+        }
         season
         seasonYear
         averageScore
