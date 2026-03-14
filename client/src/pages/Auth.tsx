@@ -326,7 +326,7 @@ const Auth = () => {
           </div>
 
           <p className="text-center text-xs text-muted-foreground/40 mt-6">
-            © 2025 AniCircle · Built for anime lovers
+            © 2026 AniCircle · Built for anime lovers
           </p>
         </div>
       </div>

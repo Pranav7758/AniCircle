@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { getAnimeList, createAnime, updateAnime, deleteAnime } from "@/services/supabaseData";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LogOut, Plus, Search, Sparkles, Trophy, Users, Settings, PieChart } from "lucide-react";
+import { LogOut, Plus, Search, Sparkles, Trophy, Users, Settings, PieChart, Play, CheckCircle2, Clock, ArrowUpDown } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import AnimeRanking from "@/components/AnimeRanking";
@@ -17,7 +17,6 @@ import Notifications from "@/components/Notifications";
 import NewEpisodesBanner from "@/components/NewEpisodesBanner";
 import Radar from "@/components/Radar";
 import AnalyticsDashboard from "@/components/AnalyticsDashboard";
-import { Loader2 } from "lucide-react";
 
 interface Anime {
   id: string;
@@ -35,6 +34,44 @@ interface Anime {
   isHentai: boolean | null;
 }
 
+const SkeletonCard = () => (
+  <div className="flex flex-col rounded-2xl overflow-hidden border border-border/40 bg-card">
+    <div className="aspect-[3/4] animate-shimmer" />
+    <div className="p-2.5 space-y-2">
+      <div className="h-3 rounded-full animate-shimmer w-3/4" />
+      <div className="h-2 rounded-full animate-shimmer w-1/2" />
+    </div>
+  </div>
+);
+
+const StatsBar = ({ animeList }: { animeList: Anime[] }) => {
+  const watching = animeList.filter(a => a.status === "watching").length;
+  const completed = animeList.filter(a => a.status === "completed").length;
+  const totalEps = animeList.reduce((sum, a) => sum + a.episodesWatched, 0);
+  const uniqueTitles = new Set(animeList.map(a => a.title)).size;
+
+  const stats = [
+    { icon: Play, label: "Watching", value: watching, color: "text-primary" },
+    { icon: CheckCircle2, label: "Completed", value: completed, color: "text-emerald-400" },
+    { icon: Trophy, label: "Total Titles", value: uniqueTitles, color: "text-amber-400" },
+    { icon: Clock, label: "Episodes", value: totalEps.toLocaleString(), color: "text-blue-400" },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+      {stats.map(({ icon: Icon, label, value, color }) => (
+        <div key={label} className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-muted/30 border border-border/40 holo-glass">
+          <Icon className={`w-4 h-4 shrink-0 ${color}`} />
+          <div className="min-w-0">
+            <p className={`text-base font-black leading-none ${color}`}>{value}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">{label}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 const Index = () => {
   const [, setLocation] = useLocation();
   const { user, logout } = useAuth();
@@ -44,6 +81,7 @@ const Index = () => {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [hentaiFilter, setHentaiFilter] = useState<string>("hide");
   const [rankingFilter, setRankingFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<string>(() => localStorage.getItem("animeSortBy") || "default");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [prefilledSearchQuery, setPrefilledSearchQuery] = useState("");
@@ -75,7 +113,6 @@ const Index = () => {
 
   const fetchAnimeList = async () => {
     if (!user) return;
-
     try {
       const data = await getAnimeList();
       setAnimeList(data || []);
@@ -115,14 +152,57 @@ const Index = () => {
     setFilteredAnimeList(filtered);
   };
 
-  const groupedAnime = (filteredAnimeList || []).reduce((groups, anime) => {
-    const title = anime.title;
-    if (!groups[title]) {
-      groups[title] = [];
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const a of animeList) {
+      counts[a.status] = (counts[a.status] || 0) + 1;
     }
-    groups[title].push(anime);
-    return groups;
-  }, {} as Record<string, Anime[]>);
+    return counts;
+  }, [animeList]);
+
+  const groupedAnime = useMemo(() => {
+    const groups = (filteredAnimeList || []).reduce((acc, anime) => {
+      const title = anime.title;
+      if (!acc[title]) acc[title] = [];
+      acc[title].push(anime);
+      return acc;
+    }, {} as Record<string, Anime[]>);
+
+    const entries = Object.entries(groups);
+
+    switch (sortBy) {
+      case "title-asc":
+        entries.sort(([a], [b]) => a.localeCompare(b));
+        break;
+      case "title-desc":
+        entries.sort(([a], [b]) => b.localeCompare(a));
+        break;
+      case "rating-desc": {
+        entries.sort(([, seasonsA], [, seasonsB]) => {
+          const avgA = seasonsA.filter(s => s.rating).length
+            ? seasonsA.reduce((sum, s) => sum + (s.rating || 0), 0) / seasonsA.filter(s => s.rating).length
+            : 0;
+          const avgB = seasonsB.filter(s => s.rating).length
+            ? seasonsB.reduce((sum, s) => sum + (s.rating || 0), 0) / seasonsB.filter(s => s.rating).length
+            : 0;
+          return avgB - avgA;
+        });
+        break;
+      }
+      case "progress-desc": {
+        entries.sort(([, seasonsA], [, seasonsB]) => {
+          const progressA = seasonsA.reduce((sum, s) => sum + s.episodesWatched, 0);
+          const progressB = seasonsB.reduce((sum, s) => sum + s.episodesWatched, 0);
+          return progressB - progressA;
+        });
+        break;
+      }
+      default:
+        break;
+    }
+
+    return Object.fromEntries(entries);
+  }, [filteredAnimeList, sortBy]);
 
   const handleAddAnime = async (data: AnimeFormData) => {
     if (data.seasons && data.seasons.length > 0) {
@@ -218,6 +298,15 @@ const Index = () => {
     }
   };
 
+  const handleQuickEpisodeUpdate = async (id: string, newEpisodes: number) => {
+    try {
+      await updateAnime(id, { episodesWatched: newEpisodes });
+      setAnimeList(prev => prev.map(a => a.id === id ? { ...a, episodesWatched: newEpisodes } : a));
+    } catch (error) {
+      toast.error("Failed to update episode count");
+    }
+  };
+
   const handleSignOut = async () => {
     await logout();
     setLocation("/auth");
@@ -242,22 +331,40 @@ const Index = () => {
     });
   };
 
+  const gridClass = gridSize === "compact"
+    ? "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7"
+    : gridSize === "small"
+    ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+    : gridSize === "medium"
+    ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+    : gridSize === "large"
+    ? "grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4"
+    : "grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3";
+
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background aurora-bg">
-        <div className="text-center space-y-5 animate-fade-in">
-          <div className="relative mx-auto w-20 h-20">
-            <div className="absolute inset-0 rounded-full border-2 border-primary/20 animate-spin-slow" />
-            <div className="absolute inset-2 rounded-full border border-primary/40 animate-spin-slow" style={{ animationDirection: 'reverse', animationDuration: '4s' }} />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <img src="/logo.png" alt="AniCircle" className="h-12 w-12 rounded-full shadow-neon" />
+      <div className="min-h-screen flex flex-col bg-background">
+        <header className="sticky top-0 z-50 border-b border-border/40 glass bg-glow">
+          <div className="header-accent-strip" />
+          <div className="container mx-auto px-4 py-2.5">
+            <div className="flex items-center gap-2.5">
+              <div className="relative">
+                <div className="absolute inset-0 rounded-full bg-primary/25 blur-md animate-glow-pulse" />
+                <img src="/logo.png" alt="AniCircle" className="relative h-8 w-8 sm:h-9 sm:w-9 rounded-full shadow-neon" />
+              </div>
+              <h2 className="text-lg sm:text-xl font-black text-gradient">AniCircle</h2>
             </div>
           </div>
-          <div className="space-y-1">
-            <p className="text-lg font-bold text-gradient">AniCircle</p>
-            <p className="text-sm text-muted-foreground animate-pulse">Loading your anime universe...</p>
+        </header>
+        <main className="container mx-auto px-4 pt-8 pb-8 flex-1">
+          <div className="mb-6 h-10 w-80 rounded-xl animate-shimmer" />
+          <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {[1,2,3,4].map(i => <div key={i} className="h-14 rounded-xl animate-shimmer" />)}
           </div>
-        </div>
+          <div className={`grid gap-3 sm:gap-4 ${gridClass}`}>
+            {Array.from({ length: 10 }).map((_, i) => <SkeletonCard key={i} />)}
+          </div>
+        </main>
       </div>
     );
   }
@@ -380,6 +487,9 @@ const Index = () => {
 
           <TabsContent value="list" className="space-y-4">
             {user && <NewEpisodesBanner userId={user.id} />}
+
+            {animeList.length > 0 && <StatsBar animeList={animeList} />}
+
             <div className="mb-4">
               <div className="flex flex-col md:flex-row gap-3">
                 <div className="flex-1 relative">
@@ -393,26 +503,29 @@ const Index = () => {
                   />
                 </div>
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="h-10 w-full md:w-44 rounded-xl border-border/50 bg-muted/30 text-sm" data-testid="select-status-filter">
+                  <SelectTrigger className="h-10 w-full md:w-48 rounded-xl border-border/50 bg-muted/30 text-sm" data-testid="select-status-filter">
                     <SelectValue placeholder="Filter by status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="watching">Watching</SelectItem>
-                    <SelectItem value="completed">Completed</SelectItem>
-                    <SelectItem value="plan_to_watch">Plan to Watch</SelectItem>
-                    <SelectItem value="on_hold">On Hold</SelectItem>
-                    <SelectItem value="dropped">Dropped</SelectItem>
+                    <SelectItem value="all">All Status ({animeList.length})</SelectItem>
+                    <SelectItem value="watching">Watching ({statusCounts.watching || 0})</SelectItem>
+                    <SelectItem value="completed">Completed ({statusCounts.completed || 0})</SelectItem>
+                    <SelectItem value="plan_to_watch">Plan to Watch ({statusCounts.plan_to_watch || 0})</SelectItem>
+                    <SelectItem value="on_hold">On Hold ({statusCounts.on_hold || 0})</SelectItem>
+                    <SelectItem value="dropped">Dropped ({statusCounts.dropped || 0})</SelectItem>
                   </SelectContent>
                 </Select>
-                <Select value={rankingFilter} onValueChange={setRankingFilter}>
-                  <SelectTrigger className="h-10 w-full md:w-44 rounded-xl border-border/50 bg-muted/30 text-sm" data-testid="select-ranking-filter">
-                    <SelectValue placeholder="Ranking filter" />
+                <Select value={sortBy} onValueChange={(v) => { setSortBy(v); localStorage.setItem("animeSortBy", v); }}>
+                  <SelectTrigger className="h-10 w-full md:w-44 rounded-xl border-border/50 bg-muted/30 text-sm" data-testid="select-sort">
+                    <ArrowUpDown className="w-3.5 h-3.5 mr-1.5 text-muted-foreground/60" />
+                    <SelectValue placeholder="Sort by" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Anime</SelectItem>
-                    <SelectItem value="ranked">Ranked Only</SelectItem>
-                    <SelectItem value="unranked">Unranked Only</SelectItem>
+                    <SelectItem value="default">Recently Added</SelectItem>
+                    <SelectItem value="title-asc">Title A → Z</SelectItem>
+                    <SelectItem value="title-desc">Title Z → A</SelectItem>
+                    <SelectItem value="rating-desc">Highest Rated</SelectItem>
+                    <SelectItem value="progress-desc">Most Watched</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -446,35 +559,37 @@ const Index = () => {
                 )}
               </div>
             ) : (
-              <div className={`grid gap-3 sm:gap-4 animate-fade-in ${gridSize === "compact" ? "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7" :
-                gridSize === "small" ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6" :
-                  gridSize === "medium" ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" :
-                    gridSize === "large" ? "grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4" :
-                      "grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3"
-                }`}>
-                {Object.entries(groupedAnime).map(([title, seasons]) => (
-                  <AnimeGroupCard
-                    key={title}
-                    title={title}
-                    coverImage={seasons[0].coverImage}
-                    seasons={seasons.map(s => ({
-                      id: s.id,
-                      seasonNumber: s.seasonNumber,
-                      episodesWatched: s.episodesWatched,
-                      totalEpisodes: s.totalEpisodes,
-                      status: s.status,
-                      rating: s.rating,
-                      notes: s.notes || "",
-                    }))}
-                    onEdit={openEditDialog}
-                    onDelete={handleDeleteAnime}
-                    onAddSeason={(title) => {
-                      setPrefilledSearchQuery(title);
-                      setIsAddDialogOpen(true);
-                    }}
-                  />
-                ))}
-              </div>
+              <>
+                <p className="text-xs text-muted-foreground mb-1">
+                  {Object.keys(groupedAnime).length} title{Object.keys(groupedAnime).length !== 1 ? "s" : ""}
+                  {filteredAnimeList.length !== animeList.length ? ` (filtered from ${new Set(animeList.map(a => a.title)).size})` : ""}
+                </p>
+                <div className={`grid gap-3 sm:gap-4 animate-fade-in ${gridClass}`}>
+                  {Object.entries(groupedAnime).map(([title, seasons]) => (
+                    <AnimeGroupCard
+                      key={title}
+                      title={title}
+                      coverImage={seasons[0].coverImage}
+                      seasons={seasons.map(s => ({
+                        id: s.id,
+                        seasonNumber: s.seasonNumber,
+                        episodesWatched: s.episodesWatched,
+                        totalEpisodes: s.totalEpisodes,
+                        status: s.status,
+                        rating: s.rating,
+                        notes: s.notes || "",
+                      }))}
+                      onEdit={openEditDialog}
+                      onDelete={handleDeleteAnime}
+                      onAddSeason={(title) => {
+                        setPrefilledSearchQuery(title);
+                        setIsAddDialogOpen(true);
+                      }}
+                      onQuickEpisodeUpdate={handleQuickEpisodeUpdate}
+                    />
+                  ))}
+                </div>
+              </>
             )}
           </TabsContent>
 
