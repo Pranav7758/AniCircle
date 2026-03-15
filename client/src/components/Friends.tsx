@@ -217,16 +217,27 @@ const Friends = ({ currentUserId }: FriendsProps) => {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="friends" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="friends" data-testid="tab-my-friends">My Friends</TabsTrigger>
-          <TabsTrigger value="feed" data-testid="tab-feed" className="gap-1">
-            <Activity className="w-3.5 h-3.5" /> Feed
+        <TabsList className="flex w-full h-auto flex-wrap gap-1 md:grid md:grid-cols-5 md:gap-0">
+          <TabsTrigger value="friends" data-testid="tab-my-friends" className="flex-1 min-w-[70px] gap-1">
+            <Users className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden sm:inline">My </span>Friends
           </TabsTrigger>
-          <TabsTrigger value="compare" data-testid="tab-compare" className="gap-1">
-            <Swords className="w-3.5 h-3.5" /> Compare
+          <TabsTrigger value="feed" data-testid="tab-feed" className="flex-1 min-w-[60px] gap-1">
+            <Activity className="w-3.5 h-3.5 shrink-0" />
+            <span>Feed</span>
           </TabsTrigger>
-          <TabsTrigger value="requests" data-testid="tab-requests">Requests</TabsTrigger>
-          <TabsTrigger value="find" data-testid="tab-find-friends">Find Friends</TabsTrigger>
+          <TabsTrigger value="compare" data-testid="tab-compare" className="flex-1 min-w-[70px] gap-1">
+            <Swords className="w-3.5 h-3.5 shrink-0" />
+            <span>Compare</span>
+          </TabsTrigger>
+          <TabsTrigger value="requests" data-testid="tab-requests" className="flex-1 min-w-[70px] gap-1">
+            <UserPlus className="w-3.5 h-3.5 shrink-0" />
+            <span>Requests</span>
+          </TabsTrigger>
+          <TabsTrigger value="find" data-testid="tab-find-friends" className="flex-1 min-w-[60px] gap-1">
+            <Search className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden sm:inline">Find </span>Friends
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="friends" className="space-y-4">
