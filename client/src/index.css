@@ -544,9 +544,81 @@
   to { transform: rotate(360deg); }
 }
 
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pop-in {
+  from { opacity: 0; transform: scale(0.75); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes tab-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes gradient-flow {
+  0% { background-position: 0% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes count-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* ── Neon flicker on logo ── */
 .animate-neon-flicker {
   animation: neon-flicker 8s ease-in-out infinite;
+}
+
+/* ── Staggered fade-in for lists ── */
+.animate-stagger-in {
+  animation: fade-in 0.45s ease-out both;
+}
+
+/* ── Slide-in from right ── */
+.animate-slide-in-right {
+  animation: slide-in-right 0.4s ease-out both;
+}
+
+/* ── Slide-in from left ── */
+.animate-slide-in-left {
+  animation: slide-in-left 0.4s ease-out both;
+}
+
+/* ── Pop-in (elastic) ── */
+.animate-pop-in {
+  animation: pop-in 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) both;
+}
+
+/* ── Tab content transition ── */
+.animate-tab-in {
+  animation: tab-in 0.3s ease-out both;
+}
+
+/* ── Gradient strip flow ── */
+.header-accent-strip-anim {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg,
+    hsl(268 88% 62%) 0%,
+    hsl(215 90% 58%) 33%,
+    hsl(330 85% 62%) 66%,
+    hsl(268 88% 62%) 100%);
+  background-size: 200% 100%;
+  animation: gradient-flow 3s linear infinite;
+  opacity: 0.9;
 }
 
 /* ── Header top accent strip ── */

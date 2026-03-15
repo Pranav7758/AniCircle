@@ -61,11 +61,15 @@ const StatsBar = ({ animeList }: { animeList: Anime[] }) => {
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-      {stats.map(({ icon: Icon, label, value, color }) => (
-        <div key={label} className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-muted/30 border border-border/40 holo-glass">
+      {stats.map(({ icon: Icon, label, value, color }, i) => (
+        <div
+          key={label}
+          className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-muted/30 border border-border/40 holo-glass animate-stagger-in"
+          style={{ animationDelay: `${i * 80}ms` }}
+        >
           <Icon className={`w-4 h-4 shrink-0 ${color}`} />
           <div className="min-w-0">
-            <p className={`text-base font-black leading-none ${color}`}>{value}</p>
+            <p className={`text-base font-black leading-none ${color} animate-stagger-in`} style={{ animationDelay: `${i * 80 + 100}ms` }}>{value}</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">{label}</p>
           </div>
         </div>
@@ -576,7 +580,7 @@ const Index = () => {
             </div>
           </div>
 
-          <TabsContent value="list" className="space-y-4">
+          <TabsContent value="list" className="space-y-4 animate-tab-in">
             {user && <NewEpisodesBanner userId={user.id} />}
 
             {animeList.length > 0 && <StatsBar animeList={animeList} />}
@@ -667,10 +671,10 @@ const Index = () => {
                   {Object.keys(groupedAnime).length} title{Object.keys(groupedAnime).length !== 1 ? "s" : ""}
                   {filteredAnimeList.length !== animeList.length ? ` (filtered from ${new Set(animeList.map(a => a.title)).size})` : ""}
                 </p>
-                <div className={`grid gap-3 sm:gap-4 animate-fade-in ${gridClass}`}>
-                  {Object.entries(groupedAnime).map(([title, seasons]) => (
+                <div className={`grid gap-3 sm:gap-4 ${gridClass}`}>
+                  {Object.entries(groupedAnime).map(([title, seasons], cardIndex) => (
+                    <div key={title} className="animate-stagger-in" style={{ animationDelay: `${Math.min(cardIndex * 40, 600)}ms` }}>
                     <AnimeGroupCard
-                      key={title}
                       title={title}
                       coverImage={seasons[0].coverImage}
                       seasons={seasons.map(s => ({
@@ -690,13 +694,14 @@ const Index = () => {
                       }}
                       onQuickEpisodeUpdate={handleQuickEpisodeUpdate}
                     />
+                    </div>
                   ))}
                 </div>
               </>
             )}
           </TabsContent>
 
-          <TabsContent value="radar" className="pt-2">
+          <TabsContent value="radar" className="pt-2 animate-tab-in">
             {user && (
               <Radar
                 userId={user.id}
@@ -706,7 +711,7 @@ const Index = () => {
             )}
           </TabsContent>
 
-          <TabsContent value="ranking" className="space-y-4">
+          <TabsContent value="ranking" className="space-y-4 animate-tab-in">
             <div className="mb-6">
               <div className="flex items-center gap-2 mb-1">
                 <Trophy className="w-5 h-5 text-amber-400" />
@@ -717,11 +722,11 @@ const Index = () => {
             {user && <AnimeRanking userId={user.id} isOwnProfile={true} />}
           </TabsContent>
 
-          <TabsContent value="friends" className="space-y-4">
+          <TabsContent value="friends" className="space-y-4 animate-tab-in">
             {user && <Friends currentUserId={user.id} />}
           </TabsContent>
 
-          <TabsContent value="analytics" className="space-y-4 pt-4">
+          <TabsContent value="analytics" className="space-y-4 pt-4 animate-tab-in">
             <AnalyticsDashboard />
           </TabsContent>
 

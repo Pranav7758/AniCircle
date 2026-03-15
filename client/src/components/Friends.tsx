@@ -359,10 +359,10 @@ const Friends = ({ currentUserId }: FriendsProps) => {
                   </div>
                 ) : (
                   <div className="grid gap-4">
-                    {friends.map((friend) => {
+                    {friends.map((friend, fi) => {
                       const friendId = friend.userId === currentUserId ? friend.friendId : friend.userId;
                       return (
-                        <Card key={friend.id} className="cursor-pointer hover:bg-accent/50" data-testid={`friend-card-${friend.id}`}>
+                        <Card key={friend.id} className="cursor-pointer hover:bg-accent/50 animate-stagger-in" style={{ animationDelay: `${fi * 70}ms` }} data-testid={`friend-card-${friend.id}`}>
                           <CardContent className="p-4">
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-3">
@@ -405,7 +405,7 @@ const Friends = ({ currentUserId }: FriendsProps) => {
             </div>
           ) : (
             <div className="space-y-2.5">
-              {activityFeed.map((item) => {
+              {activityFeed.map((item, ai) => {
                 const icon =
                   item.type === "completed" ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> :
                   item.type === "rated" ? <Star className="w-4 h-4 text-amber-400 shrink-0" /> :
@@ -425,7 +425,7 @@ const Friends = ({ currentUserId }: FriendsProps) => {
                   item.type === "completed" && item.rating ? ` — ${item.rating}/10` : "";
 
                 return (
-                  <div key={item.id} className="flex items-center gap-3 p-3 rounded-xl bg-muted/20 border border-border/30 holo-glass hover:bg-muted/30 transition-colors">
+                  <div key={item.id} className="flex items-center gap-3 p-3 rounded-xl bg-muted/20 border border-border/30 holo-glass hover:bg-muted/30 transition-colors animate-stagger-in" style={{ animationDelay: `${ai * 60}ms` }}>
                     {item.coverImage ? (
                       <img src={item.coverImage} alt={item.animeTitle} className="w-10 h-14 object-cover rounded-lg shrink-0" />
                     ) : (
@@ -469,8 +469,8 @@ const Friends = ({ currentUserId }: FriendsProps) => {
                 <p className="text-sm text-muted-foreground">No pending requests</p>
               ) : (
                 <div className="space-y-2">
-                  {pendingRequests.map((request) => (
-                    <Card key={request.id} data-testid={`request-card-${request.id}`}>
+                  {pendingRequests.map((request, ri) => (
+                    <Card key={request.id} className="animate-stagger-in" style={{ animationDelay: `${ri * 70}ms` }} data-testid={`request-card-${request.id}`}>
                       <CardContent className="p-4">
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-3">

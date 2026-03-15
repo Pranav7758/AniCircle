@@ -167,8 +167,8 @@ const Auth = () => {
               { icon: Eye, label: "Track every episode with real-time progress" },
               { icon: Zap, label: "Radar — never miss a sequel or new season" },
               { icon: Star, label: "Rate and rank your all-time favourites" },
-            ].map(({ icon: Icon, label }) => (
-              <div key={label} className="flex items-center gap-3 glass-light rounded-xl px-4 py-3 border border-border/30 animate-fade-in">
+            ].map(({ icon: Icon, label }, i) => (
+              <div key={label} className="flex items-center gap-3 glass-light rounded-xl px-4 py-3 border border-border/30 animate-stagger-in" style={{ animationDelay: `${i * 120 + 200}ms` }}>
                 <div className="shrink-0 w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center">
                   <Icon className="w-4 h-4 text-primary" />
                 </div>
