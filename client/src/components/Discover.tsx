@@ -7,6 +7,7 @@ import {
   GET_TOP_GENRE_QUERY,
   GET_TOP_RATED_ISEKAI_QUERY,
   GET_POPULAR_SEASON_QUERY,
+  SEARCH_ANIME_QUERY,
 } from "@/services/anilist";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -300,13 +301,19 @@ function FindSimilar({ animeList, allKnownIds, showMature, onAdd, addingId }: {
     setQuery(anime.title);
     setOpen(false);
     setResults([]);
-    if (!anime.anilistId) {
-      // No AniList ID — can't fetch recommendations
-      return;
-    }
     setLoading(true);
     try {
-      const data = await fetchAniList(GET_RECOMMENDATIONS_QUERY, { id: anime.anilistId });
+      let anilistId = anime.anilistId;
+
+      // If no stored AniList ID, look it up by title
+      if (!anilistId) {
+        const searchData = await fetchAniList(SEARCH_ANIME_QUERY, { search: anime.title }, false);
+        const match = searchData?.Page?.media?.[0];
+        if (!match) { setLoading(false); return; }
+        anilistId = match.id;
+      }
+
+      const data = await fetchAniList(GET_RECOMMENDATIONS_QUERY, { id: anilistId });
       const recs = (data?.Media?.recommendations?.nodes || [])
         .filter((n: any) => n.mediaRecommendation && !allKnownIds.has(n.mediaRecommendation.id))
         .map((n: any) => n.mediaRecommendation);
@@ -392,9 +399,7 @@ function FindSimilar({ animeList, allKnownIds, showMature, onAdd, addingId }: {
       {loading && <SkeletonRow />}
       {!loading && selected && results.length === 0 && (
         <p className="text-xs text-muted-foreground py-3">
-          {!selected.anilistId
-            ? `"${selected.title}" was added manually and doesn't have AniList data, so we can't fetch recommendations for it.`
-            : "No similar anime found — you might have already seen them all!"}
+          No similar anime found for "{selected.title}" — you might have already seen everything similar!
         </p>
       )}
       {!loading && results.length > 0 && (
