@@ -3,8 +3,8 @@ import {
   fetchAniList,
   GET_TRENDING_QUERY,
   GET_RECOMMENDATIONS_QUERY,
-  GET_ANALYTICS_QUERY,
   GET_GENRE_TRENDING_QUERY,
+  GET_ISEKAI_TRENDING_QUERY,
   GET_TOP_RATED_ISEKAI_QUERY,
   GET_POPULAR_SEASON_QUERY,
 } from "@/services/anilist";
@@ -40,39 +40,40 @@ const MOODS = [
     id: "dark", label: "Dark & Intense", emoji: "🌑", desc: "Psychological, Horror, Thriller",
     from: "from-purple-900/60", to: "to-purple-600/20", border: "border-purple-500/40", ring: "ring-purple-500",
     glow: "shadow-[0_0_20px_rgba(168,85,247,0.35)]",
-    genres: ["Thriller", "Psychological", "Horror", "Drama", "Mystery", "Suspense"],
+    anilistGenre: "Thriller",
   },
   {
     id: "action", label: "Pure Action", emoji: "⚔️", desc: "Fights, Adventure, Sports",
     from: "from-red-900/60", to: "to-orange-700/20", border: "border-red-500/40", ring: "ring-red-500",
     glow: "shadow-[0_0_20px_rgba(239,68,68,0.35)]",
-    genres: ["Action", "Adventure", "Sports", "Martial Arts", "Military"],
+    anilistGenre: "Action",
   },
   {
     id: "funny", label: "Make Me Laugh", emoji: "😂", desc: "Comedy, Parody, Gag Humor",
     from: "from-yellow-900/60", to: "to-yellow-600/20", border: "border-yellow-500/40", ring: "ring-yellow-500",
     glow: "shadow-[0_0_20px_rgba(234,179,8,0.35)]",
-    genres: ["Comedy", "Slice of Life", "Parody", "Gag Humor"],
+    anilistGenre: "Comedy",
   },
   {
     id: "wholesome", label: "Feel Good", emoji: "🌸", desc: "Romance, Slice of Life, School",
     from: "from-pink-900/60", to: "to-pink-600/20", border: "border-pink-500/40", ring: "ring-pink-500",
     glow: "shadow-[0_0_20px_rgba(236,72,153,0.35)]",
-    genres: ["Slice of Life", "Romance", "Comedy", "School", "Iyashikei"],
+    anilistGenre: "Romance",
   },
   {
     id: "isekai", label: "Isekai / Fantasy", emoji: "🌀", desc: "Other Worlds, Magic, Adventure",
     from: "from-blue-900/60", to: "to-violet-700/20", border: "border-blue-500/40", ring: "ring-blue-500",
     glow: "shadow-[0_0_20px_rgba(59,130,246,0.35)]",
-    genres: ["Fantasy", "Adventure", "Isekai", "Magic", "Supernatural"],
+    anilistGenre: "Fantasy",
+    anilistTag: "Isekai",
   },
   {
     id: "brainy", label: "Mind Games", emoji: "🧠", desc: "Mystery, Sci-Fi, Strategy",
     from: "from-emerald-900/60", to: "to-teal-700/20", border: "border-emerald-500/40", ring: "ring-emerald-500",
     glow: "shadow-[0_0_20px_rgba(16,185,129,0.35)]",
-    genres: ["Mystery", "Sci-Fi", "Psychological", "Strategy Game", "Thriller"],
+    anilistGenre: "Mystery",
   },
-];
+] as const;
 
 const STATUS_MAP: Record<string, { label: string; color: string }> = {
   RELEASING: { label: "Airing", color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" },
@@ -410,16 +411,12 @@ export default function Discover({ animeList, onAddAnime }: Props) {
   const [recommendations, setRecommendations] = useState<{ sourceTitle: string; items: any[] }[]>([]);
   const [loadingRecs, setLoadingRecs] = useState(true);
   const [activeMood, setActiveMood] = useState<string | null>(null);
-  const [moodGenreMap, setMoodGenreMap] = useState<Map<number, string[]>>(new Map());
-  const [loadingMoodGenres, setLoadingMoodGenres] = useState(false);
+  const [moodResults, setMoodResults] = useState<any[]>([]);
+  const [loadingMoodResults, setLoadingMoodResults] = useState(false);
   const [addingId, setAddingId] = useState<number | null>(null);
 
   const allKnownIds = useMemo(
     () => new Set(animeList.map(a => a.anilistId).filter(Boolean) as number[]),
-    [animeList]
-  );
-  const planToWatch = useMemo(
-    () => animeList.filter(a => a.status === "plan_to_watch" && a.anilistId),
     [animeList]
   );
 
@@ -429,7 +426,7 @@ export default function Discover({ animeList, onAddAnime }: Props) {
       try {
         const [trendData, isekaiData, topIsekaiData, seasonData] = await Promise.all([
           fetchAniList(GET_TRENDING_QUERY, {}),
-          fetchAniList(GET_GENRE_TRENDING_QUERY, { genre: "Isekai" }),
+          fetchAniList(GET_ISEKAI_TRENDING_QUERY, {}),
           fetchAniList(GET_TOP_RATED_ISEKAI_QUERY, {}),
           fetchAniList(GET_POPULAR_SEASON_QUERY, { season, seasonYear }),
         ]);
@@ -477,41 +474,27 @@ export default function Discover({ animeList, onAddAnime }: Props) {
     load();
   }, [animeList.length]);
 
+  // When a mood is picked, fetch matching anime from AniList
   useEffect(() => {
-    const ids = planToWatch.map(a => a.anilistId as number);
-    if (ids.length === 0) return;
+    if (!activeMood) { setMoodResults([]); return; }
+    const mood = MOODS.find(m => m.id === activeMood);
+    if (!mood) return;
+    setLoadingMoodResults(true);
+    setMoodResults([]);
     async function load() {
-      setLoadingMoodGenres(true);
-      const newMap = new Map<number, string[]>();
-      for (let i = 0; i < ids.length; i += 50) {
-        try {
-          const data = await fetchAniList(GET_ANALYTICS_QUERY, { ids: ids.slice(i, i + 50) });
-          for (const media of data?.Page?.media || []) {
-            const genres = [...(media.genres || [])];
-            if (media.tags) {
-              for (const tag of media.tags) {
-                if (!tag.isMediaSpoiler && tag.rank >= 70) genres.push(tag.name);
-              }
-            }
-            if (genres.length) newMap.set(media.id, genres);
-          }
-        } catch { }
-      }
-      setMoodGenreMap(newMap);
-      setLoadingMoodGenres(false);
+      try {
+        let data: any;
+        if ("anilistTag" in mood && mood.anilistTag) {
+          data = await fetchAniList(GET_ISEKAI_TRENDING_QUERY, {}, false);
+        } else {
+          data = await fetchAniList(GET_GENRE_TRENDING_QUERY, { genre: mood.anilistGenre }, false);
+        }
+        setMoodResults(data?.Page?.media || []);
+      } catch { }
+      finally { setLoadingMoodResults(false); }
     }
     load();
-  }, [planToWatch.length]);
-
-  const moodResults = useMemo(() => {
-    if (!activeMood) return [];
-    const mood = MOODS.find(m => m.id === activeMood);
-    if (!mood) return [];
-    return planToWatch.filter(a => {
-      const genres = moodGenreMap.get(a.anilistId as number) || [];
-      return mood.genres.some(mg => genres.some(g => g.toLowerCase().includes(mg.toLowerCase())));
-    });
-  }, [activeMood, planToWatch, moodGenreMap]);
+  }, [activeMood]);
 
   const handleAdd = async (anime: any) => {
     setAddingId(anime.id);
@@ -710,36 +693,34 @@ export default function Discover({ animeList, onAddAnime }: Props) {
 
         {activeMood && (
           <div>
-            {loadingMoodGenres ? (
-              <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin opacity-40" /></div>
+            {loadingMoodResults ? (
+              <div className="flex justify-center py-8">
+                <div className="flex flex-col items-center gap-2">
+                  <Loader2 className="w-6 h-6 animate-spin opacity-40" />
+                  <p className="text-xs text-muted-foreground">Finding anime for your vibe…</p>
+                </div>
+              </div>
             ) : moodResults.length === 0 ? (
               <Card className="bg-muted/10 border-dashed border-border/40">
                 <CardContent className="text-center py-8 text-muted-foreground text-sm">
                   <span className="text-2xl block mb-2">🎭</span>
-                  No matches in your Plan to Watch for this mood.
-                  <p className="text-xs mt-1 opacity-60">Try adding more anime or switch mood.</p>
+                  Couldn't load results. Try again.
                 </CardContent>
               </Card>
             ) : (
               <>
                 <p className="text-xs text-muted-foreground mb-3">
-                  <span className="font-bold text-foreground">{moodResults.length}</span> anime match this mood in your Plan to Watch
+                  Showing top <span className="font-bold text-foreground">{moodResults.length}</span> picks for this vibe
                 </p>
                 <HorizontalScroll>
                   {moodResults.map(anime => (
-                    <div key={anime.id} className="flex-shrink-0 w-36 sm:w-40 group">
-                      <div className="relative aspect-[3/4] rounded-xl overflow-hidden border border-white/10">
-                        {anime.coverImage ? (
-                          <img src={anime.coverImage} alt={anime.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                        ) : (
-                          <div className="w-full h-full bg-muted/40 flex items-center justify-center"><Tv className="w-6 h-6 opacity-20" /></div>
-                        )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
-                        <div className="absolute bottom-2 left-2 right-2">
-                          <p className="text-[10px] font-bold text-white line-clamp-2 leading-tight">{anime.title}</p>
-                        </div>
-                      </div>
-                    </div>
+                    <PremiumAnimeCard
+                      key={anime.id}
+                      anime={anime}
+                      isInList={allKnownIds.has(anime.id)}
+                      onAdd={() => handleAdd(anime)}
+                      adding={addingId === anime.id}
+                    />
                   ))}
                 </HorizontalScroll>
               </>

@@ -293,8 +293,40 @@ export const GET_TRENDING_QUERY = `
 
 export const GET_GENRE_TRENDING_QUERY = `
   query ($genre: String) {
+    Page(page: 1, perPage: 16) {
+      media(type: ANIME, genre: $genre, sort: TRENDING_DESC, averageScore_greater: 60) {
+        id
+        idMal
+        title {
+          english
+          romaji
+        }
+        coverImage {
+          large
+          medium
+          extraLarge
+        }
+        bannerImage
+        averageScore
+        episodes
+        status
+        season
+        seasonYear
+        format
+        genres
+        nextAiringEpisode {
+          airingAt
+          episode
+        }
+      }
+    }
+  }
+`;
+
+export const GET_ISEKAI_TRENDING_QUERY = `
+  query {
     Page(page: 1, perPage: 14) {
-      media(type: ANIME, genre: $genre, sort: TRENDING_DESC, status_not: NOT_YET_RELEASED, averageScore_greater: 60) {
+      media(type: ANIME, tag: "Isekai", sort: TRENDING_DESC, averageScore_greater: 60) {
         id
         idMal
         title {
@@ -361,7 +393,7 @@ export const GET_RECOMMENDATIONS_QUERY = `
 export const GET_TOP_RATED_ISEKAI_QUERY = `
   query {
     Page(page: 1, perPage: 14) {
-      media(type: ANIME, genre: "Isekai", sort: SCORE_DESC, averageScore_greater: 70, format_in: [TV, MOVIE, OVA]) {
+      media(type: ANIME, tag: "Isekai", sort: SCORE_DESC, averageScore_greater: 70, format_in: [TV, MOVIE, OVA]) {
         id
         idMal
         title {
