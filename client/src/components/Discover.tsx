@@ -5,14 +5,16 @@ import {
   GET_RECOMMENDATIONS_QUERY,
   GET_ANALYTICS_QUERY,
   GET_GENRE_TRENDING_QUERY,
+  GET_TOP_RATED_ISEKAI_QUERY,
+  GET_POPULAR_SEASON_QUERY,
 } from "@/services/anilist";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Loader2, Sparkles, Brain, Plus, Star, Flame, Tv,
-  Heart, Swords, Zap, Moon, Smile, ChevronLeft, ChevronRight,
-  Check, Play, Clock, Scroll,
+  Zap, ChevronLeft, ChevronRight,
+  Check, Play, Clock, Trophy, CalendarDays,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -78,6 +80,16 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
   NOT_YET_RELEASED: { label: "Upcoming", color: "bg-amber-500/20 text-amber-400 border-amber-500/30" },
 };
 
+function getCurrentSeason(): { season: string; seasonYear: number } {
+  const month = new Date().getMonth() + 1;
+  const year = new Date().getFullYear();
+  let season = "WINTER";
+  if (month >= 4 && month <= 6) season = "SPRING";
+  else if (month >= 7 && month <= 9) season = "SUMMER";
+  else if (month >= 10 && month <= 12) season = "FALL";
+  return { season, seasonYear: year };
+}
+
 function PremiumAnimeCard({
   anime, isInList, onAdd, adding, rank,
 }: {
@@ -88,7 +100,7 @@ function PremiumAnimeCard({
   const st = STATUS_MAP[anime.status] || null;
 
   return (
-    <div className="group relative flex-shrink-0 w-36 sm:w-40">
+    <div className="group relative flex-shrink-0 w-36 sm:w-40" data-testid={`card-anime-${anime.id}`}>
       <div className="relative aspect-[3/4] rounded-xl overflow-hidden border border-white/10 shadow-lg">
         {anime.coverImage?.large || anime.coverImage?.extraLarge ? (
           <img
@@ -102,7 +114,7 @@ function PremiumAnimeCard({
           </div>
         )}
 
-        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/20 to-transparent" />
 
         {rank !== undefined && (
           <div className="absolute top-2 left-2 w-7 h-7 rounded-full bg-black/80 backdrop-blur border border-white/20 flex items-center justify-center text-[11px] font-black text-white">
@@ -127,12 +139,13 @@ function PremiumAnimeCard({
         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
           {isInList ? (
             <div className="bg-emerald-500/80 backdrop-blur rounded-full px-3 py-1.5 flex items-center gap-1.5 text-white text-xs font-bold">
-              <Check className="w-3.5 h-3.5" /> In Your List
+              <Check className="w-3.5 h-3.5" /> In List
             </div>
           ) : (
             <button
               onClick={(e) => { e.stopPropagation(); onAdd(); }}
               disabled={adding}
+              data-testid={`button-add-${anime.id}`}
               className="bg-primary/90 hover:bg-primary backdrop-blur rounded-full px-3 py-1.5 flex items-center gap-1.5 text-white text-xs font-bold transition-colors shadow-neon"
             >
               {adding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
@@ -176,36 +189,71 @@ function HorizontalScroll({ children }: { children: React.ReactNode }) {
   );
 }
 
-function TrendingHero({ anime, isInList, onAdd, adding }: { anime: any; isInList: boolean; onAdd: () => void; adding: boolean }) {
+function CinematicHero({ animes, allKnownIds, onAdd, addingId }: {
+  animes: any[];
+  allKnownIds: Set<number>;
+  onAdd: (anime: any) => void;
+  addingId: number | null;
+}) {
+  const [activeIdx, setActiveIdx] = useState(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const resetInterval = () => {
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(() => {
+      setActiveIdx(i => (i + 1) % Math.min(animes.length, 6));
+    }, 6000);
+  };
+
+  useEffect(() => {
+    if (animes.length === 0) return;
+    resetInterval();
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [animes.length]);
+
+  const go = (idx: number) => {
+    setActiveIdx(idx);
+    resetInterval();
+  };
+
+  if (animes.length === 0) return null;
+  const anime = animes[activeIdx] || animes[0];
   const title = anime.title?.english || anime.title?.romaji;
   const score = anime.averageScore ? (anime.averageScore / 10).toFixed(1) : null;
-  const desc = anime.description?.replace(/<[^>]*>/g, "").slice(0, 180) + (anime.description?.length > 180 ? "…" : "");
+  const desc = anime.description?.replace(/<[^>]*>/g, "").slice(0, 200);
   const ep = anime.nextAiringEpisode?.episode;
   const bg = anime.bannerImage || anime.coverImage?.extraLarge || anime.coverImage?.large;
+  const isInList = allKnownIds.has(anime.id);
+  const adding = addingId === anime.id;
+  const dots = Math.min(animes.length, 6);
 
   return (
-    <div className="relative w-full rounded-2xl overflow-hidden border border-white/10 shadow-2xl mb-2" style={{ minHeight: 280 }}>
+    <div className="relative w-full rounded-2xl overflow-hidden border border-white/10 shadow-2xl" style={{ minHeight: 300 }}>
       {bg && (
-        <>
-          <img src={bg} alt="" className="absolute inset-0 w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-r from-background via-background/85 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-t from-background/70 to-transparent" />
-        </>
+        <img
+          key={anime.id}
+          src={bg}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover transition-opacity duration-700"
+        />
       )}
-      {!bg && <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-background" />}
+      <div className="absolute inset-0 bg-gradient-to-r from-background via-background/90 to-background/20" />
+      <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-transparent to-transparent" />
 
-      <div className="relative z-10 flex items-end sm:items-center gap-4 p-5 sm:p-8 h-full" style={{ minHeight: 280 }}>
+      <div className="relative z-10 flex items-center gap-5 p-6 sm:p-10" style={{ minHeight: 300 }}>
         <div className="shrink-0 hidden sm:block">
           <img
-            src={anime.coverImage?.large || anime.coverImage?.medium}
+            key={anime.id + "-cover"}
+            src={anime.coverImage?.extraLarge || anime.coverImage?.large}
             alt={title}
-            className="w-32 h-44 object-cover rounded-xl shadow-2xl border border-white/10"
+            className="w-28 h-40 object-cover rounded-xl shadow-2xl border border-white/10 transition-opacity duration-500"
           />
         </div>
+
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-2 flex-wrap">
+          <div className="flex items-center gap-2 mb-2.5 flex-wrap">
             <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 text-[10px] font-bold">
-              <Flame className="w-2.5 h-2.5 mr-1" /> TRENDING #1
+              <Flame className="w-2.5 h-2.5 mr-1" /> TRENDING #{activeIdx + 1}
             </Badge>
             {anime.status === "RELEASING" && ep && (
               <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">
@@ -218,7 +266,9 @@ function TrendingHero({ anime, isInList, onAdd, adding }: { anime: any; isInList
               </Badge>
             )}
           </div>
-          <h2 className="text-2xl sm:text-3xl font-black text-white mb-2 leading-tight drop-shadow-lg">{title}</h2>
+
+          <h2 className="text-2xl sm:text-4xl font-black text-white mb-2 leading-tight drop-shadow-lg">{title}</h2>
+
           <div className="flex flex-wrap gap-1.5 mb-3">
             {anime.genres?.slice(0, 5).map((g: string) => (
               <span key={g} className="text-[10px] font-semibold bg-white/10 backdrop-blur text-white/80 rounded-full px-2 py-0.5 border border-white/10">
@@ -226,8 +276,14 @@ function TrendingHero({ anime, isInList, onAdd, adding }: { anime: any; isInList
               </span>
             ))}
           </div>
-          {desc && <p className="text-xs text-white/60 mb-4 leading-relaxed max-w-md hidden sm:block">{desc}</p>}
-          <div className="flex items-center gap-2">
+
+          {desc && (
+            <p className="text-xs text-white/55 mb-4 leading-relaxed max-w-lg hidden sm:block line-clamp-2">
+              {desc}
+            </p>
+          )}
+
+          <div className="flex items-center gap-3">
             {isInList ? (
               <Button size="sm" variant="outline" className="gap-1.5 text-xs border-emerald-500/50 text-emerald-400 bg-emerald-500/10 rounded-xl" disabled>
                 <Check className="w-3.5 h-3.5" /> In Your List
@@ -236,8 +292,9 @@ function TrendingHero({ anime, isInList, onAdd, adding }: { anime: any; isInList
               <Button
                 size="sm"
                 className="gap-1.5 text-xs gradient-primary shadow-neon rounded-xl font-bold"
-                onClick={onAdd}
+                onClick={() => onAdd(anime)}
                 disabled={adding}
+                data-testid={`button-hero-add-${anime.id}`}
               >
                 {adding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
                 Add to List
@@ -251,6 +308,92 @@ function TrendingHero({ anime, isInList, onAdd, adding }: { anime: any; isInList
           </div>
         </div>
       </div>
+
+      {/* Dot navigation */}
+      <div className="absolute bottom-4 right-5 flex gap-1.5 z-20">
+        {Array.from({ length: dots }).map((_, i) => (
+          <button
+            key={i}
+            onClick={() => go(i)}
+            className={`h-1.5 rounded-full transition-all duration-300 ${i === activeIdx ? "w-5 bg-white" : "w-1.5 bg-white/30 hover:bg-white/60"}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function IsekaiSpotlight({ anime, isInList, onAdd, adding }: {
+  anime: any; isInList: boolean; onAdd: () => void; adding: boolean;
+}) {
+  const title = anime.title?.english || anime.title?.romaji;
+  const score = anime.averageScore ? (anime.averageScore / 10).toFixed(1) : null;
+  const desc = anime.description?.replace(/<[^>]*>/g, "").slice(0, 220);
+  const ep = anime.nextAiringEpisode?.episode;
+  const bg = anime.bannerImage || anime.coverImage?.extraLarge;
+
+  return (
+    <div className="relative w-full rounded-2xl overflow-hidden border border-violet-500/30 shadow-[0_0_40px_rgba(139,92,246,0.2)] mb-5" style={{ minHeight: 220 }}>
+      {bg && (
+        <img src={bg} alt="" className="absolute inset-0 w-full h-full object-cover" />
+      )}
+      <div className="absolute inset-0 bg-gradient-to-r from-violet-950/95 via-indigo-950/85 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+      <div className="absolute inset-0" style={{
+        backgroundImage: "radial-gradient(ellipse at 5% 50%, rgba(139,92,246,0.25) 0%, transparent 50%)"
+      }} />
+
+      <div className="relative z-10 flex items-center gap-5 p-5 sm:p-7" style={{ minHeight: 220 }}>
+        <div className="shrink-0 hidden sm:block">
+          <img
+            src={anime.coverImage?.extraLarge || anime.coverImage?.large}
+            alt={title}
+            className="w-24 h-36 object-cover rounded-xl shadow-2xl border border-violet-400/20"
+          />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
+            <Badge className="bg-violet-500/25 text-violet-300 border-violet-400/30 text-[10px] font-bold">
+              🌀 ISEKAI #1 TRENDING
+            </Badge>
+            {anime.status === "RELEASING" && ep && (
+              <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">
+                <Play className="w-2.5 h-2.5 mr-1 fill-current" /> EP {ep} Airing
+              </Badge>
+            )}
+            {score && (
+              <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-[10px]">
+                <Star className="w-2.5 h-2.5 mr-1 fill-amber-400" /> {score}/10
+              </Badge>
+            )}
+          </div>
+          <h3 className="text-xl sm:text-2xl font-black text-white mb-2 leading-tight">{title}</h3>
+          <div className="flex flex-wrap gap-1.5 mb-3">
+            {anime.genres?.slice(0, 4).map((g: string) => (
+              <span key={g} className="text-[9px] font-semibold bg-violet-900/50 backdrop-blur text-violet-200 rounded-full px-2 py-0.5 border border-violet-400/20">
+                {g}
+              </span>
+            ))}
+          </div>
+          {desc && <p className="text-xs text-white/50 mb-4 leading-relaxed max-w-md hidden sm:block line-clamp-2">{desc}</p>}
+          {isInList ? (
+            <Button size="sm" variant="outline" className="gap-1.5 text-xs border-emerald-500/50 text-emerald-400 bg-emerald-500/10 rounded-xl" disabled>
+              <Check className="w-3.5 h-3.5" /> In Your List
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              className="gap-1.5 text-xs bg-violet-600 hover:bg-violet-500 text-white rounded-xl font-bold shadow-[0_0_20px_rgba(139,92,246,0.4)]"
+              onClick={onAdd}
+              disabled={adding}
+              data-testid={`button-isekai-spotlight-${anime.id}`}
+            >
+              {adding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+              Add to List
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -260,6 +403,10 @@ export default function Discover({ animeList, onAddAnime }: Props) {
   const [loadingTrending, setLoadingTrending] = useState(true);
   const [isekai, setIsekai] = useState<any[]>([]);
   const [loadingIsekai, setLoadingIsekai] = useState(true);
+  const [topIsekai, setTopIsekai] = useState<any[]>([]);
+  const [loadingTopIsekai, setLoadingTopIsekai] = useState(true);
+  const [seasonPicks, setSeasonPicks] = useState<any[]>([]);
+  const [loadingSeasonPicks, setLoadingSeasonPicks] = useState(true);
   const [recommendations, setRecommendations] = useState<{ sourceTitle: string; items: any[] }[]>([]);
   const [loadingRecs, setLoadingRecs] = useState(true);
   const [activeMood, setActiveMood] = useState<string | null>(null);
@@ -277,17 +424,25 @@ export default function Discover({ animeList, onAddAnime }: Props) {
   );
 
   useEffect(() => {
+    const { season, seasonYear } = getCurrentSeason();
     async function load() {
       try {
-        const [trendData, isekaiData] = await Promise.all([
+        const [trendData, isekaiData, topIsekaiData, seasonData] = await Promise.all([
           fetchAniList(GET_TRENDING_QUERY, {}),
           fetchAniList(GET_GENRE_TRENDING_QUERY, { genre: "Isekai" }),
+          fetchAniList(GET_TOP_RATED_ISEKAI_QUERY, {}),
+          fetchAniList(GET_POPULAR_SEASON_QUERY, { season, seasonYear }),
         ]);
         setTrending(trendData?.Page?.media || []);
         setIsekai(isekaiData?.Page?.media || []);
-      } catch { } finally {
+        setTopIsekai(topIsekaiData?.Page?.media || []);
+        setSeasonPicks(seasonData?.Page?.media || []);
+      } catch { }
+      finally {
         setLoadingTrending(false);
         setLoadingIsekai(false);
+        setLoadingTopIsekai(false);
+        setLoadingSeasonPicks(false);
       }
     }
     load();
@@ -379,55 +534,104 @@ export default function Discover({ animeList, onAddAnime }: Props) {
     finally { setAddingId(null); }
   };
 
-  const hero = trending[0];
-  const trendingRest = trending.slice(1);
+  const isekaiSpotlight = isekai[0];
+  const isekaiRest = isekai.slice(1);
+  const { season, seasonYear } = getCurrentSeason();
+  const seasonLabel = `${season.charAt(0) + season.slice(1).toLowerCase()} ${seasonYear}`;
 
   return (
     <div className="space-y-10 pb-6">
 
-      {/* ── Hero Spotlight ── */}
+      {/* ── Cinematic Hero ── */}
       {loadingTrending ? (
-        <div className="flex justify-center py-14"><Loader2 className="w-8 h-8 animate-spin opacity-30" /></div>
-      ) : hero ? (
+        <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin opacity-30" /></div>
+      ) : trending.length > 0 ? (
         <section>
-          <TrendingHero
-            anime={hero}
-            isInList={allKnownIds.has(hero.id)}
-            onAdd={() => handleAdd(hero)}
-            adding={addingId === hero.id}
+          <CinematicHero
+            animes={trending.slice(0, 6)}
+            allKnownIds={allKnownIds}
+            onAdd={handleAdd}
+            addingId={addingId}
           />
         </section>
       ) : null}
 
       {/* ── Isekai Corner ── */}
       <section>
+        {/* Header banner */}
         <div className="relative rounded-2xl overflow-hidden mb-5">
-          <div className="absolute inset-0 bg-gradient-to-r from-violet-950 via-blue-950 to-indigo-950 opacity-60" />
+          <div className="absolute inset-0 bg-gradient-to-r from-violet-950 via-blue-950 to-indigo-950 opacity-70" />
           <div className="absolute inset-0" style={{
-            backgroundImage: "radial-gradient(ellipse at 20% 50%, rgba(139,92,246,0.3) 0%, transparent 60%), radial-gradient(ellipse at 80% 50%, rgba(59,130,246,0.2) 0%, transparent 60%)"
+            backgroundImage: "radial-gradient(ellipse at 15% 50%, rgba(139,92,246,0.4) 0%, transparent 55%), radial-gradient(ellipse at 85% 50%, rgba(59,130,246,0.25) 0%, transparent 55%)"
           }} />
           <div className="relative z-10 px-5 py-4 flex items-center gap-3">
-            <div className="text-3xl select-none">🌀</div>
+            <div className="text-3xl select-none animate-spin" style={{ animationDuration: "8s" }}>🌀</div>
             <div>
               <h2 className="text-xl font-black text-white flex items-center gap-2">
                 Isekai Corner
-                <Badge className="bg-violet-500/30 text-violet-300 border-violet-500/40 text-[9px] ml-1">Your Fave</Badge>
+                <Badge className="bg-violet-500/30 text-violet-300 border-violet-500/40 text-[9px] ml-1">Your Fave ✨</Badge>
               </h2>
-              <p className="text-xs text-white/50 mt-0.5">The hottest other-world adventures — live & updated</p>
+              <p className="text-xs text-white/50 mt-0.5">Portal to another world — live & trending</p>
             </div>
-            <div className="ml-auto flex gap-1 opacity-30">
+            <div className="ml-auto flex gap-1.5 opacity-50">
               {["✦", "✦", "✦"].map((s, i) => (
-                <span key={i} className={`text-violet-300 text-xs animate-pulse`} style={{ animationDelay: `${i * 0.3}s` }}>{s}</span>
+                <span key={i} className="text-violet-300 text-sm animate-pulse" style={{ animationDelay: `${i * 0.4}s` }}>{s}</span>
               ))}
             </div>
           </div>
         </div>
 
         {loadingIsekai ? (
+          <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin opacity-40" /></div>
+        ) : (
+          <>
+            {/* Spotlight card for #1 isekai */}
+            {isekaiSpotlight && (
+              <IsekaiSpotlight
+                anime={isekaiSpotlight}
+                isInList={allKnownIds.has(isekaiSpotlight.id)}
+                onAdd={() => handleAdd(isekaiSpotlight)}
+                adding={addingId === isekaiSpotlight.id}
+              />
+            )}
+
+            {/* Trending isekai carousel */}
+            {isekaiRest.length > 0 && (
+              <>
+                <p className="text-xs font-semibold text-violet-400/70 mb-3 flex items-center gap-1.5">
+                  <Flame className="w-3.5 h-3.5" /> More Trending Isekai
+                </p>
+                <HorizontalScroll>
+                  {isekaiRest.map((anime, idx) => (
+                    <PremiumAnimeCard
+                      key={anime.id}
+                      anime={anime}
+                      isInList={allKnownIds.has(anime.id)}
+                      onAdd={() => handleAdd(anime)}
+                      adding={addingId === anime.id}
+                      rank={idx + 2}
+                    />
+                  ))}
+                </HorizontalScroll>
+              </>
+            )}
+          </>
+        )}
+      </section>
+
+      {/* ── Top Rated Isekai All Time ── */}
+      <section className="pt-2 border-t border-border/30">
+        <div className="flex items-center gap-2.5 mb-1">
+          <Trophy className="h-5 w-5 text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.7)]" />
+          <h2 className="text-2xl font-black">Top Rated Isekai of All Time</h2>
+          <span className="text-xs text-amber-400/60 font-semibold ml-1">🏆</span>
+        </div>
+        <p className="text-muted-foreground text-sm mb-5">The community's absolute favourites — ranked by score.</p>
+        {loadingTopIsekai ? (
           <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin opacity-40" /></div>
         ) : (
           <HorizontalScroll>
-            {isekai.map((anime, idx) => (
+            {topIsekai.map((anime, idx) => (
               <PremiumAnimeCard
                 key={anime.id}
                 anime={anime}
@@ -435,6 +639,31 @@ export default function Discover({ animeList, onAddAnime }: Props) {
                 onAdd={() => handleAdd(anime)}
                 adding={addingId === anime.id}
                 rank={idx + 1}
+              />
+            ))}
+          </HorizontalScroll>
+        )}
+      </section>
+
+      {/* ── Season Picks ── */}
+      <section className="pt-2 border-t border-border/30">
+        <div className="flex items-center gap-2.5 mb-1">
+          <CalendarDays className="h-5 w-5 text-sky-400 drop-shadow-[0_0_8px_rgba(56,189,248,0.7)]" />
+          <h2 className="text-2xl font-black">{seasonLabel} Picks</h2>
+          <Badge className="bg-sky-500/15 text-sky-400 border-sky-500/25 text-[9px] font-bold ml-1">THIS SEASON</Badge>
+        </div>
+        <p className="text-muted-foreground text-sm mb-5">The most popular shows airing right now.</p>
+        {loadingSeasonPicks ? (
+          <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin opacity-40" /></div>
+        ) : (
+          <HorizontalScroll>
+            {seasonPicks.map((anime) => (
+              <PremiumAnimeCard
+                key={anime.id}
+                anime={anime}
+                isInList={allKnownIds.has(anime.id)}
+                onAdd={() => handleAdd(anime)}
+                adding={addingId === anime.id}
               />
             ))}
           </HorizontalScroll>
@@ -456,6 +685,7 @@ export default function Discover({ animeList, onAddAnime }: Props) {
               <button
                 key={mood.id}
                 onClick={() => setActiveMood(active ? null : mood.id)}
+                data-testid={`button-mood-${mood.id}`}
                 className={`
                   relative group flex flex-col items-center gap-2 p-4 rounded-2xl border text-center
                   bg-gradient-to-b ${mood.from} ${mood.to}
@@ -533,7 +763,7 @@ export default function Discover({ animeList, onAddAnime }: Props) {
             <CardContent className="text-center py-10 text-muted-foreground">
               <Brain className="w-10 h-10 mx-auto mb-2 opacity-20" />
               <p className="font-semibold">Rate some completed anime to unlock recommendations</p>
-              <p className="text-xs mt-1 opacity-60">We use AniList's own recommendation engine — the more you rate, the smarter it gets.</p>
+              <p className="text-xs mt-1 opacity-60">We'll find similar shows you'll love.</p>
             </CardContent>
           </Card>
         ) : (
@@ -562,8 +792,8 @@ export default function Discover({ animeList, onAddAnime }: Props) {
         )}
       </section>
 
-      {/* ── Trending Now (rest) ── */}
-      {trendingRest.length > 0 && (
+      {/* ── Trending Now ── */}
+      {trending.length > 0 && (
         <section className="pt-2 border-t border-border/30">
           <div className="flex items-center gap-2.5 mb-1">
             <Flame className="h-5 w-5 text-orange-400 drop-shadow-[0_0_8px_rgba(251,146,60,0.7)]" />
@@ -575,14 +805,14 @@ export default function Discover({ animeList, onAddAnime }: Props) {
           <p className="text-muted-foreground text-sm mb-5">What the entire anime community is watching this moment.</p>
 
           <HorizontalScroll>
-            {trendingRest.slice(0, 18).map((anime, idx) => (
+            {trending.slice(0, 18).map((anime, idx) => (
               <PremiumAnimeCard
                 key={anime.id}
                 anime={anime}
                 isInList={allKnownIds.has(anime.id)}
                 onAdd={() => handleAdd(anime)}
                 adding={addingId === anime.id}
-                rank={idx + 2}
+                rank={idx + 1}
               />
             ))}
           </HorizontalScroll>

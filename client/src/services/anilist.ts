@@ -358,6 +358,70 @@ export const GET_RECOMMENDATIONS_QUERY = `
   }
 `;
 
+export const GET_TOP_RATED_ISEKAI_QUERY = `
+  query {
+    Page(page: 1, perPage: 14) {
+      media(type: ANIME, genre: "Isekai", sort: SCORE_DESC, averageScore_greater: 70, format_in: [TV, MOVIE, OVA]) {
+        id
+        idMal
+        title {
+          english
+          romaji
+        }
+        coverImage {
+          large
+          medium
+          extraLarge
+        }
+        bannerImage
+        averageScore
+        episodes
+        status
+        season
+        seasonYear
+        format
+        genres
+        nextAiringEpisode {
+          airingAt
+          episode
+        }
+      }
+    }
+  }
+`;
+
+export const GET_POPULAR_SEASON_QUERY = `
+  query ($season: MediaSeason, $seasonYear: Int) {
+    Page(page: 1, perPage: 16) {
+      media(type: ANIME, season: $season, seasonYear: $seasonYear, sort: POPULARITY_DESC, status_not: NOT_YET_RELEASED, format_in: [TV]) {
+        id
+        idMal
+        title {
+          english
+          romaji
+        }
+        coverImage {
+          large
+          medium
+          extraLarge
+        }
+        bannerImage
+        averageScore
+        episodes
+        status
+        season
+        seasonYear
+        format
+        genres
+        nextAiringEpisode {
+          airingAt
+          episode
+        }
+      }
+    }
+  }
+`;
+
 export const GET_ANALYTICS_QUERY = `
   query ($ids: [Int]) {
     Page(page: 1, perPage: 50) {
