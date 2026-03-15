@@ -283,6 +283,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       await storage.logActivity(req.userId, type, animeTitle, coverImage, seasonNumber, rating);
       res.json({ success: true });
+
+      // Fire-and-forget: notify all friends about this activity
+      (async () => {
+        try {
+          // Get this user's username
+          let username = "A friend";
+          if (supabase) {
+            const { data: profile } = await supabase
+              .from("profiles")
+              .select("username")
+              .eq("id", req.userId)
+              .single();
+            if (profile?.username) username = profile.username;
+          }
+
+          // Build a readable message for the activity type
+          const actionMap: Record<string, string> = {
+            added: `added "${animeTitle}" to their list`,
+            started: `started watching "${animeTitle}"`,
+            completed: `completed "${animeTitle}"!`,
+            dropped: `dropped "${animeTitle}"`,
+            rated: `rated "${animeTitle}" ${rating ?? ""}${rating ? "/10" : ""}`.trim(),
+            watching: `is watching "${animeTitle}"`,
+            plan_to_watch: `plans to watch "${animeTitle}"`,
+          };
+          const action = actionMap[type] || `updated "${animeTitle}"`;
+          const message = `${username} ${action}`;
+
+          // Get all accepted friends of this user
+          const friends = await storage.getFriends(req.userId);
+          for (const friend of friends) {
+            const recipientId = friend.userId === req.userId ? friend.friendId : friend.userId;
+            await storage.createNotification({
+              userId: recipientId,
+              animeTitle,
+              seasonNumber: seasonNumber ?? null,
+              episodeNumber: null,
+              notificationType: "friend_activity",
+              message,
+              read: false,
+            });
+          }
+        } catch (err) {
+          console.error("Error sending friend activity notifications:", err);
+        }
+      })();
     } catch (error: any) {
       console.error("Error logging activity:", error);
       res.status(500).json({ error: "Failed to log activity" });

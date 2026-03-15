@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { getNotifications, markNotificationRead, markAllNotificationsRead } from "@/services/supabaseData";
-import { Bell, Check } from "lucide-react";
+import { Bell, Check, Users, Tv } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -74,7 +74,36 @@ const Notifications = ({ userId }: NotificationsProps) => {
 
   useEffect(() => {
     if (userId) {
-      fetchNotificationsData();
+      const loadAndNotify = async () => {
+        if (!userId) return;
+        setIsLoading(true);
+        try {
+          const data = await getNotifications();
+          setNotifications(data || []);
+          const unread = data?.filter((n: Notification) => !n.read) || [];
+          setUnreadCount(unread.length);
+
+          // Show a toast popup for unread friend activity notifications on first load
+          const friendActivity = unread.filter((n: Notification) => n.notificationType === "friend_activity");
+          if (friendActivity.length === 1) {
+            toast(friendActivity[0].message, {
+              description: "From your friends list",
+              duration: 6000,
+            });
+          } else if (friendActivity.length > 1) {
+            toast(`${friendActivity.length} new friend updates`, {
+              description: friendActivity[0].message,
+              duration: 6000,
+            });
+          }
+        } catch (error) {
+          console.error("Error fetching notifications:", error);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      loadAndNotify();
       const interval = setInterval(fetchNotificationsData, 60000);
       return () => clearInterval(interval);
     }
@@ -146,39 +175,43 @@ const Notifications = ({ userId }: NotificationsProps) => {
             </div>
           ) : (
             <div className="divide-y">
-              {notifications.map((notification) => (
+              {notifications.map((notification) => {
+                const isFriendActivity = notification.notificationType === "friend_activity";
+                return (
                 <div
                   key={notification.id}
-                  className={`p-4 hover:bg-accent/50 transition-colors ${!notification.read ? "bg-accent/30" : ""
-                    }`}
+                  className={`p-4 hover:bg-accent/50 transition-colors ${!notification.read ? "bg-accent/30" : ""}`}
                   data-testid={`notification-${notification.id}`}
                 >
-                  <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-3">
+                    <div className={`mt-0.5 flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center ${isFriendActivity ? "bg-purple-500/20" : "bg-blue-500/20"}`}>
+                      {isFriendActivity
+                        ? <Users className="h-3.5 w-3.5 text-purple-400" />
+                        : <Tv className="h-3.5 w-3.5 text-blue-400" />}
+                    </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">{notification.animeTitle}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
+                      <p className="text-xs text-muted-foreground leading-relaxed">
                         {notification.message}
                       </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {new Date(notification.createdAt).toLocaleDateString()}
+                      <p className="text-[10px] text-muted-foreground/60 mt-1">
+                        {new Date(notification.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                       </p>
                     </div>
-                    <div className="flex gap-1">
-                      {!notification.read && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() => markAsRead(notification.id)}
-                          data-testid={`button-mark-read-${notification.id}`}
-                        >
-                          <Check className="h-3 w-3" />
-                        </Button>
-                      )}
-                    </div>
+                    {!notification.read && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 flex-shrink-0"
+                        onClick={() => markAsRead(notification.id)}
+                        data-testid={`button-mark-read-${notification.id}`}
+                      >
+                        <Check className="h-3 w-3" />
+                      </Button>
+                    )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </ScrollArea>
