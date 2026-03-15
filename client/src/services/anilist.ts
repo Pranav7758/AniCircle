@@ -323,6 +323,38 @@ export const GET_GENRE_TRENDING_QUERY = `
   }
 `;
 
+export const GET_TOP_GENRE_QUERY = `
+  query ($genre: String) {
+    Page(page: 1, perPage: 20) {
+      media(type: ANIME, genre: $genre, sort: SCORE_DESC, averageScore_greater: 70, format_in: [TV, MOVIE, OVA]) {
+        id
+        idMal
+        title {
+          english
+          romaji
+        }
+        coverImage {
+          large
+          medium
+          extraLarge
+        }
+        bannerImage
+        averageScore
+        episodes
+        status
+        season
+        seasonYear
+        format
+        genres
+        nextAiringEpisode {
+          airingAt
+          episode
+        }
+      }
+    }
+  }
+`;
+
 export const GET_ISEKAI_TRENDING_QUERY = `
   query {
     Page(page: 1, perPage: 14) {
