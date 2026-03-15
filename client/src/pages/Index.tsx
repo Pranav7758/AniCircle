@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { getAnimeList, createAnime, updateAnime, deleteAnime } from "@/services/supabaseData";
+import { getAnimeList, createAnime, updateAnime, deleteAnime, logActivity } from "@/services/supabaseData";
 import { fetchAniList, GET_ANALYTICS_QUERY } from "@/services/anilist";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LogOut, Plus, Search, Sparkles, Trophy, Users, Settings, PieChart, Play, CheckCircle2, Clock, ArrowUpDown, Tag } from "lucide-react";
+import { LogOut, Plus, Search, Sparkles, Trophy, Users, Settings, PieChart, Play, CheckCircle2, Clock, ArrowUpDown, Tag, Compass, Share2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import AnimeRanking from "@/components/AnimeRanking";
@@ -18,6 +18,7 @@ import Notifications from "@/components/Notifications";
 import NewEpisodesBanner from "@/components/NewEpisodesBanner";
 import Radar from "@/components/Radar";
 import AnalyticsDashboard from "@/components/AnalyticsDashboard";
+import Discover from "@/components/Discover";
 
 interface Anime {
   id: string;
@@ -289,6 +290,7 @@ const Index = () => {
       try {
         await createAnime(seasonsToAdd);
         toast.success(`${selectedSeasons.length} season${selectedSeasons.length !== 1 ? 's' : ''} added successfully!`);
+        logActivity("added", data.title, data.coverImage || null, seasonsToAdd[0]?.seasonNumber);
         fetchAnimeList();
       } catch (error: any) {
         console.error("Error adding anime:", error);
@@ -316,6 +318,7 @@ const Index = () => {
     try {
       await createAnime(seasonsToAdd2);
       toast.success(`${numberOfSeasons} season${numberOfSeasons !== 1 ? 's' : ''} added successfully!`);
+      logActivity("added", data.title, data.coverImage || null, 1);
       fetchAnimeList();
     } catch (error: any) {
       toast.error("Failed to add anime");
@@ -337,6 +340,13 @@ const Index = () => {
         coverImage: data.coverImage || null,
         seasonNumber: data.seasonNumber,
       });
+
+      const prevStatus = editingAnime.status;
+      if (data.status === "completed" && prevStatus !== "completed") {
+        logActivity("completed", data.title, data.coverImage || null, data.seasonNumber, data.rating || null);
+      } else if (data.rating && data.rating !== editingAnime.rating) {
+        logActivity("rated", data.title, data.coverImage || null, data.seasonNumber, data.rating);
+      }
 
       toast.success("Anime updated successfully!");
       setEditingAnime(null);
@@ -450,6 +460,21 @@ const Index = () => {
             </div>
             <div className="flex items-center gap-1.5">
               {user && <Notifications userId={user.id} />}
+              {user?.shortId && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  title="Share My Profile"
+                  className="h-8 w-8 hover:bg-muted/50 text-muted-foreground hover:text-foreground rounded-xl"
+                  onClick={() => {
+                    const url = `${window.location.origin}/u/${(user.shortId ?? "").toUpperCase()}`;
+                    navigator.clipboard.writeText(url);
+                    toast.success("Profile link copied to clipboard!");
+                  }}
+                >
+                  <Share2 className="w-4 h-4" />
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="icon"
@@ -511,6 +536,11 @@ const Index = () => {
                   className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium gap-1">
                   <Users className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Friends</span>
+                </TabsTrigger>
+                <TabsTrigger value="discover" data-testid="tab-discover"
+                  className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium gap-1">
+                  <Compass className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Discover</span>
                 </TabsTrigger>
               </TabsList>
 
@@ -691,6 +721,10 @@ const Index = () => {
 
           <TabsContent value="analytics" className="space-y-4 pt-4">
             <AnalyticsDashboard />
+          </TabsContent>
+
+          <TabsContent value="discover" className="pt-4">
+            <Discover animeList={animeList} onAddAnime={handleAddAnime} />
           </TabsContent>
         </Tabs>
       </main>

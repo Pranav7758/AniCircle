@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
-import { getFriends, getFriendRequests, getFriendAnimeList, sendFriendRequest, updateFriendStatus, getProfileByShortId } from "@/services/supabaseData";
+import { getFriends, getFriendRequests, getFriendAnimeList, sendFriendRequest, updateFriendStatus, getProfileByShortId, getFriendsActivity } from "@/services/supabaseData";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { UserPlus, Check, X, Users, Search, Copy, Swords } from "lucide-react";
+import { UserPlus, Check, X, Users, Search, Copy, Swords, Activity, Star, Plus, CheckCircle2, Play, Trash2, Loader2 } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import AnimeGroupCard from "./AnimeGroupCard";
 import FriendCompare from "./FriendCompare";
@@ -53,6 +54,8 @@ const Friends = ({ currentUserId }: FriendsProps) => {
   const [friendStatusFilter, setFriendStatusFilter] = useState<string>("all");
   const [friendHentaiFilter, setFriendHentaiFilter] = useState<string>("hide");
   const [friendRankingFilter, setFriendRankingFilter] = useState<string>("all");
+  const [activityFeed, setActivityFeed] = useState<any[]>([]);
+  const [loadingActivity, setLoadingActivity] = useState(false);
 
   const fetchFriendsData = async () => {
     try {
@@ -88,6 +91,18 @@ const Friends = ({ currentUserId }: FriendsProps) => {
     fetchFriendsData();
     fetchFriendRequestsData();
   }, [currentUserId]);
+
+  useEffect(() => {
+    if (friends.length === 0) return;
+    const friendUserIds = friends.map(f =>
+      f.userId === currentUserId ? f.friendId : f.userId
+    );
+    setLoadingActivity(true);
+    getFriendsActivity(friendUserIds)
+      .then(data => setActivityFeed(data))
+      .catch(() => {})
+      .finally(() => setLoadingActivity(false));
+  }, [friends, currentUserId]);
 
   useEffect(() => {
     if (selectedFriendForList) {
@@ -202,8 +217,11 @@ const Friends = ({ currentUserId }: FriendsProps) => {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="friends" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="friends" data-testid="tab-my-friends">My Friends</TabsTrigger>
+          <TabsTrigger value="feed" data-testid="tab-feed" className="gap-1">
+            <Activity className="w-3.5 h-3.5" /> Feed
+          </TabsTrigger>
           <TabsTrigger value="compare" data-testid="tab-compare" className="gap-1">
             <Swords className="w-3.5 h-3.5" /> Compare
           </TabsTrigger>
@@ -357,6 +375,71 @@ const Friends = ({ currentUserId }: FriendsProps) => {
               </div>
             </div>
           </div>
+        </TabsContent>
+
+        <TabsContent value="feed" className="space-y-4 pt-4">
+          {loadingActivity ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin opacity-40" />
+            </div>
+          ) : activityFeed.length === 0 ? (
+            <div className="text-center py-16 text-muted-foreground">
+              <Activity className="w-12 h-12 mx-auto mb-3 opacity-20" />
+              <p className="font-semibold text-base">No activity yet</p>
+              <p className="text-sm mt-1 opacity-70">
+                {friends.length === 0
+                  ? "Add some friends to see their activity here."
+                  : "Your friends haven't logged any activity yet. Activity appears when they add or complete anime."}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {activityFeed.map((item) => {
+                const icon =
+                  item.type === "completed" ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> :
+                  item.type === "rated" ? <Star className="w-4 h-4 text-amber-400 shrink-0" /> :
+                  item.type === "dropped" ? <Trash2 className="w-4 h-4 text-red-400 shrink-0" /> :
+                  item.type === "started" ? <Play className="w-4 h-4 text-blue-400 shrink-0" /> :
+                  <Plus className="w-4 h-4 text-primary shrink-0" />;
+
+                const verb =
+                  item.type === "completed" ? "completed" :
+                  item.type === "rated" ? "rated" :
+                  item.type === "dropped" ? "dropped" :
+                  item.type === "started" ? "started watching" :
+                  "added";
+
+                const extra =
+                  item.type === "rated" && item.rating ? ` — ${item.rating}/10` :
+                  item.type === "completed" && item.rating ? ` — ${item.rating}/10` : "";
+
+                return (
+                  <div key={item.id} className="flex items-center gap-3 p-3 rounded-xl bg-muted/20 border border-border/30 holo-glass hover:bg-muted/30 transition-colors">
+                    {item.coverImage ? (
+                      <img src={item.coverImage} alt={item.animeTitle} className="w-10 h-14 object-cover rounded-lg shrink-0" />
+                    ) : (
+                      <div className="w-10 h-14 bg-muted/40 rounded-lg shrink-0 flex items-center justify-center">
+                        {icon}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm leading-snug">
+                        <span className="font-bold">{item.username}</span>
+                        {" "}{verb}{" "}
+                        <span className="font-semibold text-foreground">{item.animeTitle}</span>
+                        {item.seasonNumber && item.seasonNumber > 1 ? ` S${item.seasonNumber}` : ""}
+                        {extra && <span className="text-amber-400 font-bold">{extra}</span>}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {formatDistanceToNow(new Date(item.createdAt), { addSuffix: true })}
+                      </p>
+                    </div>
+                    {icon}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="compare" className="space-y-4 pt-2">

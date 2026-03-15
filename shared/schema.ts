@@ -1,4 +1,4 @@
-import { pgTable, text, integer, boolean, timestamp, uuid, index } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, boolean, timestamp, uuid, index, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations, sql } from "drizzle-orm";
@@ -69,6 +69,20 @@ export const notifications = pgTable("notifications", {
 }, (table) => [
   index("idx_notifications_user_id").on(table.userId),
   index("idx_notifications_read").on(table.userId, table.read),
+]);
+
+export const activityFeed = pgTable("activity_feed", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull().references(() => profiles.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), // 'added' | 'completed' | 'dropped' | 'rated' | 'started'
+  animeTitle: text("anime_title").notNull(),
+  coverImage: text("cover_image"),
+  seasonNumber: integer("season_number"),
+  rating: integer("rating"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_activity_feed_user_id").on(table.userId),
+  index("idx_activity_feed_created_at").on(table.createdAt),
 ]);
 
 export const profilesRelations = relations(profiles, ({ many }) => ({

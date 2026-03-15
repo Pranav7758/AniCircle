@@ -258,6 +258,71 @@ export const GET_RELATIONS_DEEP_QUERY = `
 
 export const GET_SEQUELS_QUERY = GET_RELATIONS_DEEP_QUERY;
 
+export const GET_TRENDING_QUERY = `
+  query {
+    Page(page: 1, perPage: 20) {
+      media(type: ANIME, sort: TRENDING_DESC, status_not: NOT_YET_RELEASED) {
+        id
+        idMal
+        title {
+          english
+          romaji
+        }
+        coverImage {
+          large
+          medium
+        }
+        averageScore
+        episodes
+        status
+        season
+        seasonYear
+        format
+        genres
+        nextAiringEpisode {
+          airingAt
+          episode
+        }
+      }
+    }
+  }
+`;
+
+export const GET_RECOMMENDATIONS_QUERY = `
+  query ($id: Int) {
+    Media(id: $id, type: ANIME) {
+      title {
+        english
+        romaji
+      }
+      recommendations(sort: RATING_DESC, page: 1, perPage: 8) {
+        nodes {
+          rating
+          mediaRecommendation {
+            id
+            idMal
+            title {
+              english
+              romaji
+            }
+            coverImage {
+              large
+              medium
+            }
+            averageScore
+            genres
+            episodes
+            status
+            format
+            season
+            seasonYear
+          }
+        }
+      }
+    }
+  }
+`;
+
 export const GET_ANALYTICS_QUERY = `
   query ($ids: [Int]) {
     Page(page: 1, perPage: 50) {

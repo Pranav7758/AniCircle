@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
+import PublicProfile from "./pages/PublicProfile";
 import { Loader2 } from "lucide-react";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -60,6 +61,9 @@ function Router() {
       </Route>
       <Route path="/auth">
         <PublicRoute><Auth /></PublicRoute>
+      </Route>
+      <Route path="/u/:shortId">
+        {(params) => <PublicProfile />}
       </Route>
       <Route component={NotFound} />
     </Switch>

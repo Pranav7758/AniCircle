@@ -1,12 +1,18 @@
 # AniCircle - Anime Tracker
 
 ## Overview
-AniCircle is a full-stack anime tracking application that allows users to:
+AniCircle is a full-stack anime tracking and social platform that allows users to:
 - Track their anime watchlist with episodes watched, ratings, and notes
-- Search and add anime from MyAnimeList via Jikan API
-- Rank their favorite anime
-- Connect with friends and view their anime lists
+- Search and add anime using AniList GraphQL API
+- Rank their favorite anime with drag-and-drop
+- Connect with friends, view their lists, compare stats, and watch Activity Feed
 - Receive notifications about anime updates
+- **Discover Tab**: Smart Recommendations (AniList-powered), Mood Picker, Trending Spotlight
+- **Public Profile**: Shareable `/u/:shortId` pages viewable without login
+- **Activity Feed**: Friends' real-time activity (adds, completions, ratings)
+- **Radar**: Sequel/prequel chain tracking with airing dates
+- **Analytics**: Genre/tag breakdown of watch history
+- **Genre Filter**: Filter My List by genre
 
 ## Tech Stack
 - **Frontend**: React + Vite + TypeScript

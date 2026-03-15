@@ -281,6 +281,43 @@ export async function markAllNotificationsRead(): Promise<void> {
   if (error) throw error;
 }
 
+export async function logActivity(type: string, animeTitle: string, coverImage?: string | null, seasonNumber?: number, rating?: number | null): Promise<void> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    await supabase.from('activity_feed').insert({
+      user_id: user.id,
+      type,
+      anime_title: animeTitle,
+      cover_image: coverImage || null,
+      season_number: seasonNumber || null,
+      rating: rating || null,
+    });
+  } catch { /* fire-and-forget */ }
+}
+
+export async function getFriendsActivity(friendIds: string[]): Promise<any[]> {
+  if (friendIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from('activity_feed')
+    .select('*, profiles!activity_feed_user_id_fkey(username)')
+    .in('user_id', friendIds)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (error) return [];
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    userId: row.user_id,
+    username: row.profiles?.username || 'User',
+    type: row.type,
+    animeTitle: row.anime_title,
+    coverImage: row.cover_image,
+    seasonNumber: row.season_number,
+    rating: row.rating,
+    createdAt: row.created_at,
+  }));
+}
+
 export async function getProfileByShortId(shortId: string): Promise<{ id: string; name: string } | null> {
   const { data, error } = await supabase
     .from('profiles')
