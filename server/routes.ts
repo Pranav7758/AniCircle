@@ -34,6 +34,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       req.userId = user.id;
+      req.userEmail = user.email;
       next();
     } catch (error) {
       console.error("Auth error:", error);
@@ -132,11 +133,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (trimmed.length < 2 || trimmed.length > 30) {
         return res.status(400).json({ error: "Username must be 2–30 characters" });
       }
-      const updated = await storage.updateProfile(req.userId, { username: trimmed });
+
+      if (!supabase) {
+        return res.status(500).json({ error: "Server not configured" });
+      }
+
+      const { data: updated, error: upsertError } = await supabase
+        .from("profiles")
+        .upsert({ id: req.userId, email: req.userEmail || "", username: trimmed }, { onConflict: "id" })
+        .select("username")
+        .single();
+
+      if (upsertError) {
+        console.error("Error upserting profile:", upsertError);
+        return res.status(500).json({ error: "Failed to update username" });
+      }
+
       res.json({ username: updated?.username });
     } catch (error: any) {
       console.error("Error updating profile:", error);
-      res.status(500).json({ error: "Failed to update profile" });
+      res.status(500).json({ error: "Failed to update username" });
     }
   });
 
