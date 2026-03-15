@@ -271,7 +271,42 @@ export const GET_TRENDING_QUERY = `
         coverImage {
           large
           medium
+          extraLarge
         }
+        bannerImage
+        description(asHtml: false)
+        averageScore
+        episodes
+        status
+        season
+        seasonYear
+        format
+        genres
+        nextAiringEpisode {
+          airingAt
+          episode
+        }
+      }
+    }
+  }
+`;
+
+export const GET_GENRE_TRENDING_QUERY = `
+  query ($genre: String) {
+    Page(page: 1, perPage: 14) {
+      media(type: ANIME, genre: $genre, sort: TRENDING_DESC, status_not: NOT_YET_RELEASED, averageScore_greater: 60) {
+        id
+        idMal
+        title {
+          english
+          romaji
+        }
+        coverImage {
+          large
+          medium
+          extraLarge
+        }
+        bannerImage
         averageScore
         episodes
         status
