@@ -217,26 +217,26 @@ const Friends = ({ currentUserId }: FriendsProps) => {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="friends" className="w-full">
-        <TabsList className="flex w-full h-auto flex-wrap gap-1 md:grid md:grid-cols-5 md:gap-0">
-          <TabsTrigger value="friends" data-testid="tab-my-friends" className="flex-1 min-w-[70px] gap-1">
+        <TabsList className="grid w-full h-auto grid-cols-3 gap-1 p-1 md:grid-cols-5">
+          <TabsTrigger value="friends" data-testid="tab-my-friends" className="gap-1 text-xs py-2">
             <Users className="w-3.5 h-3.5 shrink-0" />
-            <span className="hidden sm:inline">My </span>Friends
+            Friends
           </TabsTrigger>
-          <TabsTrigger value="feed" data-testid="tab-feed" className="flex-1 min-w-[60px] gap-1">
+          <TabsTrigger value="feed" data-testid="tab-feed" className="gap-1 text-xs py-2">
             <Activity className="w-3.5 h-3.5 shrink-0" />
-            <span>Feed</span>
+            Feed
           </TabsTrigger>
-          <TabsTrigger value="compare" data-testid="tab-compare" className="flex-1 min-w-[70px] gap-1">
+          <TabsTrigger value="compare" data-testid="tab-compare" className="gap-1 text-xs py-2">
             <Swords className="w-3.5 h-3.5 shrink-0" />
-            <span>Compare</span>
+            Compare
           </TabsTrigger>
-          <TabsTrigger value="requests" data-testid="tab-requests" className="flex-1 min-w-[70px] gap-1">
+          <TabsTrigger value="requests" data-testid="tab-requests" className="gap-1 text-xs py-2 col-span-1">
             <UserPlus className="w-3.5 h-3.5 shrink-0" />
-            <span>Requests</span>
+            Requests
           </TabsTrigger>
-          <TabsTrigger value="find" data-testid="tab-find-friends" className="flex-1 min-w-[60px] gap-1">
+          <TabsTrigger value="find" data-testid="tab-find-friends" className="gap-1 text-xs py-2 col-span-2 md:col-span-1">
             <Search className="w-3.5 h-3.5 shrink-0" />
-            <span className="hidden sm:inline">Find </span>Friends
+            Find Friends
           </TabsTrigger>
         </TabsList>
 
