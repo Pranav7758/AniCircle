@@ -358,7 +358,7 @@ export const GET_TOP_GENRE_QUERY = `
 export const GET_ISEKAI_TRENDING_QUERY = `
   query {
     Page(page: 1, perPage: 14) {
-      media(type: ANIME, tag: "Isekai", sort: TRENDING_DESC, averageScore_greater: 60) {
+      media(type: ANIME, tag: "Isekai", minimumTagRank: 60, sort: TRENDING_DESC, averageScore_greater: 60) {
         id
         idMal
         title {
@@ -425,7 +425,7 @@ export const GET_RECOMMENDATIONS_QUERY = `
 export const GET_TOP_RATED_ISEKAI_QUERY = `
   query {
     Page(page: 1, perPage: 50) {
-      media(type: ANIME, tag: "Isekai", sort: SCORE_DESC, averageScore_greater: 60, format_in: [TV, MOVIE, OVA]) {
+      media(type: ANIME, tag: "Isekai", minimumTagRank: 60, sort: SCORE_DESC, averageScore_greater: 60, format_in: [TV, MOVIE, OVA]) {
         id
         idMal
         title {
