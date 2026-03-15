@@ -275,16 +275,14 @@ function FindSimilar({ animeList, allKnownIds, showMature, onAdd, addingId }: {
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const eligible = useMemo(() =>
-    animeList
-      .filter(a => a.anilistId)
-      .sort((a, b) => (b.rating || 0) - (a.rating || 0)),
+    [...animeList].sort((a, b) => (b.rating || 0) - (a.rating || 0)),
     [animeList]
   );
 
   const filtered = useMemo(() => {
-    if (!query.trim()) return eligible.slice(0, 8);
+    if (!query.trim()) return eligible.slice(0, 15);
     const q = query.toLowerCase();
-    return eligible.filter(a => a.title.toLowerCase().includes(q)).slice(0, 8);
+    return eligible.filter(a => a.title.toLowerCase().includes(q)).slice(0, 15);
   }, [query, eligible]);
 
   useEffect(() => {
@@ -302,6 +300,10 @@ function FindSimilar({ animeList, allKnownIds, showMature, onAdd, addingId }: {
     setQuery(anime.title);
     setOpen(false);
     setResults([]);
+    if (!anime.anilistId) {
+      // No AniList ID — can't fetch recommendations
+      return;
+    }
     setLoading(true);
     try {
       const data = await fetchAniList(GET_RECOMMENDATIONS_QUERY, { id: anime.anilistId });
@@ -389,7 +391,11 @@ function FindSimilar({ animeList, allKnownIds, showMature, onAdd, addingId }: {
       {/* Results */}
       {loading && <SkeletonRow />}
       {!loading && selected && results.length === 0 && (
-        <p className="text-xs text-muted-foreground py-3">No similar anime found — you might have already seen them all!</p>
+        <p className="text-xs text-muted-foreground py-3">
+          {!selected.anilistId
+            ? `"${selected.title}" was added manually and doesn't have AniList data, so we can't fetch recommendations for it.`
+            : "No similar anime found — you might have already seen them all!"}
+        </p>
       )}
       {!loading && results.length > 0 && (
         <>
