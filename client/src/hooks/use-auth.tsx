@@ -267,25 +267,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateUsername = async (newUsername: string) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) throw new Error("Not authenticated");
-
-    const res = await fetch("/api/profile", {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({ username: newUsername.trim() }),
-    });
-
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.error || "Failed to update username");
+    const trimmed = newUsername.trim();
+    if (trimmed.length < 2 || trimmed.length > 30) {
+      throw new Error("Username must be 2–30 characters");
     }
 
-    const body = await res.json();
-    setUser((prev) => prev ? { ...prev, username: body.username } : prev);
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    if (!currentUser) throw new Error("Not authenticated");
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .update({ username: trimmed })
+      .eq("id", currentUser.id)
+      .select("username")
+      .single();
+
+    if (error) throw new Error(error.message || "Failed to update username");
+    setUser((prev) => prev ? { ...prev, username: data?.username ?? trimmed } : prev);
   };
 
   const clearRecoveryMode = () => {

@@ -281,47 +281,87 @@ export async function markAllNotificationsRead(): Promise<void> {
   if (error) throw error;
 }
 
-async function getAuthToken(): Promise<string | null> {
-  const { data: { session } } = await supabase.auth.getSession();
-  return session?.access_token ?? null;
-}
-
 export async function logActivity(type: string, animeTitle: string, coverImage?: string | null, seasonNumber?: number, rating?: number | null): Promise<void> {
   try {
-    const token = await getAuthToken();
-    if (!token) return;
-    await fetch('/api/activity', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify({ type, animeTitle, coverImage: coverImage ?? null, seasonNumber: seasonNumber ?? null, rating: rating ?? null }),
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabase.from('activity_feed').insert({
+      user_id: user.id,
+      type,
+      anime_title: animeTitle,
+      cover_image: coverImage ?? null,
+      season_number: seasonNumber ?? null,
+      rating: rating ?? null,
     });
+    if (error) return;
+
+    // Fire-and-forget: notify friends
+    (async () => {
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('username')
+          .eq('id', user.id)
+          .single();
+
+        const username = profile?.username || 'A friend';
+        const actionMap: Record<string, string> = {
+          added: `added "${animeTitle}" to their list`,
+          started: `started watching "${animeTitle}"`,
+          completed: `completed "${animeTitle}"!`,
+          dropped: `dropped "${animeTitle}"`,
+          rated: `rated "${animeTitle}" ${rating ?? ''}${rating ? '/10' : ''}`.trim(),
+          watching: `is watching "${animeTitle}"`,
+          plan_to_watch: `plans to watch "${animeTitle}"`,
+        };
+        const message = `${username} ${actionMap[type] || `updated "${animeTitle}"`}`;
+
+        const { data: friendRows } = await supabase
+          .from('friends')
+          .select('user_id, friend_id')
+          .or(`user_id.eq.${user.id},friend_id.eq.${user.id}`)
+          .eq('status', 'accepted');
+
+        for (const friend of friendRows || []) {
+          const recipientId = friend.user_id === user.id ? friend.friend_id : friend.user_id;
+          await supabase.from('notifications').insert({
+            user_id: recipientId,
+            anime_title: animeTitle,
+            season_number: seasonNumber ?? null,
+            episode_number: null,
+            notification_type: 'friend_activity',
+            message,
+            read: false,
+          });
+        }
+      } catch { /* ignore notification errors */ }
+    })();
   } catch { /* fire-and-forget */ }
 }
 
 export async function getFriendsActivity(friendIds: string[]): Promise<any[]> {
   if (friendIds.length === 0) return [];
   try {
-    const token = await getAuthToken();
-    if (!token) return [];
-    const params = new URLSearchParams({ friendIds: friendIds.join(',') });
-    const res = await fetch(`/api/activity/friends?${params}`, {
-      headers: { 'Authorization': `Bearer ${token}` },
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
+    const { data, error } = await supabase
+      .from('activity_feed')
+      .select('*, profiles(username)')
+      .in('user_id', friendIds)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) return [];
+
     return (data || []).map((row: any) => ({
       id: row.id,
-      userId: row.userId,
-      username: row.username || 'User',
+      userId: row.user_id,
+      username: row.profiles?.username || 'User',
       type: row.type,
-      animeTitle: row.animeTitle,
-      coverImage: row.coverImage,
-      seasonNumber: row.seasonNumber,
+      animeTitle: row.anime_title,
+      coverImage: row.cover_image,
+      seasonNumber: row.season_number,
       rating: row.rating,
-      createdAt: row.createdAt,
+      createdAt: row.created_at,
     }));
   } catch {
     return [];
