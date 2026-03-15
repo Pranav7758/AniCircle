@@ -724,7 +724,7 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="discover" className="pt-4">
-            <Discover animeList={animeList} onAddAnime={handleAddAnime} />
+            <Discover animeList={animeList} onAddAnime={handleAddAnime} showMature={hentaiFilter !== "hide"} />
           </TabsContent>
         </Tabs>
       </main>

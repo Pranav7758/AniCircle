@@ -394,7 +394,7 @@ export const GET_RECOMMENDATIONS_QUERY = `
         english
         romaji
       }
-      recommendations(sort: RATING_DESC, page: 1, perPage: 8) {
+      recommendations(sort: RATING_DESC, page: 1, perPage: 20) {
         nodes {
           rating
           mediaRecommendation {
