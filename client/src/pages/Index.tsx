@@ -6,7 +6,7 @@ import { fetchAniList, GET_ANALYTICS_QUERY } from "@/services/anilist";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LogOut, Plus, Search, Sparkles, Trophy, Users, Settings, PieChart, Play, CheckCircle2, Clock, ArrowUpDown, Tag, Compass, Share2 } from "lucide-react";
+import { LogOut, Plus, Search, Sparkles, Trophy, Users, Settings, PieChart, Play, CheckCircle2, Clock, ArrowUpDown, Tag, Compass, Share2, Loader2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import AnimeRanking from "@/components/AnimeRanking";
@@ -76,7 +76,7 @@ const StatsBar = ({ animeList }: { animeList: Anime[] }) => {
 
 const Index = () => {
   const [, setLocation] = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, updateUsername } = useAuth();
   const [animeList, setAnimeList] = useState<Anime[]>([]);
   const [filteredAnimeList, setFilteredAnimeList] = useState<Anime[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -89,6 +89,8 @@ const Index = () => {
   const genreFetchRef = useRef<string>("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [newUsername, setNewUsername] = useState("");
+  const [isSavingUsername, setIsSavingUsername] = useState(false);
   const [prefilledSearchQuery, setPrefilledSearchQuery] = useState("");
   const [editingAnime, setEditingAnime] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -749,7 +751,7 @@ const Index = () => {
         />
       )}
 
-      <Dialog open={isSettingsOpen} onOpenChange={setIsSettingsOpen}>
+      <Dialog open={isSettingsOpen} onOpenChange={(open) => { setIsSettingsOpen(open); if (open) setNewUsername(user?.username || ""); }}>
         <DialogContent className="sm:max-w-md bg-card/95 backdrop-blur-xl border-border/50 shadow-neon">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -758,6 +760,65 @@ const Index = () => {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-6 py-4 animate-fade-in">
+            <div className="space-y-4">
+              <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Profile</h4>
+              <div className="p-4 rounded-xl border border-border/50 bg-background/50 holo-glass space-y-3">
+                <div className="space-y-1">
+                  <span className="text-sm font-semibold text-foreground block">Username</span>
+                  <span className="text-xs text-muted-foreground block leading-relaxed">Your name visible to friends in activity feeds and friend lists</span>
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    value={newUsername}
+                    onChange={(e) => setNewUsername(e.target.value)}
+                    placeholder={user?.username || "Enter username"}
+                    maxLength={30}
+                    className="flex-1 h-9 text-sm"
+                    data-testid="input-new-username"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        (async () => {
+                          const trimmed = newUsername.trim();
+                          if (!trimmed || trimmed === user?.username) return;
+                          if (trimmed.length < 2) { toast.error("Username must be at least 2 characters"); return; }
+                          setIsSavingUsername(true);
+                          try {
+                            await updateUsername(trimmed);
+                            toast.success("Username updated!");
+                          } catch (err: any) {
+                            toast.error(err.message || "Failed to update username");
+                          } finally {
+                            setIsSavingUsername(false);
+                          }
+                        })();
+                      }
+                    }}
+                  />
+                  <Button
+                    size="sm"
+                    disabled={isSavingUsername || !newUsername.trim() || newUsername.trim() === user?.username}
+                    onClick={async () => {
+                      const trimmed = newUsername.trim();
+                      if (trimmed.length < 2) { toast.error("Username must be at least 2 characters"); return; }
+                      setIsSavingUsername(true);
+                      try {
+                        await updateUsername(trimmed);
+                        toast.success("Username updated!");
+                      } catch (err: any) {
+                        toast.error(err.message || "Failed to update username");
+                      } finally {
+                        setIsSavingUsername(false);
+                      }
+                    }}
+                    data-testid="button-save-username"
+                    className="shrink-0"
+                  >
+                    {isSavingUsername ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-4">
               <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Content Filters</h4>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-border/50 bg-background/50 holo-glass">

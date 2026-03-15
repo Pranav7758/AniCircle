@@ -19,6 +19,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   updatePassword: (newPassword: string) => Promise<void>;
+  updateUsername: (newUsername: string) => Promise<void>;
   clearRecoveryMode: () => void;
   loginWithGoogle: () => Promise<void>;
   session: Session | null;
@@ -265,12 +266,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateUsername = async (newUsername: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error("Not authenticated");
+
+    const res = await fetch("/api/profile", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ username: newUsername.trim() }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error || "Failed to update username");
+    }
+
+    const body = await res.json();
+    setUser((prev) => prev ? { ...prev, username: body.username } : prev);
+  };
+
   const clearRecoveryMode = () => {
     setIsRecoveryMode(false);
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, isRecoveryMode, login, register, logout, resetPassword, updatePassword, clearRecoveryMode, loginWithGoogle, session }}>
+    <AuthContext.Provider value={{ user, isLoading, isRecoveryMode, login, register, logout, resetPassword, updatePassword, updateUsername, clearRecoveryMode, loginWithGoogle, session }}>
       {children}
     </AuthContext.Provider>
   );

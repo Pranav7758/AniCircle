@@ -122,6 +122,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/profile", requireAuth, async (req: any, res) => {
+    try {
+      const { username } = req.body;
+      if (!username || typeof username !== "string") {
+        return res.status(400).json({ error: "Username is required" });
+      }
+      const trimmed = username.trim();
+      if (trimmed.length < 2 || trimmed.length > 30) {
+        return res.status(400).json({ error: "Username must be 2–30 characters" });
+      }
+      const updated = await storage.updateProfile(req.userId, { username: trimmed });
+      res.json({ username: updated?.username });
+    } catch (error: any) {
+      console.error("Error updating profile:", error);
+      res.status(500).json({ error: "Failed to update profile" });
+    }
+  });
+
   app.get("/api/friends", requireAuth, async (req: any, res) => {
     try {
       const friendsList = await storage.getFriends(req.userId);
