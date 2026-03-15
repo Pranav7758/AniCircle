@@ -91,7 +91,7 @@ function AnimeCard({ anime, isInList, onAdd, adding, rank }: {
   const st = STATUS_MAP[anime.status] || null;
 
   return (
-    <div className="group relative flex-shrink-0 w-[130px] sm:w-[144px]" data-testid={`card-anime-${anime.id}`}>
+    <div className="group relative flex-shrink-0 w-[130px] sm:w-[144px] md:w-full" data-testid={`card-anime-${anime.id}`}>
       <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-muted/30">
         {anime.coverImage?.large || anime.coverImage?.extraLarge ? (
           <img
@@ -146,13 +146,27 @@ function Row({ children }: { children: React.ReactNode }) {
   const scroll = (d: number) => ref.current?.scrollBy({ left: d * 400, behavior: "smooth" });
   return (
     <div className="relative group/row">
-      <button onClick={() => scroll(-1)} className="absolute -left-2 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-background border border-border flex items-center justify-center opacity-0 group-hover/row:opacity-100 hover:bg-muted transition-all shadow-md">
+      {/* Scroll arrows — mobile only */}
+      <button
+        onClick={() => scroll(-1)}
+        className="md:hidden absolute -left-2 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-background border border-border flex items-center justify-center opacity-0 group-hover/row:opacity-100 hover:bg-muted transition-all shadow-md"
+      >
         <ChevronLeft className="w-3.5 h-3.5" />
       </button>
-      <div ref={ref} className="flex gap-2.5 overflow-x-auto pb-1" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
+
+      {/* Mobile: horizontal scroll — Desktop: wrapping grid */}
+      <div
+        ref={ref}
+        className="flex md:grid md:grid-cols-[repeat(auto-fill,minmax(148px,1fr))] gap-2.5 md:gap-3 overflow-x-auto md:overflow-x-visible pb-1 md:pb-0"
+        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+      >
         {children}
       </div>
-      <button onClick={() => scroll(1)} className="absolute -right-2 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-background border border-border flex items-center justify-center opacity-0 group-hover/row:opacity-100 hover:bg-muted transition-all shadow-md">
+
+      <button
+        onClick={() => scroll(1)}
+        className="md:hidden absolute -right-2 top-1/2 -translate-y-1/2 z-10 w-7 h-7 rounded-full bg-background border border-border flex items-center justify-center opacity-0 group-hover/row:opacity-100 hover:bg-muted transition-all shadow-md"
+      >
         <ChevronRight className="w-3.5 h-3.5" />
       </button>
     </div>
@@ -161,9 +175,9 @@ function Row({ children }: { children: React.ReactNode }) {
 
 function SkeletonRow() {
   return (
-    <div className="flex gap-2.5">
+    <div className="flex md:grid md:grid-cols-[repeat(auto-fill,minmax(148px,1fr))] gap-2.5 md:gap-3 overflow-x-auto md:overflow-x-visible">
       {Array.from({ length: 8 }).map((_, i) => (
-        <div key={i} className="flex-shrink-0 w-[130px] sm:w-[144px] aspect-[2/3] rounded-lg bg-muted/40 animate-pulse" />
+        <div key={i} className="flex-shrink-0 w-[130px] sm:w-[144px] md:w-full aspect-[2/3] rounded-lg bg-muted/40 animate-pulse" />
       ))}
     </div>
   );
