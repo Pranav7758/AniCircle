@@ -283,7 +283,8 @@ export async function markAllNotificationsRead(): Promise<void> {
 
 export async function logActivity(type: string, animeTitle: string, coverImage?: string | null, seasonNumber?: number, rating?: number | null): Promise<void> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) return;
 
     const { error } = await supabase.from('activity_feed').insert({
