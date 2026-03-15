@@ -1,12 +1,12 @@
 import { 
-  profiles, anime, friends, notifications,
+  profiles, anime, friends, notifications, activityFeed,
   type Profile, type InsertProfile, 
   type Anime, type InsertAnime,
   type Friend, type InsertFriend,
   type Notification, type InsertNotification
 } from "../shared/schema";
 import { db } from "./db";
-import { eq, or, and, desc, asc } from "drizzle-orm";
+import { eq, or, and, desc, asc, inArray } from "drizzle-orm";
 
 export interface IStorage {
   getProfile(id: string): Promise<Profile | undefined>;
@@ -31,6 +31,9 @@ export interface IStorage {
   createNotification(notification: InsertNotification): Promise<Notification>;
   markNotificationRead(id: string): Promise<void>;
   markAllNotificationsRead(userId: string): Promise<void>;
+
+  getActivityFeed(friendIds: string[]): Promise<any[]>;
+  logActivity(userId: string, type: string, animeTitle: string, coverImage?: string | null, seasonNumber?: number | null, rating?: number | null): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -189,6 +192,38 @@ export class DatabaseStorage implements IStorage {
       .update(notifications)
       .set({ read: true })
       .where(eq(notifications.userId, userId));
+  }
+
+  async getActivityFeed(friendIds: string[]): Promise<any[]> {
+    if (friendIds.length === 0) return [];
+    return await db
+      .select({
+        id: activityFeed.id,
+        userId: activityFeed.userId,
+        username: profiles.username,
+        type: activityFeed.type,
+        animeTitle: activityFeed.animeTitle,
+        coverImage: activityFeed.coverImage,
+        seasonNumber: activityFeed.seasonNumber,
+        rating: activityFeed.rating,
+        createdAt: activityFeed.createdAt,
+      })
+      .from(activityFeed)
+      .leftJoin(profiles, eq(activityFeed.userId, profiles.id))
+      .where(inArray(activityFeed.userId, friendIds))
+      .orderBy(desc(activityFeed.createdAt))
+      .limit(50);
+  }
+
+  async logActivity(userId: string, type: string, animeTitle: string, coverImage?: string | null, seasonNumber?: number | null, rating?: number | null): Promise<void> {
+    await db.insert(activityFeed).values({
+      userId,
+      type,
+      animeTitle,
+      coverImage: coverImage ?? null,
+      seasonNumber: seasonNumber ?? null,
+      rating: rating ?? null,
+    });
   }
 }
 

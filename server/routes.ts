@@ -227,6 +227,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/activity/friends", requireAuth, async (req: any, res) => {
+    try {
+      const friendIds = ((req.query.friendIds as string) || "")
+        .split(",")
+        .map((id: string) => id.trim())
+        .filter(Boolean);
+      const activity = await storage.getActivityFeed(friendIds);
+      res.json(activity);
+    } catch (error: any) {
+      console.error("Error fetching activity feed:", error);
+      res.status(500).json({ error: "Failed to fetch activity feed" });
+    }
+  });
+
+  app.post("/api/activity", requireAuth, async (req: any, res) => {
+    try {
+      const { type, animeTitle, coverImage, seasonNumber, rating } = req.body;
+      if (!type || !animeTitle) {
+        return res.status(400).json({ error: "type and animeTitle are required" });
+      }
+      await storage.logActivity(req.userId, type, animeTitle, coverImage, seasonNumber, rating);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error logging activity:", error);
+      res.status(500).json({ error: "Failed to log activity" });
+    }
+  });
+
   app.get("/api/profiles/:id", async (req, res) => {
     try {
       const { id } = req.params;

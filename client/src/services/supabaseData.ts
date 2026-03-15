@@ -281,41 +281,51 @@ export async function markAllNotificationsRead(): Promise<void> {
   if (error) throw error;
 }
 
+async function getAuthToken(): Promise<string | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.access_token ?? null;
+}
+
 export async function logActivity(type: string, animeTitle: string, coverImage?: string | null, seasonNumber?: number, rating?: number | null): Promise<void> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    await supabase.from('activity_feed').insert({
-      user_id: user.id,
-      type,
-      anime_title: animeTitle,
-      cover_image: coverImage || null,
-      season_number: seasonNumber || null,
-      rating: rating || null,
+    const token = await getAuthToken();
+    if (!token) return;
+    await fetch('/api/activity', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ type, animeTitle, coverImage: coverImage ?? null, seasonNumber: seasonNumber ?? null, rating: rating ?? null }),
     });
   } catch { /* fire-and-forget */ }
 }
 
 export async function getFriendsActivity(friendIds: string[]): Promise<any[]> {
   if (friendIds.length === 0) return [];
-  const { data, error } = await supabase
-    .from('activity_feed')
-    .select('*, profiles!activity_feed_user_id_fkey(username)')
-    .in('user_id', friendIds)
-    .order('created_at', { ascending: false })
-    .limit(50);
-  if (error) return [];
-  return (data || []).map((row: any) => ({
-    id: row.id,
-    userId: row.user_id,
-    username: row.profiles?.username || 'User',
-    type: row.type,
-    animeTitle: row.anime_title,
-    coverImage: row.cover_image,
-    seasonNumber: row.season_number,
-    rating: row.rating,
-    createdAt: row.created_at,
-  }));
+  try {
+    const token = await getAuthToken();
+    if (!token) return [];
+    const params = new URLSearchParams({ friendIds: friendIds.join(',') });
+    const res = await fetch(`/api/activity/friends?${params}`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      userId: row.userId,
+      username: row.username || 'User',
+      type: row.type,
+      animeTitle: row.animeTitle,
+      coverImage: row.coverImage,
+      seasonNumber: row.seasonNumber,
+      rating: row.rating,
+      createdAt: row.createdAt,
+    }));
+  } catch {
+    return [];
+  }
 }
 
 export async function getProfileByShortId(shortId: string): Promise<{ id: string; name: string } | null> {
