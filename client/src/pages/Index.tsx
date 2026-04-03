@@ -19,6 +19,7 @@ import NewEpisodesBanner from "@/components/NewEpisodesBanner";
 import Radar from "@/components/Radar";
 import AnalyticsDashboard from "@/components/AnalyticsDashboard";
 import Discover from "@/components/Discover";
+import Watch from "@/components/Watch";
 
 interface Anime {
   id: string;
@@ -548,6 +549,11 @@ const Index = () => {
                   <Compass className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Discover</span>
                 </TabsTrigger>
+                <TabsTrigger value="watch" data-testid="tab-watch"
+                  className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium gap-1">
+                  <Play className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Watch</span>
+                </TabsTrigger>
               </TabsList>
 
               {activeTab === "list" && (
@@ -732,6 +738,10 @@ const Index = () => {
 
           <TabsContent value="discover" className="pt-4">
             <Discover animeList={animeList} onAddAnime={handleAddAnime} showMature={hentaiFilter !== "hide"} />
+          </TabsContent>
+
+          <TabsContent value="watch" className="pt-4 animate-tab-in">
+            <Watch animeList={animeList} />
           </TabsContent>
         </Tabs>
       </main>
