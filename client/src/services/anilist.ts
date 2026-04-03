@@ -258,6 +258,47 @@ export const GET_RELATIONS_DEEP_QUERY = `
 
 export const GET_SEQUELS_QUERY = GET_RELATIONS_DEEP_QUERY;
 
+export const GET_WEEKLY_SCHEDULE_QUERY = `
+  query ($airingAt_greater: Int, $airingAt_lesser: Int, $page: Int) {
+    Page(page: $page, perPage: 50) {
+      pageInfo {
+        hasNextPage
+        currentPage
+      }
+      airingSchedules(
+        airingAt_greater: $airingAt_greater
+        airingAt_lesser: $airingAt_lesser
+        sort: TIME
+      ) {
+        id
+        airingAt
+        episode
+        media {
+          id
+          idMal
+          title {
+            romaji
+            english
+          }
+          coverImage {
+            medium
+            large
+          }
+          format
+          episodes
+          averageScore
+          genres
+          studios(isMain: true) {
+            nodes {
+              name
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
 export const GET_TRENDING_QUERY = `
   query {
     Page(page: 1, perPage: 20) {
