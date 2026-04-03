@@ -1,9 +1,10 @@
-import { useState, useMemo, useRef, useEffect } from "react";
-import { Search, Play, Loader2, Tv, AlertTriangle, ChevronLeft, ChevronRight, ExternalLink, Film } from "lucide-react";
+import { useState, useMemo, useRef, useCallback } from "react";
+import { Search, Play, Loader2, Tv, AlertTriangle, ChevronLeft, ChevronRight, ExternalLink, Film, RefreshCw, Subtitles } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { useQuery } from "@tanstack/react-query";
 
 interface Anime {
     id: string;
@@ -17,13 +18,27 @@ interface Anime {
     malId: number | null;
 }
 
+interface Source {
+    url: string;
+    sourceName: string;
+    priority: number;
+}
+
 interface WatchProps {
     animeList: Anime[];
 }
 
-function build2EmbedUrl(malId: number, episode: number): string {
-    return `https://www.2embed.cc/embed/anime/${malId}/ep/${episode}`;
-}
+// Friendly display names for sources
+const SOURCE_LABELS: Record<string, string> = {
+    "Vid-mp4": "VidStream",
+    "Ss-Hls": "StreamSB",
+    "Ok": "OK.ru",
+    "Mp4": "MP4Upload",
+    "Default": "Primary",
+    "Ak": "Secondary",
+    "S-mp4": "Backup",
+    "Luf-Mp4": "LufMP4",
+};
 
 function EpisodeGrid({
     total,
@@ -36,10 +51,10 @@ function EpisodeGrid({
     selected: number;
     onSelect: (ep: number) => void;
 }) {
-    const PER_PAGE = 50;
+    const PER_PAGE = 60;
     const pages = Math.ceil(total / PER_PAGE);
-    const currentPage = Math.ceil(selected / PER_PAGE);
-    const [page, setPage] = useState(currentPage > 0 ? currentPage : 1);
+    const initPage = Math.ceil(selected / PER_PAGE) || 1;
+    const [page, setPage] = useState(initPage);
     const start = (page - 1) * PER_PAGE + 1;
     const end = Math.min(page * PER_PAGE, total);
 
@@ -54,7 +69,7 @@ function EpisodeGrid({
                             className={`shrink-0 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
                                 p === page
                                     ? "bg-primary text-primary-foreground"
-                                    : "bg-muted/40 text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                                    : "bg-muted/40 text-muted-foreground hover:bg-muted/70"
                             }`}
                         >
                             {(p - 1) * PER_PAGE + 1}–{Math.min(p * PER_PAGE, total)}
@@ -62,7 +77,7 @@ function EpisodeGrid({
                     ))}
                 </div>
             )}
-            <div className="grid grid-cols-8 sm:grid-cols-10 md:grid-cols-12 lg:grid-cols-16 xl:grid-cols-20 gap-1.5">
+            <div className="grid grid-cols-8 sm:grid-cols-10 md:grid-cols-12 lg:grid-cols-15 xl:grid-cols-20 gap-1.5">
                 {Array.from({ length: end - start + 1 }, (_, i) => start + i).map(ep => {
                     const isWatched = ep <= watched;
                     const isSelected = ep === selected;
@@ -71,11 +86,12 @@ function EpisodeGrid({
                             key={ep}
                             onClick={() => onSelect(ep)}
                             data-testid={`button-episode-${ep}`}
+                            title={`Episode ${ep}${isWatched ? " (watched)" : ""}`}
                             className={`h-8 rounded-md text-xs font-semibold transition-all ${
                                 isSelected
-                                    ? "bg-primary text-primary-foreground shadow-neon"
+                                    ? "bg-primary text-primary-foreground shadow-neon ring-2 ring-primary/30"
                                     : isWatched
-                                        ? "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/20"
+                                        ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/20"
                                         : "bg-muted/40 text-muted-foreground hover:bg-muted/70 hover:text-foreground border border-border/30"
                             }`}
                         >
@@ -88,51 +104,139 @@ function EpisodeGrid({
     );
 }
 
+function VideoPlayer({
+    anime,
+    episode,
+    langType,
+}: {
+    anime: Anime;
+    episode: number;
+    langType: "sub" | "dub";
+}) {
+    const [sourceIndex, setSourceIndex] = useState(0);
+    const iframeRef = useRef<HTMLIFrameElement>(null);
+
+    const { data, isLoading, error, refetch } = useQuery<{ sources: Source[]; showName: string }>({
+        queryKey: ["/api/watch/sources", anime.malId, anime.title, episode, langType],
+        queryFn: async () => {
+            const params = new URLSearchParams({
+                title: anime.title,
+                episode: String(episode),
+                type: langType,
+                ...(anime.malId ? { malId: String(anime.malId) } : {}),
+            });
+            const res = await fetch(`/api/watch/sources?${params}`);
+            if (!res.ok) throw new Error("Failed to fetch sources");
+            return res.json();
+        },
+        staleTime: 10 * 60 * 1000,
+        retry: 1,
+    });
+
+    // Reset source index when episode/type changes
+    const sources = data?.sources || [];
+    const currentSource = sources[sourceIndex];
+
+    if (isLoading) {
+        return (
+            <div className="aspect-video rounded-xl border border-border/50 bg-black flex flex-col items-center justify-center gap-3">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-xs text-muted-foreground">Finding episode sources…</p>
+            </div>
+        );
+    }
+
+    if (error || sources.length === 0) {
+        return (
+            <div className="aspect-video rounded-xl border border-orange-500/20 bg-black flex flex-col items-center justify-center gap-4 p-6 text-center">
+                <AlertTriangle className="h-10 w-10 text-orange-400 opacity-70" />
+                <div>
+                    <p className="font-semibold text-foreground">No sources found</p>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+                        {langType === "dub" ? "Dub may not be available — try Sub instead." : "This episode might not be available on AllAnime yet."}
+                    </p>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => refetch()} className="gap-1.5">
+                    <RefreshCw className="w-3.5 h-3.5" /> Retry
+                </Button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-3">
+            {/* Player */}
+            <div className="relative rounded-xl overflow-hidden border border-border/50 bg-black aspect-video">
+                <iframe
+                    ref={iframeRef}
+                    key={currentSource.url}
+                    src={currentSource.url}
+                    className="w-full h-full"
+                    allowFullScreen
+                    allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+                    data-testid="iframe-player"
+                />
+            </div>
+
+            {/* Source switcher */}
+            {sources.length > 1 && (
+                <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] text-muted-foreground font-medium shrink-0">Sources:</span>
+                    {sources.map((s, i) => (
+                        <button
+                            key={i}
+                            onClick={() => setSourceIndex(i)}
+                            data-testid={`button-source-${i}`}
+                            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                                i === sourceIndex
+                                    ? "bg-primary text-primary-foreground"
+                                    : "bg-muted/40 text-muted-foreground hover:bg-muted/70 border border-border/30"
+                            }`}
+                        >
+                            {SOURCE_LABELS[s.sourceName] || s.sourceName}
+                        </button>
+                    ))}
+                    <a
+                        href={currentSource.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ml-auto text-[11px] text-muted-foreground/60 hover:text-muted-foreground flex items-center gap-1"
+                    >
+                        <ExternalLink className="w-3 h-3" /> Open tab
+                    </a>
+                </div>
+            )}
+
+            {data?.showName && data.showName !== anime.title && (
+                <p className="text-[11px] text-muted-foreground/60">
+                    Matched as: <span className="text-muted-foreground">{data.showName}</span> on AllAnime
+                </p>
+            )}
+        </div>
+    );
+}
+
 export default function Watch({ animeList }: WatchProps) {
     const [search, setSearch] = useState("");
     const [selectedAnime, setSelectedAnime] = useState<Anime | null>(null);
     const [selectedEp, setSelectedEp] = useState(1);
-    const [iframeLoading, setIframeLoading] = useState(false);
-    const [iframeError, setIframeError] = useState(false);
-    const iframeRef = useRef<HTMLIFrameElement>(null);
+    const [langType, setLangType] = useState<"sub" | "dub">("sub");
 
-    const validAnime = useMemo(
-        () => animeList.filter(a => a.malId),
-        [animeList]
-    );
-
+    // All anime are searchable (even without malId — we search by title on AllAnime)
     const filtered = useMemo(() => {
-        if (!search.trim()) return validAnime;
-        const q = search.toLowerCase();
-        return validAnime.filter(a => a.title.toLowerCase().includes(q));
-    }, [search, validAnime]);
+        const q = search.toLowerCase().trim();
+        if (!q) return animeList;
+        return animeList.filter(a => a.title.toLowerCase().includes(q));
+    }, [search, animeList]);
 
-    const totalEps = selectedAnime?.totalEpisodes || 99;
-    const embedUrl = selectedAnime?.malId
-        ? build2EmbedUrl(selectedAnime.malId, selectedEp)
-        : null;
-
-    function selectAnime(anime: Anime) {
+    const selectAnime = useCallback((anime: Anime) => {
         setSelectedAnime(anime);
-        setSelectedEp(Math.max(1, (anime.episodesWatched || 0)));
-        setIframeError(false);
-        setIframeLoading(true);
-    }
+        const startEp = Math.max(1, anime.episodesWatched || 0);
+        setSelectedEp(startEp > (anime.totalEpisodes || 9999) ? 1 : startEp);
+        setLangType("sub");
+    }, []);
 
-    function handleEpSelect(ep: number) {
-        setSelectedEp(ep);
-        setIframeError(false);
-        setIframeLoading(true);
-    }
-
-    useEffect(() => {
-        if (selectedAnime) {
-            setIframeLoading(true);
-            setIframeError(false);
-        }
-    }, [embedUrl]);
-
-    const noMalAnime = animeList.filter(a => !a.malId);
+    const totalEps = selectedAnime?.totalEpisodes || 999;
 
     return (
         <div className="space-y-6">
@@ -141,92 +245,70 @@ export default function Watch({ animeList }: WatchProps) {
                 <Film className="h-5 w-5 text-primary drop-shadow-[0_0_8px_rgba(139,92,246,0.7)]" />
                 <h2 className="text-2xl font-bold">Watch</h2>
                 <span className="ml-auto text-xs bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full text-muted-foreground">
-                    via 2embed · {validAnime.length} watchable
+                    via AllAnime · {animeList.length} titles
                 </span>
             </div>
             <p className="text-muted-foreground text-sm -mt-4">
-                Stream anime from your list. Only shows added via search (with MAL ID) are available.
+                Stream anime from your list directly in the browser.
             </p>
 
-            {/* Player + Info */}
-            {selectedAnime && embedUrl ? (
+            {selectedAnime ? (
                 <div className="space-y-4">
-                    {/* Back + title */}
-                    <div className="flex items-center gap-3">
+                    {/* Back + title bar */}
+                    <div className="flex items-center gap-3 flex-wrap">
                         <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => setSelectedAnime(null)}
-                            className="gap-1.5 -ml-2 h-8 text-muted-foreground hover:text-foreground"
+                            className="gap-1.5 -ml-2 h-8 text-muted-foreground hover:text-foreground shrink-0"
                             data-testid="button-back-to-list"
                         >
                             <ChevronLeft className="w-4 h-4" /> Back
                         </Button>
-                        <h3 className="font-bold text-base truncate flex-1">{selectedAnime.title}</h3>
-                        <Badge variant="outline" className="shrink-0 text-xs">
-                            Ep {selectedEp}{selectedAnime.totalEpisodes ? ` / ${selectedAnime.totalEpisodes}` : ""}
-                        </Badge>
+                        <h3 className="font-bold text-base truncate flex-1 min-w-0">{selectedAnime.title}</h3>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                                onClick={() => setLangType("sub")}
+                                data-testid="button-type-sub"
+                                className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+                                    langType === "sub" ? "bg-primary text-primary-foreground" : "bg-muted/40 text-muted-foreground hover:bg-muted/70"
+                                }`}
+                            >
+                                SUB
+                            </button>
+                            <button
+                                onClick={() => setLangType("dub")}
+                                data-testid="button-type-dub"
+                                className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+                                    langType === "dub" ? "bg-primary text-primary-foreground" : "bg-muted/40 text-muted-foreground hover:bg-muted/70"
+                                }`}
+                            >
+                                DUB
+                            </button>
+                        </div>
                     </div>
 
                     {/* Video Player */}
-                    <div className="relative rounded-xl overflow-hidden border border-border/50 bg-black aspect-video">
-                        {iframeLoading && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-10 gap-3">
-                                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                                <p className="text-xs text-muted-foreground">Loading episode {selectedEp}…</p>
-                            </div>
-                        )}
-                        {iframeError ? (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black p-6 text-center">
-                                <AlertTriangle className="h-10 w-10 text-orange-400 opacity-70" />
-                                <div>
-                                    <p className="font-semibold text-foreground">Episode not available</p>
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                        This episode may not be on 2embed yet. Try a different episode or open externally.
-                                    </p>
-                                </div>
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => window.open(embedUrl, "_blank")}
-                                    className="gap-1.5"
-                                >
-                                    <ExternalLink className="w-3.5 h-3.5" /> Open externally
-                                </Button>
-                            </div>
-                        ) : (
-                            <iframe
-                                ref={iframeRef}
-                                key={embedUrl}
-                                src={embedUrl}
-                                className="w-full h-full"
-                                allowFullScreen
-                                allow="autoplay; fullscreen; encrypted-media"
-                                onLoad={() => setIframeLoading(false)}
-                                onError={() => { setIframeLoading(false); setIframeError(true); }}
-                                data-testid="iframe-player"
-                            />
-                        )}
-                    </div>
+                    <VideoPlayer anime={selectedAnime} episode={selectedEp} langType={langType} />
 
-                    {/* Episode Prev / Next */}
+                    {/* Prev / Next */}
                     <div className="flex items-center justify-between gap-2">
                         <Button
                             variant="outline"
                             size="sm"
                             disabled={selectedEp <= 1}
-                            onClick={() => handleEpSelect(selectedEp - 1)}
+                            onClick={() => setSelectedEp(e => e - 1)}
                             className="gap-1.5"
                             data-testid="button-prev-episode"
                         >
                             <ChevronLeft className="w-3.5 h-3.5" /> Prev
                         </Button>
-                        <span className="text-sm text-muted-foreground">Episode {selectedEp}</span>
+                        <span className="text-sm text-muted-foreground font-medium">Episode {selectedEp}</span>
                         <Button
                             variant="outline"
                             size="sm"
                             disabled={selectedEp >= totalEps}
-                            onClick={() => handleEpSelect(selectedEp + 1)}
+                            onClick={() => setSelectedEp(e => e + 1)}
                             className="gap-1.5"
                             data-testid="button-next-episode"
                         >
@@ -234,21 +316,20 @@ export default function Watch({ animeList }: WatchProps) {
                         </Button>
                     </div>
 
-                    {/* Episode Grid */}
+                    {/* Episode grid */}
                     <div className="space-y-2">
                         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Episodes</p>
                         <EpisodeGrid
                             total={totalEps}
                             watched={selectedAnime.episodesWatched || 0}
                             selected={selectedEp}
-                            onSelect={handleEpSelect}
+                            onSelect={setSelectedEp}
                         />
                     </div>
 
-                    {/* Note */}
-                    <p className="text-[11px] text-muted-foreground/60 flex items-center gap-1">
-                        <ExternalLink className="w-3 h-3" />
-                        Powered by 2embed.cc · Video streams belong to their respective sources.
+                    <p className="text-[11px] text-muted-foreground/50 flex items-center gap-1">
+                        <Subtitles className="w-3 h-3" />
+                        Powered by AllAnime · Content belongs to respective rights holders.
                     </p>
                 </div>
             ) : (
@@ -265,14 +346,12 @@ export default function Watch({ animeList }: WatchProps) {
                         />
                     </div>
 
-                    {validAnime.length === 0 ? (
+                    {animeList.length === 0 ? (
                         <Card className="bg-muted/30 border-dashed">
                             <CardContent className="flex flex-col items-center justify-center p-12 text-center text-muted-foreground gap-3">
                                 <Tv className="h-10 w-10 mb-1 opacity-20" />
-                                <p className="font-medium">No watchable anime yet</p>
-                                <p className="text-xs max-w-xs">
-                                    Add anime via search (not manually) to get MAL IDs, which are required for streaming.
-                                </p>
+                                <p className="font-medium">No anime in your list yet</p>
+                                <p className="text-xs">Add some anime first, then come back here to watch.</p>
                             </CardContent>
                         </Card>
                     ) : filtered.length === 0 ? (
@@ -296,7 +375,6 @@ export default function Watch({ animeList }: WatchProps) {
                                         data-testid={`button-watch-anime-${anime.id}`}
                                         className="group relative rounded-xl overflow-hidden border border-border/40 bg-card hover:border-primary/50 transition-all hover:shadow-neon text-left"
                                     >
-                                        {/* Cover */}
                                         <div className="aspect-[3/4] overflow-hidden bg-muted/30 relative">
                                             {anime.coverImage ? (
                                                 <img
@@ -309,13 +387,11 @@ export default function Watch({ animeList }: WatchProps) {
                                                     <Tv className="w-8 h-8 opacity-20" />
                                                 </div>
                                             )}
-                                            {/* Play overlay */}
                                             <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                                 <div className="w-12 h-12 rounded-full bg-primary/90 flex items-center justify-center shadow-neon">
                                                     <Play className="w-5 h-5 text-white fill-white ml-0.5" />
                                                 </div>
                                             </div>
-                                            {/* Status badge */}
                                             <div className="absolute top-1.5 left-1.5">
                                                 <Badge className={`text-[9px] px-1.5 py-0 h-4 ${
                                                     anime.status === "watching"
@@ -328,16 +404,12 @@ export default function Watch({ animeList }: WatchProps) {
                                                 </Badge>
                                             </div>
                                         </div>
-                                        {/* Info */}
                                         <div className="p-2 space-y-1">
                                             <p className="text-xs font-semibold line-clamp-2 leading-tight">{anime.title}</p>
                                             {total ? (
                                                 <div className="space-y-0.5">
                                                     <div className="w-full bg-muted/40 rounded-full h-1 overflow-hidden">
-                                                        <div
-                                                            className="h-1 rounded-full bg-primary/60 transition-all"
-                                                            style={{ width: `${pct}%` }}
-                                                        />
+                                                        <div className="h-1 rounded-full bg-primary/60 transition-all" style={{ width: `${pct}%` }} />
                                                     </div>
                                                     <p className="text-[10px] text-muted-foreground">{watched}/{total} ep</p>
                                                 </div>
@@ -349,13 +421,6 @@ export default function Watch({ animeList }: WatchProps) {
                                 );
                             })}
                         </div>
-                    )}
-
-                    {/* Notice for anime without MAL ID */}
-                    {noMalAnime.length > 0 && (
-                        <p className="text-[11px] text-muted-foreground/60 mt-2">
-                            {noMalAnime.length} anime in your list {noMalAnime.length === 1 ? "was" : "were"} added manually without a MAL ID and can't be streamed.
-                        </p>
                     )}
                 </>
             )}

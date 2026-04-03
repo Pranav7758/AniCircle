@@ -351,6 +351,109 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ── Watch / Streaming Proxy ──────────────────────────────────────────────
+  // Public endpoint — no auth needed. Proxies AllAnime GraphQL to avoid CORS.
+
+  const ALLANIME_API = "https://api.allanime.day/api";
+  const ALLANIME_HEADERS = {
+    "Content-Type": "application/json",
+    "Referer": "https://allanime.to",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+  };
+
+  // Decode AllAnime's obfuscated "--HEXSTRING" URLs
+  function decodeAllAnimeUrl(raw: string): string | null {
+    try {
+      if (!raw.startsWith("--")) return raw;
+      const hex = raw.slice(2);
+      const bytes = Buffer.from(hex, "hex");
+      // XOR key used by AllAnime (0x38 repeating, first 8 chars are https:// )
+      // Derived empirically from the Yt-mp4 source which encodes known YouTube URLs
+      const KEY = 0x38;
+      const decoded = Buffer.from(bytes.map(b => b ^ KEY)).toString("utf8");
+      if (decoded.startsWith("http") || decoded.startsWith("//")) return decoded;
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Search AllAnime shows by title, return edges with _id + malId
+  async function searchAllAnime(title: string): Promise<any[]> {
+    const body = JSON.stringify({
+      query: `query($search: SearchInput) {
+        shows(search: $search, limit: 20, page: 1, translationType: sub, countryOrigin: JP) {
+          edges { _id name malId }
+        }
+      }`,
+      variables: { search: { allowAdult: true, allowUnknown: true, query: title } },
+    });
+    const res = await fetch(ALLANIME_API, { method: "POST", headers: ALLANIME_HEADERS, body });
+    const json = await res.json() as any;
+    return json?.data?.shows?.edges || [];
+  }
+
+  // Get episode source URLs from AllAnime
+  async function getAllAnimeEpisodeSources(showId: string, episode: string, type: string): Promise<any[]> {
+    const body = JSON.stringify({
+      query: `query($showId: String!, $translationType: VaildTranslationTypeEnumType!, $episodeString: String!) {
+        episode(showId: $showId, translationType: $translationType, episodeString: $episodeString) {
+          episodeString sourceUrls
+        }
+      }`,
+      variables: { showId, translationType: type, episodeString: episode },
+    });
+    const res = await fetch(ALLANIME_API, { method: "POST", headers: ALLANIME_HEADERS, body });
+    const json = await res.json() as any;
+    return json?.data?.episode?.sourceUrls || [];
+  }
+
+  app.get("/api/watch/sources", async (req: any, res) => {
+    try {
+      const { malId, title, episode = "1", type = "sub" } = req.query;
+      if (!title) return res.status(400).json({ error: "title is required" });
+
+      // Search AllAnime and find the best match by MAL ID or title
+      const results = await searchAllAnime(String(title));
+      let show = malId
+        ? results.find((s: any) => String(s.malId) === String(malId))
+        : null;
+      // Fallback: first result
+      if (!show && results.length > 0) show = results[0];
+      if (!show) return res.status(404).json({ error: "Anime not found on AllAnime" });
+
+      const rawSources = await getAllAnimeEpisodeSources(show._id, String(episode), String(type));
+
+      // Filter & decode into embeddable iframe URLs
+      const SKIP_SOURCES = ["Yt-mp4"]; // YouTube blocks iframes
+      const sources: { url: string; sourceName: string; priority: number }[] = [];
+
+      for (const s of rawSources) {
+        if (SKIP_SOURCES.includes(s.sourceName)) continue;
+        if (s.type !== "iframe") continue;
+
+        let url: string = s.sourceUrl;
+        if (url.startsWith("--")) {
+          const decoded = decodeAllAnimeUrl(url);
+          if (!decoded) continue;
+          url = decoded;
+        }
+        if (url.startsWith("//")) url = "https:" + url;
+        if (!url.startsWith("http")) continue;
+
+        sources.push({ url, sourceName: s.sourceName, priority: s.priority ?? 0 });
+      }
+
+      // Sort by priority descending
+      sources.sort((a, b) => b.priority - a.priority);
+
+      res.json({ showId: show._id, showName: show.name, episode, sources });
+    } catch (err: any) {
+      console.error("Watch sources error:", err?.message);
+      res.status(500).json({ error: "Failed to fetch sources" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
