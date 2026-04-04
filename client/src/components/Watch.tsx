@@ -2,8 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import Hls from "hls.js";
 import {
     Search, Play, Loader2, Tv, AlertTriangle, ChevronLeft, ChevronRight,
-    Film, RefreshCw, Maximize2, Volume2, VolumeX, Wifi, WifiOff,
-    CheckCircle2, AlertCircle, ExternalLink
+    Film, RefreshCw, Maximize2, Volume2, VolumeX, CheckCircle2, Wifi
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -31,21 +30,22 @@ interface GogoResult {
     image: string;
 }
 
+interface EpisodeInfo {
+    start: number;
+    end: number;
+    dubId: string | null;
+    dubEnd: number | null;
+}
+
 interface StreamResult {
     stream: string;
     type: "hls" | "mp4";
     source: string;
 }
 
-// ── HLS Native Video Player ───────────────────────────────────────────────────
+// ── HLS Player ────────────────────────────────────────────────────────────────
 
-function HlsPlayer({
-    streamResult,
-    onError,
-}: {
-    streamResult: StreamResult;
-    onError: () => void;
-}) {
+function HlsPlayer({ streamResult, onError }: { streamResult: StreamResult; onError: () => void }) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const hlsRef = useRef<Hls | null>(null);
     const [muted, setMuted] = useState(false);
@@ -54,100 +54,54 @@ function HlsPlayer({
         const video = videoRef.current;
         if (!video) return;
 
-        // Destroy previous HLS instance
-        if (hlsRef.current) {
-            hlsRef.current.destroy();
-            hlsRef.current = null;
-        }
+        if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
+
+        const proxiedUrl = `/api/proxy/stream?url=${encodeURIComponent(streamResult.stream)}`;
 
         if (streamResult.type === "hls") {
-            // Route through our server-side proxy to bypass CORS on CDN servers
-            const proxiedUrl = `/api/proxy/stream?url=${encodeURIComponent(streamResult.stream)}`;
-
             if (Hls.isSupported()) {
-                const hls = new Hls({
-                    enableWorker: true,
-                    lowLatencyMode: false,
-                    backBufferLength: 90,
-                });
+                const hls = new Hls({ enableWorker: true, backBufferLength: 90 });
                 hlsRef.current = hls;
                 hls.loadSource(proxiedUrl);
                 hls.attachMedia(video);
-                hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                    video.play().catch(() => {});
-                });
+                hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
                 hls.on(Hls.Events.ERROR, (_, data) => {
-                    if (data.fatal) {
-                        console.error("[HLS] Fatal error:", data.type, data.details);
-                        onError();
-                    }
+                    if (data.fatal) { console.error("[HLS] Fatal:", data.type, data.details); onError(); }
                 });
             } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-                // Safari native HLS — still route through proxy for CORS
                 video.src = proxiedUrl;
                 video.play().catch(() => {});
-            } else {
-                onError();
-            }
+            } else { onError(); }
         } else {
-            // MP4 direct — also proxy for CORS
-            video.src = `/api/proxy/stream?url=${encodeURIComponent(streamResult.stream)}`;
+            video.src = proxiedUrl;
             video.play().catch(() => {});
         }
 
-        return () => {
-            if (hlsRef.current) {
-                hlsRef.current.destroy();
-                hlsRef.current = null;
-            }
-        };
+        return () => { if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; } };
     }, [streamResult.stream]);
-
-    const toggleMute = () => {
-        if (videoRef.current) {
-            videoRef.current.muted = !muted;
-            setMuted(!muted);
-        }
-    };
-
-    const toggleFullscreen = () => {
-        if (videoRef.current) {
-            if (document.fullscreenElement) {
-                document.exitFullscreen();
-            } else {
-                videoRef.current.requestFullscreen();
-            }
-        }
-    };
 
     return (
         <div className="relative group rounded-xl overflow-hidden border border-border/50 bg-black aspect-video">
             <video
                 ref={videoRef}
                 className="w-full h-full object-contain"
-                controls
-                autoPlay
-                playsInline
+                controls playsInline autoPlay
                 data-testid="video-player"
             />
-            {/* Overlay controls */}
             <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
-                    onClick={toggleMute}
+                    onClick={() => { if (videoRef.current) { videoRef.current.muted = !muted; setMuted(!muted); } }}
                     className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white transition-colors"
-                    data-testid="button-toggle-mute"
                 >
                     {muted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
                 </button>
                 <button
-                    onClick={toggleFullscreen}
+                    onClick={() => { const v = videoRef.current; if (!v) return; document.fullscreenElement ? document.exitFullscreen() : v.requestFullscreen(); }}
                     className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white transition-colors"
-                    data-testid="button-fullscreen"
                 >
                     <Maximize2 className="w-3.5 h-3.5" />
                 </button>
             </div>
-            {/* Stream info badge */}
             <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <span className="px-2 py-0.5 rounded-md bg-black/70 text-[10px] text-emerald-400 font-mono">
                     {streamResult.type.toUpperCase()} · {streamResult.source}
@@ -159,21 +113,12 @@ function HlsPlayer({
 
 // ── Episode Grid ──────────────────────────────────────────────────────────────
 
-function EpisodeGrid({
-    total,
-    watched,
-    selected,
-    onSelect,
-}: {
-    total: number;
-    watched: number;
-    selected: number;
-    onSelect: (ep: number) => void;
+function EpisodeGrid({ total, watched, selected, onSelect }: {
+    total: number; watched: number; selected: number; onSelect: (ep: number) => void;
 }) {
     const PER_PAGE = 60;
     const pages = Math.ceil(total / PER_PAGE);
-    const initPage = Math.ceil(selected / PER_PAGE) || 1;
-    const [page, setPage] = useState(initPage);
+    const [page, setPage] = useState(Math.ceil(selected / PER_PAGE) || 1);
     const start = (page - 1) * PER_PAGE + 1;
     const end = Math.min(page * PER_PAGE, total);
 
@@ -182,40 +127,27 @@ function EpisodeGrid({
             {pages > 1 && (
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
                     {Array.from({ length: pages }, (_, i) => i + 1).map(p => (
-                        <button
-                            key={p}
-                            onClick={() => setPage(p)}
-                            className={`shrink-0 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
-                                p === page
-                                    ? "bg-primary text-primary-foreground"
-                                    : "bg-muted/40 text-muted-foreground hover:bg-muted/70"
-                            }`}
-                        >
+                        <button key={p} onClick={() => setPage(p)}
+                            className={`shrink-0 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${p === page ? "bg-primary text-primary-foreground" : "bg-muted/40 text-muted-foreground hover:bg-muted/70"}`}>
                             {(p - 1) * PER_PAGE + 1}–{Math.min(p * PER_PAGE, total)}
                         </button>
                     ))}
                 </div>
             )}
-            <div className="grid grid-cols-8 sm:grid-cols-10 md:grid-cols-12 lg:grid-cols-15 xl:grid-cols-20 gap-1.5">
+            <div className="grid grid-cols-8 sm:grid-cols-10 md:grid-cols-12 gap-1.5">
                 {Array.from({ length: end - start + 1 }, (_, i) => start + i).map(ep => {
                     const isWatched = ep <= watched;
                     const isSel = ep === selected;
                     return (
-                        <button
-                            key={ep}
-                            onClick={() => onSelect(ep)}
+                        <button key={ep} onClick={() => onSelect(ep)}
                             data-testid={`button-episode-${ep}`}
                             title={`Episode ${ep}${isWatched ? " (watched)" : ""}`}
-                            className={`h-8 rounded-md text-xs font-semibold transition-all ${
-                                isSel
-                                    ? "bg-primary text-primary-foreground shadow-neon ring-2 ring-primary/30"
-                                    : isWatched
-                                        ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/20"
-                                        : "bg-muted/40 text-muted-foreground hover:bg-muted/70 hover:text-foreground border border-border/30"
-                            }`}
-                        >
-                            {ep}
-                        </button>
+                            className={`h-8 rounded-md text-xs font-semibold transition-all ${isSel
+                                ? "bg-primary text-primary-foreground shadow-neon ring-2 ring-primary/30"
+                                : isWatched
+                                    ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/20"
+                                    : "bg-muted/40 text-muted-foreground hover:bg-muted/70 hover:text-foreground border border-border/30"
+                            }`}>{ep}</button>
                     );
                 })}
             </div>
@@ -223,13 +155,9 @@ function EpisodeGrid({
     );
 }
 
-// ── Gogoanime Search Panel ────────────────────────────────────────────────────
+// ── Gogoanime Match Panel ─────────────────────────────────────────────────────
 
-function GogoMatchPanel({
-    title,
-    onSelect,
-    onClose,
-}: {
+function GogoMatchPanel({ title, onSelect, onClose }: {
     title: string;
     onSelect: (result: GogoResult) => void;
     onClose: () => void;
@@ -247,66 +175,37 @@ function GogoMatchPanel({
             const res = await fetch(`/api/gogoanime/search?q=${encodeURIComponent(q)}`);
             const json = await res.json();
             setResults(json.results || []);
-        } catch {
-            setResults([]);
-        } finally {
-            setLoading(false);
-            setSearched(true);
-        }
+        } catch { setResults([]); }
+        finally { setLoading(false); setSearched(true); }
     }, []);
 
-    // Auto-search on mount
     useEffect(() => { doSearch(title); }, [title]);
 
     return (
         <div className="space-y-3 p-4 border border-border/50 rounded-xl bg-card/60">
             <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold">Select Gogoanime match</p>
-                <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-xs">Cancel</button>
+                <p className="text-sm font-semibold">Select match on Gogoanime</p>
+                <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground">Cancel</button>
             </div>
             <div className="flex gap-2">
-                <Input
-                    value={query}
-                    onChange={e => setQuery(e.target.value)}
+                <Input value={query} onChange={e => setQuery(e.target.value)}
                     onKeyDown={e => e.key === "Enter" && doSearch(query)}
-                    placeholder="Search Gogoanime…"
-                    className="h-8 text-xs flex-1"
-                    data-testid="input-gogo-search"
-                />
-                <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => doSearch(query)}
-                    disabled={loading}
-                    className="h-8 px-3 shrink-0"
-                    data-testid="button-gogo-search"
-                >
+                    placeholder="Search Gogoanime…" className="h-8 text-xs flex-1"
+                    data-testid="input-gogo-search" />
+                <Button size="sm" variant="outline" onClick={() => doSearch(query)} disabled={loading}
+                    className="h-8 px-3 shrink-0" data-testid="button-gogo-search">
                     {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
                 </Button>
             </div>
-
-            {loading && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
-                    <Loader2 className="w-3 h-3 animate-spin" /> Searching Gogoanime…
-                </div>
-            )}
-
-            {searched && results.length === 0 && !loading && (
-                <p className="text-xs text-muted-foreground py-2">No results found. Try a different title.</p>
-            )}
-
+            {loading && <p className="text-xs text-muted-foreground py-1">Searching…</p>}
+            {searched && !loading && results.length === 0 && <p className="text-xs text-muted-foreground py-1">No results. Try a shorter title.</p>}
             {results.length > 0 && (
-                <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
+                <div className="max-h-56 overflow-y-auto space-y-1 pr-1">
                     {results.map(r => (
-                        <button
-                            key={r.id}
-                            onClick={() => onSelect(r)}
+                        <button key={r.id} onClick={() => onSelect(r)}
                             data-testid={`button-gogo-result-${r.id}`}
-                            className="w-full flex items-center gap-2.5 p-2 rounded-lg hover:bg-primary/10 border border-transparent hover:border-primary/20 text-left transition-all"
-                        >
-                            {r.image && (
-                                <img src={r.image} alt={r.title} className="w-8 h-11 object-cover rounded shrink-0" />
-                            )}
+                            className="w-full flex items-center gap-2.5 p-2 rounded-lg hover:bg-primary/10 border border-transparent hover:border-primary/20 text-left transition-all">
+                            {r.image && <img src={r.image} alt={r.title} className="w-8 h-11 object-cover rounded shrink-0" />}
                             <span className="text-xs font-medium line-clamp-2">{r.title}</span>
                         </button>
                     ))}
@@ -316,140 +215,92 @@ function GogoMatchPanel({
     );
 }
 
-// ── Stream Panel ──────────────────────────────────────────────────────────────
+// ── Stream Extraction Panel ───────────────────────────────────────────────────
 
-type ExtractionState = "idle" | "extracting" | "ready" | "error";
+const EXTRACT_LOGS = [
+    "Launching browser…", "Loading episode page…",
+    "Connecting to stream server…", "Intercepting network requests…",
+    "Decoding video stream…",
+];
 
-function StreamPanel({
-    gogoId,
-    episode,
-    watched,
-    totalEps,
-    onEpisodeChange,
-    onChangeSource,
-}: {
-    gogoId: string;
-    episode: number;
-    watched: number;
-    totalEps: number;
-    onEpisodeChange: (ep: number) => void;
-    onChangeSource: () => void;
+type ExState = "idle" | "extracting" | "ready" | "error";
+
+function StreamPanel({ gogoId, episode, watched, totalEps, onEpisodeChange, onChangeSource }: {
+    gogoId: string; episode: number; watched: number; totalEps: number;
+    onEpisodeChange: (ep: number) => void; onChangeSource: () => void;
 }) {
-    const [state, setState] = useState<ExtractionState>("idle");
+    const [state, setState] = useState<ExState>("idle");
     const [streamResult, setStreamResult] = useState<StreamResult | null>(null);
-    const [error, setError] = useState<string>("");
-    const [extractLog, setExtractLog] = useState<string>("");
+    const [error, setError] = useState("");
+    const [logIdx, setLogIdx] = useState(0);
 
     const extract = useCallback(async () => {
         setState("extracting");
         setStreamResult(null);
         setError("");
-        setExtractLog("Launching browser…");
+        setLogIdx(0);
 
-        const logs = [
-            "Launching browser…",
-            "Loading episode page…",
-            "Finding stream server…",
-            "Intercepting network requests…",
-            "Extracting stream URL…",
-        ];
-        let logIdx = 0;
-        const logInterval = setInterval(() => {
-            logIdx = (logIdx + 1) % logs.length;
-            setExtractLog(logs[logIdx]);
-        }, 2500);
-
+        const timer = setInterval(() => setLogIdx(i => (i + 1) % EXTRACT_LOGS.length), 2800);
         try {
             const res = await fetch(`/api/extract?id=${encodeURIComponent(gogoId)}&episode=${episode}`);
             const json = await res.json();
-            clearInterval(logInterval);
-
+            clearInterval(timer);
             if (!res.ok) throw new Error(json.message || json.error || "Extraction failed");
             setStreamResult(json);
             setState("ready");
         } catch (err: any) {
-            clearInterval(logInterval);
+            clearInterval(timer);
             setError(err.message || "Unknown error");
             setState("error");
         }
     }, [gogoId, episode]);
 
-    // Auto-extract on episode change
-    useEffect(() => {
-        extract();
-    }, [gogoId, episode]);
+    useEffect(() => { extract(); }, [gogoId, episode]);
 
     return (
         <div className="space-y-4">
-            {/* Prev/Next bar */}
             <div className="flex items-center justify-between gap-2">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={episode <= 1}
+                <Button variant="outline" size="sm" disabled={episode <= 1}
                     onClick={() => onEpisodeChange(episode - 1)}
-                    className="gap-1.5"
-                    data-testid="button-prev-episode"
-                >
+                    className="gap-1.5" data-testid="button-prev-episode">
                     <ChevronLeft className="w-3.5 h-3.5" /> Prev
                 </Button>
                 <span className="text-sm text-muted-foreground font-medium">Episode {episode}</span>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={episode >= totalEps}
+                <Button variant="outline" size="sm" disabled={episode >= totalEps}
                     onClick={() => onEpisodeChange(episode + 1)}
-                    className="gap-1.5"
-                    data-testid="button-next-episode"
-                >
+                    className="gap-1.5" data-testid="button-next-episode">
                     Next <ChevronRight className="w-3.5 h-3.5" />
                 </Button>
             </div>
 
-            {/* Player area */}
             {state === "extracting" && (
                 <div className="aspect-video rounded-xl border border-border/50 bg-black flex flex-col items-center justify-center gap-4 p-6">
                     <div className="relative">
                         <div className="w-16 h-16 rounded-full border-2 border-primary/20 flex items-center justify-center">
                             <Loader2 className="w-7 h-7 animate-spin text-primary" />
                         </div>
-                        <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary animate-pulse" />
+                        <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-primary animate-pulse" />
                     </div>
                     <div className="text-center space-y-1">
-                        <p className="text-sm font-medium text-foreground">Extracting stream…</p>
-                        <p className="text-xs text-muted-foreground font-mono">{extractLog}</p>
+                        <p className="text-sm font-semibold">Extracting stream</p>
+                        <p className="text-xs text-muted-foreground font-mono">{EXTRACT_LOGS[logIdx]}</p>
                     </div>
-                    <div className="flex gap-1.5 mt-1">
-                        {[0, 1, 2, 3].map(i => (
-                            <div
-                                key={i}
-                                className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce"
-                                style={{ animationDelay: `${i * 150}ms` }}
-                            />
-                        ))}
-                    </div>
-                    <p className="text-[11px] text-muted-foreground/50">This may take 10–20 seconds…</p>
+                    <p className="text-[11px] text-muted-foreground/50">Takes 5–15 seconds…</p>
                 </div>
             )}
 
             {state === "ready" && streamResult && (
-                <HlsPlayer
-                    streamResult={streamResult}
-                    onError={() => {
-                        setError("Playback failed — try re-extracting.");
-                        setState("error");
-                    }}
-                />
+                <HlsPlayer streamResult={streamResult} onError={() => { setError("HLS playback error. Try re-extracting."); setState("error"); }} />
             )}
 
             {state === "error" && (
                 <div className="aspect-video rounded-xl border border-orange-500/20 bg-black flex flex-col items-center justify-center gap-4 p-6 text-center">
-                    <AlertTriangle className="h-10 w-10 text-orange-400 opacity-70" />
+                    <AlertTriangle className="h-10 w-10 text-orange-400 opacity-60" />
                     <div>
-                        <p className="font-semibold text-foreground">Stream extraction failed</p>
+                        <p className="font-semibold">Stream failed</p>
                         <p className="text-xs text-muted-foreground mt-1 max-w-xs line-clamp-3">{error}</p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap justify-center">
                         <Button size="sm" variant="outline" onClick={extract} className="gap-1.5" data-testid="button-retry-extract">
                             <RefreshCw className="w-3.5 h-3.5" /> Retry
                         </Button>
@@ -460,29 +311,21 @@ function StreamPanel({
                 </div>
             )}
 
-            {/* Episode grid */}
             <div className="space-y-2">
                 <div className="flex items-center justify-between">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Episodes</p>
-                    <button
-                        onClick={onChangeSource}
-                        className="text-[11px] text-muted-foreground/60 hover:text-primary flex items-center gap-1 transition-colors"
-                        data-testid="button-change-gogo-source"
-                    >
-                        <ExternalLink className="w-3 h-3" /> Change source
+                    <button onClick={onChangeSource}
+                        className="text-[11px] text-muted-foreground/60 hover:text-primary transition-colors"
+                        data-testid="button-change-gogo-source">
+                        Change source
                     </button>
                 </div>
-                <EpisodeGrid
-                    total={totalEps}
-                    watched={watched}
-                    selected={episode}
-                    onSelect={onEpisodeChange}
-                />
+                <EpisodeGrid total={totalEps} watched={watched} selected={episode} onSelect={onEpisodeChange} />
             </div>
 
             <p className="text-[11px] text-muted-foreground/40 flex items-center gap-1">
                 <Wifi className="w-3 h-3" />
-                Streams extracted from Gogoanime · Content belongs to respective rights holders.
+                Sourced from Gogoanime via Puppeteer · Content belongs to respective rights holders.
             </p>
         </div>
     );
@@ -494,8 +337,10 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
     const [search, setSearch] = useState("");
     const [selectedAnime, setSelectedAnime] = useState<Anime | null>(null);
     const [gogoMatch, setGogoMatch] = useState<GogoResult | null>(null);
-    const [totalEps, setTotalEps] = useState<number>(0);
+    const [epInfo, setEpInfo] = useState<EpisodeInfo | null>(null);
+    const [epInfoLoading, setEpInfoLoading] = useState(false);
     const [selectedEp, setSelectedEp] = useState(1);
+    const [lang, setLang] = useState<"sub" | "dub">("sub");
     const [showMatchPanel, setShowMatchPanel] = useState(false);
 
     const filtered = useMemo(() => {
@@ -503,83 +348,97 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
         return q ? animeList.filter(a => a.title.toLowerCase().includes(q)) : animeList;
     }, [search, animeList]);
 
-    const selectAnime = useCallback((anime: Anime) => {
+    const selectAnime = (anime: Anime) => {
         setSelectedAnime(anime);
         setGogoMatch(null);
+        setEpInfo(null);
         setShowMatchPanel(true);
-        setSelectedEp(Math.max(1, anime.episodesWatched || 0) > (anime.totalEpisodes || 9999) ? 1 : Math.max(1, anime.episodesWatched || 0));
-    }, []);
+        setLang("sub");
+        setSelectedEp(Math.max(1, anime.episodesWatched || 0));
+    };
 
-    const onGogoMatch = useCallback(async (result: GogoResult) => {
+    const onGogoMatch = async (result: GogoResult) => {
         setGogoMatch(result);
         setShowMatchPanel(false);
-
-        // Fetch episode count
+        setEpInfoLoading(true);
+        setLang("sub");
         try {
             const res = await fetch(`/api/gogoanime/episodes?id=${encodeURIComponent(result.id)}`);
-            if (res.ok) {
-                const range = await res.json();
-                setTotalEps(range.end || 1);
-            }
-        } catch {
-            setTotalEps(selectedAnime?.totalEpisodes || 12);
-        }
-    }, [selectedAnime]);
+            if (res.ok) setEpInfo(await res.json());
+        } catch {}
+        setEpInfoLoading(false);
+    };
+
+    // Active ID: use dubId when lang=dub, fall back to sub if no dub
+    const activeGogoId = lang === "dub" && epInfo?.dubId ? epInfo.dubId : (gogoMatch?.id || "");
+    const activeTotalEps = lang === "dub" && epInfo?.dubEnd ? epInfo.dubEnd : (epInfo?.end || selectedAnime?.totalEpisodes || 24);
+    const dubAvailable = !!epInfo?.dubId;
 
     return (
         <div className="space-y-6">
-            {/* Header */}
             <div className="flex items-center gap-2.5">
                 <Film className="h-5 w-5 text-primary drop-shadow-[0_0_8px_rgba(139,92,246,0.7)]" />
                 <h2 className="text-2xl font-bold">Watch</h2>
                 <span className="ml-auto text-xs bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full text-muted-foreground">
-                    Direct stream · {animeList.length} titles
+                    Gogoanime · {animeList.length} titles
                 </span>
             </div>
             <p className="text-muted-foreground text-sm -mt-4">
-                Streams are extracted directly from Gogoanime — no iframes, native HLS playback.
+                Direct HLS streams extracted from Gogoanime — native video player, sub &amp; dub.
             </p>
 
             {selectedAnime ? (
                 <div className="space-y-4">
-                    {/* Back + title bar */}
+                    {/* Back + header */}
                     <div className="flex items-center gap-3 flex-wrap">
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => { setSelectedAnime(null); setGogoMatch(null); setShowMatchPanel(false); }}
+                        <Button variant="ghost" size="sm"
+                            onClick={() => { setSelectedAnime(null); setGogoMatch(null); setEpInfo(null); setShowMatchPanel(false); }}
                             className="gap-1.5 -ml-2 h-8 text-muted-foreground hover:text-foreground shrink-0"
-                            data-testid="button-back-to-list"
-                        >
+                            data-testid="button-back-to-list">
                             <ChevronLeft className="w-4 h-4" /> Back
                         </Button>
-                        <div className="flex-1 min-w-0 space-y-0.5">
+                        <div className="flex-1 min-w-0">
                             <h3 className="font-bold text-base truncate">{selectedAnime.title}</h3>
                             {gogoMatch && (
                                 <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                                    Gogoanime: <span className="text-muted-foreground/80">{gogoMatch.title}</span>
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                                    {gogoMatch.title}
                                 </p>
                             )}
                         </div>
+
+                        {/* Sub / Dub toggle */}
+                        {gogoMatch && (
+                            <div className="flex items-center gap-1 shrink-0">
+                                <button onClick={() => setLang("sub")} data-testid="button-type-sub"
+                                    className={`px-3 py-1 rounded-l-lg rounded-r-none border text-xs font-semibold transition-all ${lang === "sub" ? "bg-primary text-white border-primary" : "bg-muted/40 border-border/40 text-muted-foreground hover:text-foreground"}`}>
+                                    SUB
+                                </button>
+                                <button
+                                    onClick={() => dubAvailable && setLang("dub")}
+                                    data-testid="button-type-dub"
+                                    disabled={!dubAvailable && !epInfoLoading}
+                                    title={!dubAvailable && !epInfoLoading ? "Dub not available for this show" : ""}
+                                    className={`px-3 py-1 rounded-r-lg rounded-l-none border text-xs font-semibold transition-all ${lang === "dub" ? "bg-primary text-white border-primary" : dubAvailable ? "bg-muted/40 border-border/40 text-muted-foreground hover:text-foreground" : "bg-muted/20 border-border/20 text-muted-foreground/30 cursor-not-allowed"}`}>
+                                    {epInfoLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "DUB"}
+                                </button>
+                            </div>
+                        )}
                     </div>
 
-                    {/* Gogoanime match selection */}
+                    {/* Match panel */}
                     {showMatchPanel && (
-                        <GogoMatchPanel
-                            title={selectedAnime.title}
-                            onSelect={onGogoMatch}
-                            onClose={() => setShowMatchPanel(false)}
-                        />
+                        <GogoMatchPanel title={selectedAnime.title} onSelect={onGogoMatch} onClose={() => setShowMatchPanel(false)} />
                     )}
 
-                    {/* Stream player (only when match selected) */}
+                    {/* Stream panel */}
                     {gogoMatch && !showMatchPanel && (
                         <StreamPanel
-                            gogoId={gogoMatch.id}
+                            key={`${activeGogoId}-${selectedEp}`}
+                            gogoId={activeGogoId}
                             episode={selectedEp}
                             watched={selectedAnime.episodesWatched || 0}
-                            totalEps={totalEps || selectedAnime.totalEpisodes || 24}
+                            totalEps={activeTotalEps}
                             onEpisodeChange={setSelectedEp}
                             onChangeSource={() => setShowMatchPanel(true)}
                         />
@@ -588,35 +447,28 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                     {/* Waiting for match */}
                     {!gogoMatch && !showMatchPanel && (
                         <Card className="bg-muted/20 border-dashed">
-                            <CardContent className="flex items-center justify-center p-8 gap-3 text-muted-foreground">
-                                <AlertCircle className="w-5 h-5 opacity-50" />
-                                <p className="text-sm">Select a Gogoanime match to start streaming.</p>
-                                <Button size="sm" variant="outline" onClick={() => setShowMatchPanel(true)}>
-                                    Find match
-                                </Button>
+                            <CardContent className="flex items-center justify-center gap-3 p-8 text-muted-foreground">
+                                <AlertTriangle className="w-4 h-4 opacity-40" />
+                                <p className="text-sm">Select a match to start streaming.</p>
+                                <Button size="sm" variant="outline" onClick={() => setShowMatchPanel(true)}>Find match</Button>
                             </CardContent>
                         </Card>
                     )}
                 </div>
             ) : (
                 <>
-                    {/* Search */}
                     <div className="relative max-w-sm">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input
-                            placeholder="Search your list…"
-                            value={search}
-                            onChange={e => setSearch(e.target.value)}
+                        <Input placeholder="Search your list…" value={search} onChange={e => setSearch(e.target.value)}
                             className="pl-9 h-10 rounded-xl border-border/50 bg-muted/30"
-                            data-testid="input-watch-search"
-                        />
+                            data-testid="input-watch-search" />
                     </div>
 
                     {animeList.length === 0 ? (
                         <Card className="bg-muted/30 border-dashed">
                             <CardContent className="flex flex-col items-center justify-center p-12 text-center text-muted-foreground gap-3">
                                 <Tv className="h-10 w-10 mb-1 opacity-20" />
-                                <p className="font-medium">No anime in your list yet</p>
+                                <p className="font-medium">Your list is empty</p>
                                 <p className="text-xs">Add some anime first, then come back here to watch.</p>
                             </CardContent>
                         </Card>
@@ -633,39 +485,22 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                                 const watched = anime.episodesWatched || 0;
                                 const total = anime.totalEpisodes;
                                 const pct = total ? Math.min(100, (watched / total) * 100) : 0;
-
                                 return (
-                                    <button
-                                        key={anime.id}
-                                        onClick={() => selectAnime(anime)}
+                                    <button key={anime.id} onClick={() => selectAnime(anime)}
                                         data-testid={`button-watch-anime-${anime.id}`}
-                                        className="group relative rounded-xl overflow-hidden border border-border/40 bg-card hover:border-primary/50 transition-all hover:shadow-neon text-left"
-                                    >
+                                        className="group relative rounded-xl overflow-hidden border border-border/40 bg-card hover:border-primary/50 transition-all hover:shadow-neon text-left">
                                         <div className="aspect-[3/4] overflow-hidden bg-muted/30 relative">
-                                            {anime.coverImage ? (
-                                                <img
-                                                    src={anime.coverImage}
-                                                    alt={anime.title}
-                                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                                />
-                                            ) : (
-                                                <div className="w-full h-full flex items-center justify-center">
-                                                    <Tv className="w-8 h-8 opacity-20" />
-                                                </div>
-                                            )}
+                                            {anime.coverImage
+                                                ? <img src={anime.coverImage} alt={anime.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                                : <div className="w-full h-full flex items-center justify-center"><Tv className="w-8 h-8 opacity-20" /></div>
+                                            }
                                             <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                                 <div className="w-12 h-12 rounded-full bg-primary/90 flex items-center justify-center shadow-neon">
                                                     <Play className="w-5 h-5 text-white fill-white ml-0.5" />
                                                 </div>
                                             </div>
                                             <div className="absolute top-1.5 left-1.5">
-                                                <Badge className={`text-[9px] px-1.5 py-0 h-4 ${
-                                                    anime.status === "watching"
-                                                        ? "bg-primary/80 text-white"
-                                                        : anime.status === "completed"
-                                                            ? "bg-emerald-500/80 text-white"
-                                                            : "bg-muted/80 text-muted-foreground"
-                                                }`}>
+                                                <Badge className={`text-[9px] px-1.5 py-0 h-4 ${anime.status === "watching" ? "bg-primary/80 text-white" : anime.status === "completed" ? "bg-emerald-500/80 text-white" : "bg-muted/80 text-muted-foreground"}`}>
                                                     {anime.status === "plan_to_watch" ? "PTW" : anime.status.replace("_", " ")}
                                                 </Badge>
                                             </div>

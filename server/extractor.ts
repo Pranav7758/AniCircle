@@ -123,6 +123,17 @@ export function buildEpisodeUrl(animeId: string, episode: number): string {
   return `${GOGO_BASE}/${animeId}-episode-${episode}`;
 }
 
+// Check if a dub version exists for a show (convention: {id}-dub)
+export async function checkDubExists(animeId: string): Promise<string | null> {
+  const dubId = animeId.endsWith("-dub") ? animeId : `${animeId}-dub`;
+  try {
+    const range = await getGogoEpisodeList(dubId);
+    return range ? dubId : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function extractStream(episodeUrl: string): Promise<StreamResult> {
   // Check cache first
   const cached = streamCache.get(episodeUrl);

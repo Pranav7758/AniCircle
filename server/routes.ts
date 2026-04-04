@@ -360,17 +360,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (!url) return res.status(400).send("url required");
     const target = String(url);
 
-    // Only allow known safe streaming domains
-    const allowed = [
-      "vibeplayer.site", "otakuhg.site", "otakuvid.online", "myvidplay.com",
-      "gogocdn.net", "cdn.gogocdn.net", "allanime.day", "cdn.allanime.day",
-      "s3taku.one", "playtaku.online", "vidstreaming.io",
-    ];
+    // Validate it's a proper HTTPS URL (all proxied URLs are server-generated)
     try {
-      const host = new URL(target).hostname;
-      if (!allowed.some(d => host.endsWith(d))) {
-        return res.status(403).send("Domain not allowed");
-      }
+      const parsed = new URL(target);
+      if (parsed.protocol !== "https:") return res.status(400).send("HTTPS only");
     } catch {
       return res.status(400).send("Invalid URL");
     }
@@ -422,7 +415,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ── Gogoanime Scraper Endpoints ──────────────────────────────────────────
   // Public endpoints — no auth needed.
 
-  const { searchGogoanime, getGogoEpisodeList, extractStream, buildEpisodeUrl } = await import("./extractor.js");
+  const { searchGogoanime, getGogoEpisodeList, extractStream, buildEpisodeUrl, checkDubExists } = await import("./extractor.js");
 
   // Search anime on Gogoanime by title
   app.get("/api/gogoanime/search", async (req: any, res) => {
@@ -437,14 +430,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get episode count for a show
+  // Get episode count + check for dub version
   app.get("/api/gogoanime/episodes", async (req: any, res) => {
     try {
       const { id } = req.query;
       if (!id) return res.status(400).json({ error: "id is required" });
-      const range = await getGogoEpisodeList(String(id));
+      const animeId = String(id);
+
+      // Run sub episode count and dub check in parallel
+      const [range, dubId] = await Promise.all([
+        getGogoEpisodeList(animeId),
+        checkDubExists(animeId),
+      ]);
+
       if (!range) return res.status(404).json({ error: "No episodes found" });
-      res.json(range);
+
+      let dubRange = null;
+      if (dubId) {
+        try { dubRange = await getGogoEpisodeList(dubId); } catch {}
+      }
+
+      res.json({ ...range, dubId: dubId || null, dubEnd: dubRange?.end || null });
     } catch (err: any) {
       console.error("Gogoanime episodes error:", err?.message);
       res.status(500).json({ error: "Failed to fetch episodes", message: err?.message });
