@@ -1,0 +1,119 @@
+gogoanimes.cv
+
+Build an advanced anime streaming extractor that extracts direct video stream URLs (.m3u8 or .mp4) from Gogoanime-like sites.
+
+TECH STACK:
+
+* Backend: Node.js (Express)
+* Scraping: Puppeteer (MANDATORY)
+* Optional: Axios, Cheerio
+* Frontend: React + HLS.js
+
+OBJECTIVE:
+Extract real video stream URLs instead of embedding iframe.
+
+---
+
+## BACKEND IMPLEMENTATION
+
+1. CREATE API:
+   GET /api/extract?url=EPISODE_URL
+
+2. STEP 1: LOAD EPISODE PAGE
+
+* Use Axios to fetch HTML
+* Parse using Cheerio
+* Extract iframe URL from:
+
+  * data-video attributes OR iframe src
+
+3. STEP 2: LAUNCH PUPPETEER
+
+* Open new browser instance
+* Set realistic headers (user-agent)
+* Disable headless detection if needed
+
+4. STEP 3: OPEN STREAM PAGE
+
+* Navigate to extracted iframe URL
+* Wait until network is idle
+
+5. STEP 4: INTERCEPT NETWORK REQUESTS
+
+* Listen to page.on('request') and page.on('response')
+* Capture all URLs
+
+6. STEP 5: FILTER STREAM URLS
+
+* Look for:
+
+  * .m3u8
+  * .mp4
+* Store first valid stream URL
+
+7. STEP 6: RETURN RESPONSE
+   Return JSON:
+   {
+   "stream": "https://...m3u8",
+   "type": "hls"
+   }
+
+8. ADD RETRY LOGIC:
+
+* If stream not found:
+  → reload page
+  → try alternate server
+
+9. ADD MULTIPLE SERVER SUPPORT:
+
+* Extract all available servers
+* Try each one until valid stream found
+
+10. ERROR HANDLING:
+
+* Timeout (10s max)
+* No stream found
+* Blocked requests
+
+---
+
+## FRONTEND IMPLEMENTATION
+
+1. FETCH STREAM:
+   GET /api/extract?url=...
+
+2. PLAY USING HLS.JS:
+
+* Install hls.js
+* Use:
+
+if (Hls.isSupported()) {
+const hls = new Hls();
+hls.loadSource(stream_url);
+hls.attachMedia(videoElement);
+}
+
+3. FALLBACK:
+
+* If MP4 → use direct <video> tag
+
+---
+
+## ADVANCED FEATURES
+
+* Add caching (Redis) for extracted links
+* Rotate user-agents
+* Handle Cloudflare blocking
+* Use proxy if needed
+
+---
+
+## IMPORTANT NOTES
+
+* Do NOT embed iframe in frontend
+* Always extract direct video stream
+* Make scraper modular and adaptable
+* Log all captured network requests for debugging
+
+GOAL:
+Replicate a clean Netflix-style player using extracted video streams instead of iframe embedding.

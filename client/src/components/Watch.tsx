@@ -1,10 +1,16 @@
-import { useState, useMemo, useRef, useCallback } from "react";
-import { Search, Play, Loader2, Tv, AlertTriangle, ChevronLeft, ChevronRight, ExternalLink, Film, RefreshCw, Subtitles } from "lucide-react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import Hls from "hls.js";
+import {
+    Search, Play, Loader2, Tv, AlertTriangle, ChevronLeft, ChevronRight,
+    Film, RefreshCw, Maximize2, Volume2, VolumeX, Wifi, WifiOff,
+    CheckCircle2, AlertCircle, ExternalLink
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { useQuery } from "@tanstack/react-query";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Anime {
     id: string;
@@ -18,27 +24,140 @@ interface Anime {
     malId: number | null;
 }
 
-interface Source {
+interface GogoResult {
+    id: string;
+    title: string;
     url: string;
-    sourceName: string;
-    priority: number;
+    image: string;
 }
 
-interface WatchProps {
-    animeList: Anime[];
+interface StreamResult {
+    stream: string;
+    type: "hls" | "mp4";
+    source: string;
 }
 
-// Friendly display names for sources
-const SOURCE_LABELS: Record<string, string> = {
-    "Vid-mp4": "VidStream",
-    "Ss-Hls": "StreamSB",
-    "Ok": "OK.ru",
-    "Mp4": "MP4Upload",
-    "Default": "Primary",
-    "Ak": "Secondary",
-    "S-mp4": "Backup",
-    "Luf-Mp4": "LufMP4",
-};
+// ── HLS Native Video Player ───────────────────────────────────────────────────
+
+function HlsPlayer({
+    streamResult,
+    onError,
+}: {
+    streamResult: StreamResult;
+    onError: () => void;
+}) {
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const hlsRef = useRef<Hls | null>(null);
+    const [muted, setMuted] = useState(false);
+
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video) return;
+
+        // Destroy previous HLS instance
+        if (hlsRef.current) {
+            hlsRef.current.destroy();
+            hlsRef.current = null;
+        }
+
+        if (streamResult.type === "hls") {
+            // Route through our server-side proxy to bypass CORS on CDN servers
+            const proxiedUrl = `/api/proxy/stream?url=${encodeURIComponent(streamResult.stream)}`;
+
+            if (Hls.isSupported()) {
+                const hls = new Hls({
+                    enableWorker: true,
+                    lowLatencyMode: false,
+                    backBufferLength: 90,
+                });
+                hlsRef.current = hls;
+                hls.loadSource(proxiedUrl);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                    video.play().catch(() => {});
+                });
+                hls.on(Hls.Events.ERROR, (_, data) => {
+                    if (data.fatal) {
+                        console.error("[HLS] Fatal error:", data.type, data.details);
+                        onError();
+                    }
+                });
+            } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+                // Safari native HLS — still route through proxy for CORS
+                video.src = proxiedUrl;
+                video.play().catch(() => {});
+            } else {
+                onError();
+            }
+        } else {
+            // MP4 direct — also proxy for CORS
+            video.src = `/api/proxy/stream?url=${encodeURIComponent(streamResult.stream)}`;
+            video.play().catch(() => {});
+        }
+
+        return () => {
+            if (hlsRef.current) {
+                hlsRef.current.destroy();
+                hlsRef.current = null;
+            }
+        };
+    }, [streamResult.stream]);
+
+    const toggleMute = () => {
+        if (videoRef.current) {
+            videoRef.current.muted = !muted;
+            setMuted(!muted);
+        }
+    };
+
+    const toggleFullscreen = () => {
+        if (videoRef.current) {
+            if (document.fullscreenElement) {
+                document.exitFullscreen();
+            } else {
+                videoRef.current.requestFullscreen();
+            }
+        }
+    };
+
+    return (
+        <div className="relative group rounded-xl overflow-hidden border border-border/50 bg-black aspect-video">
+            <video
+                ref={videoRef}
+                className="w-full h-full object-contain"
+                controls
+                autoPlay
+                playsInline
+                data-testid="video-player"
+            />
+            {/* Overlay controls */}
+            <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                    onClick={toggleMute}
+                    className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white transition-colors"
+                    data-testid="button-toggle-mute"
+                >
+                    {muted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+                </button>
+                <button
+                    onClick={toggleFullscreen}
+                    className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white transition-colors"
+                    data-testid="button-fullscreen"
+                >
+                    <Maximize2 className="w-3.5 h-3.5" />
+                </button>
+            </div>
+            {/* Stream info badge */}
+            <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="px-2 py-0.5 rounded-md bg-black/70 text-[10px] text-emerald-400 font-mono">
+                    {streamResult.type.toUpperCase()} · {streamResult.source}
+                </span>
+            </div>
+        </div>
+    );
+}
+
+// ── Episode Grid ──────────────────────────────────────────────────────────────
 
 function EpisodeGrid({
     total,
@@ -80,7 +199,7 @@ function EpisodeGrid({
             <div className="grid grid-cols-8 sm:grid-cols-10 md:grid-cols-12 lg:grid-cols-15 xl:grid-cols-20 gap-1.5">
                 {Array.from({ length: end - start + 1 }, (_, i) => start + i).map(ep => {
                     const isWatched = ep <= watched;
-                    const isSelected = ep === selected;
+                    const isSel = ep === selected;
                     return (
                         <button
                             key={ep}
@@ -88,7 +207,7 @@ function EpisodeGrid({
                             data-testid={`button-episode-${ep}`}
                             title={`Episode ${ep}${isWatched ? " (watched)" : ""}`}
                             className={`h-8 rounded-md text-xs font-semibold transition-all ${
-                                isSelected
+                                isSel
                                     ? "bg-primary text-primary-foreground shadow-neon ring-2 ring-primary/30"
                                     : isWatched
                                         ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/20"
@@ -104,139 +223,308 @@ function EpisodeGrid({
     );
 }
 
-function VideoPlayer({
-    anime,
-    episode,
-    langType,
+// ── Gogoanime Search Panel ────────────────────────────────────────────────────
+
+function GogoMatchPanel({
+    title,
+    onSelect,
+    onClose,
 }: {
-    anime: Anime;
-    episode: number;
-    langType: "sub" | "dub";
+    title: string;
+    onSelect: (result: GogoResult) => void;
+    onClose: () => void;
 }) {
-    const [sourceIndex, setSourceIndex] = useState(0);
-    const iframeRef = useRef<HTMLIFrameElement>(null);
+    const [query, setQuery] = useState(title);
+    const [results, setResults] = useState<GogoResult[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [searched, setSearched] = useState(false);
 
-    const { data, isLoading, error, refetch } = useQuery<{ sources: Source[]; showName: string }>({
-        queryKey: ["/api/watch/sources", anime.malId, anime.title, episode, langType],
-        queryFn: async () => {
-            const params = new URLSearchParams({
-                title: anime.title,
-                episode: String(episode),
-                type: langType,
-                ...(anime.malId ? { malId: String(anime.malId) } : {}),
-            });
-            const res = await fetch(`/api/watch/sources?${params}`);
-            if (!res.ok) throw new Error("Failed to fetch sources");
-            return res.json();
-        },
-        staleTime: 10 * 60 * 1000,
-        retry: 1,
-    });
+    const doSearch = useCallback(async (q: string) => {
+        if (!q.trim()) return;
+        setLoading(true);
+        setSearched(false);
+        try {
+            const res = await fetch(`/api/gogoanime/search?q=${encodeURIComponent(q)}`);
+            const json = await res.json();
+            setResults(json.results || []);
+        } catch {
+            setResults([]);
+        } finally {
+            setLoading(false);
+            setSearched(true);
+        }
+    }, []);
 
-    // Reset source index when episode/type changes
-    const sources = data?.sources || [];
-    const currentSource = sources[sourceIndex];
-
-    if (isLoading) {
-        return (
-            <div className="aspect-video rounded-xl border border-border/50 bg-black flex flex-col items-center justify-center gap-3">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-xs text-muted-foreground">Finding episode sources…</p>
-            </div>
-        );
-    }
-
-    if (error || sources.length === 0) {
-        return (
-            <div className="aspect-video rounded-xl border border-orange-500/20 bg-black flex flex-col items-center justify-center gap-4 p-6 text-center">
-                <AlertTriangle className="h-10 w-10 text-orange-400 opacity-70" />
-                <div>
-                    <p className="font-semibold text-foreground">No sources found</p>
-                    <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-                        {langType === "dub" ? "Dub may not be available — try Sub instead." : "This episode might not be available on AllAnime yet."}
-                    </p>
-                </div>
-                <Button size="sm" variant="outline" onClick={() => refetch()} className="gap-1.5">
-                    <RefreshCw className="w-3.5 h-3.5" /> Retry
-                </Button>
-            </div>
-        );
-    }
+    // Auto-search on mount
+    useEffect(() => { doSearch(title); }, [title]);
 
     return (
-        <div className="space-y-3">
-            {/* Player */}
-            <div className="relative rounded-xl overflow-hidden border border-border/50 bg-black aspect-video">
-                <iframe
-                    ref={iframeRef}
-                    key={currentSource.url}
-                    src={currentSource.url}
-                    className="w-full h-full"
-                    allowFullScreen
-                    allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-                    data-testid="iframe-player"
+        <div className="space-y-3 p-4 border border-border/50 rounded-xl bg-card/60">
+            <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold">Select Gogoanime match</p>
+                <button onClick={onClose} className="text-muted-foreground hover:text-foreground text-xs">Cancel</button>
+            </div>
+            <div className="flex gap-2">
+                <Input
+                    value={query}
+                    onChange={e => setQuery(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && doSearch(query)}
+                    placeholder="Search Gogoanime…"
+                    className="h-8 text-xs flex-1"
+                    data-testid="input-gogo-search"
                 />
+                <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => doSearch(query)}
+                    disabled={loading}
+                    className="h-8 px-3 shrink-0"
+                    data-testid="button-gogo-search"
+                >
+                    {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
+                </Button>
             </div>
 
-            {/* Source switcher */}
-            {sources.length > 1 && (
-                <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[11px] text-muted-foreground font-medium shrink-0">Sources:</span>
-                    {sources.map((s, i) => (
-                        <button
-                            key={i}
-                            onClick={() => setSourceIndex(i)}
-                            data-testid={`button-source-${i}`}
-                            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
-                                i === sourceIndex
-                                    ? "bg-primary text-primary-foreground"
-                                    : "bg-muted/40 text-muted-foreground hover:bg-muted/70 border border-border/30"
-                            }`}
-                        >
-                            {SOURCE_LABELS[s.sourceName] || s.sourceName}
-                        </button>
-                    ))}
-                    <a
-                        href={currentSource.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="ml-auto text-[11px] text-muted-foreground/60 hover:text-muted-foreground flex items-center gap-1"
-                    >
-                        <ExternalLink className="w-3 h-3" /> Open tab
-                    </a>
+            {loading && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Searching Gogoanime…
                 </div>
             )}
 
-            {data?.showName && data.showName !== anime.title && (
-                <p className="text-[11px] text-muted-foreground/60">
-                    Matched as: <span className="text-muted-foreground">{data.showName}</span> on AllAnime
-                </p>
+            {searched && results.length === 0 && !loading && (
+                <p className="text-xs text-muted-foreground py-2">No results found. Try a different title.</p>
+            )}
+
+            {results.length > 0 && (
+                <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
+                    {results.map(r => (
+                        <button
+                            key={r.id}
+                            onClick={() => onSelect(r)}
+                            data-testid={`button-gogo-result-${r.id}`}
+                            className="w-full flex items-center gap-2.5 p-2 rounded-lg hover:bg-primary/10 border border-transparent hover:border-primary/20 text-left transition-all"
+                        >
+                            {r.image && (
+                                <img src={r.image} alt={r.title} className="w-8 h-11 object-cover rounded shrink-0" />
+                            )}
+                            <span className="text-xs font-medium line-clamp-2">{r.title}</span>
+                        </button>
+                    ))}
+                </div>
             )}
         </div>
     );
 }
 
-export default function Watch({ animeList }: WatchProps) {
+// ── Stream Panel ──────────────────────────────────────────────────────────────
+
+type ExtractionState = "idle" | "extracting" | "ready" | "error";
+
+function StreamPanel({
+    gogoId,
+    episode,
+    watched,
+    totalEps,
+    onEpisodeChange,
+    onChangeSource,
+}: {
+    gogoId: string;
+    episode: number;
+    watched: number;
+    totalEps: number;
+    onEpisodeChange: (ep: number) => void;
+    onChangeSource: () => void;
+}) {
+    const [state, setState] = useState<ExtractionState>("idle");
+    const [streamResult, setStreamResult] = useState<StreamResult | null>(null);
+    const [error, setError] = useState<string>("");
+    const [extractLog, setExtractLog] = useState<string>("");
+
+    const extract = useCallback(async () => {
+        setState("extracting");
+        setStreamResult(null);
+        setError("");
+        setExtractLog("Launching browser…");
+
+        const logs = [
+            "Launching browser…",
+            "Loading episode page…",
+            "Finding stream server…",
+            "Intercepting network requests…",
+            "Extracting stream URL…",
+        ];
+        let logIdx = 0;
+        const logInterval = setInterval(() => {
+            logIdx = (logIdx + 1) % logs.length;
+            setExtractLog(logs[logIdx]);
+        }, 2500);
+
+        try {
+            const res = await fetch(`/api/extract?id=${encodeURIComponent(gogoId)}&episode=${episode}`);
+            const json = await res.json();
+            clearInterval(logInterval);
+
+            if (!res.ok) throw new Error(json.message || json.error || "Extraction failed");
+            setStreamResult(json);
+            setState("ready");
+        } catch (err: any) {
+            clearInterval(logInterval);
+            setError(err.message || "Unknown error");
+            setState("error");
+        }
+    }, [gogoId, episode]);
+
+    // Auto-extract on episode change
+    useEffect(() => {
+        extract();
+    }, [gogoId, episode]);
+
+    return (
+        <div className="space-y-4">
+            {/* Prev/Next bar */}
+            <div className="flex items-center justify-between gap-2">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={episode <= 1}
+                    onClick={() => onEpisodeChange(episode - 1)}
+                    className="gap-1.5"
+                    data-testid="button-prev-episode"
+                >
+                    <ChevronLeft className="w-3.5 h-3.5" /> Prev
+                </Button>
+                <span className="text-sm text-muted-foreground font-medium">Episode {episode}</span>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={episode >= totalEps}
+                    onClick={() => onEpisodeChange(episode + 1)}
+                    className="gap-1.5"
+                    data-testid="button-next-episode"
+                >
+                    Next <ChevronRight className="w-3.5 h-3.5" />
+                </Button>
+            </div>
+
+            {/* Player area */}
+            {state === "extracting" && (
+                <div className="aspect-video rounded-xl border border-border/50 bg-black flex flex-col items-center justify-center gap-4 p-6">
+                    <div className="relative">
+                        <div className="w-16 h-16 rounded-full border-2 border-primary/20 flex items-center justify-center">
+                            <Loader2 className="w-7 h-7 animate-spin text-primary" />
+                        </div>
+                        <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary animate-pulse" />
+                    </div>
+                    <div className="text-center space-y-1">
+                        <p className="text-sm font-medium text-foreground">Extracting stream…</p>
+                        <p className="text-xs text-muted-foreground font-mono">{extractLog}</p>
+                    </div>
+                    <div className="flex gap-1.5 mt-1">
+                        {[0, 1, 2, 3].map(i => (
+                            <div
+                                key={i}
+                                className="w-1.5 h-1.5 rounded-full bg-primary/60 animate-bounce"
+                                style={{ animationDelay: `${i * 150}ms` }}
+                            />
+                        ))}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground/50">This may take 10–20 seconds…</p>
+                </div>
+            )}
+
+            {state === "ready" && streamResult && (
+                <HlsPlayer
+                    streamResult={streamResult}
+                    onError={() => {
+                        setError("Playback failed — try re-extracting.");
+                        setState("error");
+                    }}
+                />
+            )}
+
+            {state === "error" && (
+                <div className="aspect-video rounded-xl border border-orange-500/20 bg-black flex flex-col items-center justify-center gap-4 p-6 text-center">
+                    <AlertTriangle className="h-10 w-10 text-orange-400 opacity-70" />
+                    <div>
+                        <p className="font-semibold text-foreground">Stream extraction failed</p>
+                        <p className="text-xs text-muted-foreground mt-1 max-w-xs line-clamp-3">{error}</p>
+                    </div>
+                    <div className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={extract} className="gap-1.5" data-testid="button-retry-extract">
+                            <RefreshCw className="w-3.5 h-3.5" /> Retry
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={onChangeSource} className="gap-1.5">
+                            <Search className="w-3.5 h-3.5" /> Change source
+                        </Button>
+                    </div>
+                </div>
+            )}
+
+            {/* Episode grid */}
+            <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Episodes</p>
+                    <button
+                        onClick={onChangeSource}
+                        className="text-[11px] text-muted-foreground/60 hover:text-primary flex items-center gap-1 transition-colors"
+                        data-testid="button-change-gogo-source"
+                    >
+                        <ExternalLink className="w-3 h-3" /> Change source
+                    </button>
+                </div>
+                <EpisodeGrid
+                    total={totalEps}
+                    watched={watched}
+                    selected={episode}
+                    onSelect={onEpisodeChange}
+                />
+            </div>
+
+            <p className="text-[11px] text-muted-foreground/40 flex items-center gap-1">
+                <Wifi className="w-3 h-3" />
+                Streams extracted from Gogoanime · Content belongs to respective rights holders.
+            </p>
+        </div>
+    );
+}
+
+// ── Main Watch Component ──────────────────────────────────────────────────────
+
+export default function Watch({ animeList }: { animeList: Anime[] }) {
     const [search, setSearch] = useState("");
     const [selectedAnime, setSelectedAnime] = useState<Anime | null>(null);
+    const [gogoMatch, setGogoMatch] = useState<GogoResult | null>(null);
+    const [totalEps, setTotalEps] = useState<number>(0);
     const [selectedEp, setSelectedEp] = useState(1);
-    const [langType, setLangType] = useState<"sub" | "dub">("sub");
+    const [showMatchPanel, setShowMatchPanel] = useState(false);
 
-    // All anime are searchable (even without malId — we search by title on AllAnime)
     const filtered = useMemo(() => {
         const q = search.toLowerCase().trim();
-        if (!q) return animeList;
-        return animeList.filter(a => a.title.toLowerCase().includes(q));
+        return q ? animeList.filter(a => a.title.toLowerCase().includes(q)) : animeList;
     }, [search, animeList]);
 
     const selectAnime = useCallback((anime: Anime) => {
         setSelectedAnime(anime);
-        const startEp = Math.max(1, anime.episodesWatched || 0);
-        setSelectedEp(startEp > (anime.totalEpisodes || 9999) ? 1 : startEp);
-        setLangType("sub");
+        setGogoMatch(null);
+        setShowMatchPanel(true);
+        setSelectedEp(Math.max(1, anime.episodesWatched || 0) > (anime.totalEpisodes || 9999) ? 1 : Math.max(1, anime.episodesWatched || 0));
     }, []);
 
-    const totalEps = selectedAnime?.totalEpisodes || 999;
+    const onGogoMatch = useCallback(async (result: GogoResult) => {
+        setGogoMatch(result);
+        setShowMatchPanel(false);
+
+        // Fetch episode count
+        try {
+            const res = await fetch(`/api/gogoanime/episodes?id=${encodeURIComponent(result.id)}`);
+            if (res.ok) {
+                const range = await res.json();
+                setTotalEps(range.end || 1);
+            }
+        } catch {
+            setTotalEps(selectedAnime?.totalEpisodes || 12);
+        }
+    }, [selectedAnime]);
 
     return (
         <div className="space-y-6">
@@ -245,11 +533,11 @@ export default function Watch({ animeList }: WatchProps) {
                 <Film className="h-5 w-5 text-primary drop-shadow-[0_0_8px_rgba(139,92,246,0.7)]" />
                 <h2 className="text-2xl font-bold">Watch</h2>
                 <span className="ml-auto text-xs bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full text-muted-foreground">
-                    via AllAnime · {animeList.length} titles
+                    Direct stream · {animeList.length} titles
                 </span>
             </div>
             <p className="text-muted-foreground text-sm -mt-4">
-                Stream anime from your list directly in the browser.
+                Streams are extracted directly from Gogoanime — no iframes, native HLS playback.
             </p>
 
             {selectedAnime ? (
@@ -259,78 +547,56 @@ export default function Watch({ animeList }: WatchProps) {
                         <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => setSelectedAnime(null)}
+                            onClick={() => { setSelectedAnime(null); setGogoMatch(null); setShowMatchPanel(false); }}
                             className="gap-1.5 -ml-2 h-8 text-muted-foreground hover:text-foreground shrink-0"
                             data-testid="button-back-to-list"
                         >
                             <ChevronLeft className="w-4 h-4" /> Back
                         </Button>
-                        <h3 className="font-bold text-base truncate flex-1 min-w-0">{selectedAnime.title}</h3>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                            <button
-                                onClick={() => setLangType("sub")}
-                                data-testid="button-type-sub"
-                                className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
-                                    langType === "sub" ? "bg-primary text-primary-foreground" : "bg-muted/40 text-muted-foreground hover:bg-muted/70"
-                                }`}
-                            >
-                                SUB
-                            </button>
-                            <button
-                                onClick={() => setLangType("dub")}
-                                data-testid="button-type-dub"
-                                className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
-                                    langType === "dub" ? "bg-primary text-primary-foreground" : "bg-muted/40 text-muted-foreground hover:bg-muted/70"
-                                }`}
-                            >
-                                DUB
-                            </button>
+                        <div className="flex-1 min-w-0 space-y-0.5">
+                            <h3 className="font-bold text-base truncate">{selectedAnime.title}</h3>
+                            {gogoMatch && (
+                                <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                    Gogoanime: <span className="text-muted-foreground/80">{gogoMatch.title}</span>
+                                </p>
+                            )}
                         </div>
                     </div>
 
-                    {/* Video Player */}
-                    <VideoPlayer anime={selectedAnime} episode={selectedEp} langType={langType} />
-
-                    {/* Prev / Next */}
-                    <div className="flex items-center justify-between gap-2">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={selectedEp <= 1}
-                            onClick={() => setSelectedEp(e => e - 1)}
-                            className="gap-1.5"
-                            data-testid="button-prev-episode"
-                        >
-                            <ChevronLeft className="w-3.5 h-3.5" /> Prev
-                        </Button>
-                        <span className="text-sm text-muted-foreground font-medium">Episode {selectedEp}</span>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={selectedEp >= totalEps}
-                            onClick={() => setSelectedEp(e => e + 1)}
-                            className="gap-1.5"
-                            data-testid="button-next-episode"
-                        >
-                            Next <ChevronRight className="w-3.5 h-3.5" />
-                        </Button>
-                    </div>
-
-                    {/* Episode grid */}
-                    <div className="space-y-2">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Episodes</p>
-                        <EpisodeGrid
-                            total={totalEps}
-                            watched={selectedAnime.episodesWatched || 0}
-                            selected={selectedEp}
-                            onSelect={setSelectedEp}
+                    {/* Gogoanime match selection */}
+                    {showMatchPanel && (
+                        <GogoMatchPanel
+                            title={selectedAnime.title}
+                            onSelect={onGogoMatch}
+                            onClose={() => setShowMatchPanel(false)}
                         />
-                    </div>
+                    )}
 
-                    <p className="text-[11px] text-muted-foreground/50 flex items-center gap-1">
-                        <Subtitles className="w-3 h-3" />
-                        Powered by AllAnime · Content belongs to respective rights holders.
-                    </p>
+                    {/* Stream player (only when match selected) */}
+                    {gogoMatch && !showMatchPanel && (
+                        <StreamPanel
+                            gogoId={gogoMatch.id}
+                            episode={selectedEp}
+                            watched={selectedAnime.episodesWatched || 0}
+                            totalEps={totalEps || selectedAnime.totalEpisodes || 24}
+                            onEpisodeChange={setSelectedEp}
+                            onChangeSource={() => setShowMatchPanel(true)}
+                        />
+                    )}
+
+                    {/* Waiting for match */}
+                    {!gogoMatch && !showMatchPanel && (
+                        <Card className="bg-muted/20 border-dashed">
+                            <CardContent className="flex items-center justify-center p-8 gap-3 text-muted-foreground">
+                                <AlertCircle className="w-5 h-5 opacity-50" />
+                                <p className="text-sm">Select a Gogoanime match to start streaming.</p>
+                                <Button size="sm" variant="outline" onClick={() => setShowMatchPanel(true)}>
+                                    Find match
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    )}
                 </div>
             ) : (
                 <>

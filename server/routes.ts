@@ -351,7 +351,130 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ── Watch / Streaming Proxy ──────────────────────────────────────────────
+  // ── HLS / Stream Proxy ────────────────────────────────────────────────────
+  // Proxies .m3u8 manifests and .ts segments to bypass CORS restrictions.
+  // The browser fetches /api/proxy/stream?url=... which forwards to the CDN.
+
+  app.get("/api/proxy/stream", async (req: any, res) => {
+    const { url } = req.query;
+    if (!url) return res.status(400).send("url required");
+    const target = String(url);
+
+    // Only allow known safe streaming domains
+    const allowed = [
+      "vibeplayer.site", "otakuhg.site", "otakuvid.online", "myvidplay.com",
+      "gogocdn.net", "cdn.gogocdn.net", "allanime.day", "cdn.allanime.day",
+      "s3taku.one", "playtaku.online", "vidstreaming.io",
+    ];
+    try {
+      const host = new URL(target).hostname;
+      if (!allowed.some(d => host.endsWith(d))) {
+        return res.status(403).send("Domain not allowed");
+      }
+    } catch {
+      return res.status(400).send("Invalid URL");
+    }
+
+    try {
+      const upstream = await fetch(target, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+          Referer: "https://anitaku.to/",
+          Origin: "https://anitaku.to",
+        },
+        signal: AbortSignal.timeout(20000),
+      });
+
+      if (!upstream.ok) return res.status(upstream.status).send("Upstream error");
+
+      const contentType = upstream.headers.get("content-type") || "application/octet-stream";
+      res.setHeader("Content-Type", contentType);
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Cache-Control", "public, max-age=300");
+
+      // For m3u8 manifests, rewrite segment URLs to go through proxy
+      if (target.includes(".m3u8") || contentType.includes("mpegurl")) {
+        const text = await upstream.text();
+        const baseUrl = target.substring(0, target.lastIndexOf("/") + 1);
+        const rewritten = text.split("\n").map(line => {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith("#")) return line;
+          // Absolute URLs
+          if (trimmed.startsWith("http")) {
+            return `/api/proxy/stream?url=${encodeURIComponent(trimmed)}`;
+          }
+          // Relative URLs — resolve against base
+          const abs = new URL(trimmed, baseUrl).href;
+          return `/api/proxy/stream?url=${encodeURIComponent(abs)}`;
+        }).join("\n");
+        return res.send(rewritten);
+      }
+
+      // Binary segments (.ts, .mp4 etc.) — pipe directly
+      const buffer = await upstream.arrayBuffer();
+      return res.send(Buffer.from(buffer));
+    } catch (err: any) {
+      console.error("Proxy error:", err?.message);
+      res.status(500).send("Proxy failed");
+    }
+  });
+
+  // ── Gogoanime Scraper Endpoints ──────────────────────────────────────────
+  // Public endpoints — no auth needed.
+
+  const { searchGogoanime, getGogoEpisodeList, extractStream, buildEpisodeUrl } = await import("./extractor.js");
+
+  // Search anime on Gogoanime by title
+  app.get("/api/gogoanime/search", async (req: any, res) => {
+    try {
+      const { q } = req.query;
+      if (!q) return res.status(400).json({ error: "q is required" });
+      const results = await searchGogoanime(String(q));
+      res.json({ results });
+    } catch (err: any) {
+      console.error("Gogoanime search error:", err?.message);
+      res.status(500).json({ error: "Search failed", message: err?.message });
+    }
+  });
+
+  // Get episode count for a show
+  app.get("/api/gogoanime/episodes", async (req: any, res) => {
+    try {
+      const { id } = req.query;
+      if (!id) return res.status(400).json({ error: "id is required" });
+      const range = await getGogoEpisodeList(String(id));
+      if (!range) return res.status(404).json({ error: "No episodes found" });
+      res.json(range);
+    } catch (err: any) {
+      console.error("Gogoanime episodes error:", err?.message);
+      res.status(500).json({ error: "Failed to fetch episodes", message: err?.message });
+    }
+  });
+
+  // Extract direct stream URL from an episode page using Puppeteer
+  app.get("/api/extract", async (req: any, res) => {
+    try {
+      const { url, id, episode } = req.query;
+      let episodeUrl: string;
+
+      if (url) {
+        episodeUrl = String(url);
+      } else if (id && episode) {
+        episodeUrl = buildEpisodeUrl(String(id), parseInt(String(episode)));
+      } else {
+        return res.status(400).json({ error: "Provide url OR (id + episode)" });
+      }
+
+      console.log(`[extract] Starting extraction for: ${episodeUrl}`);
+      const result = await extractStream(episodeUrl);
+      res.json(result);
+    } catch (err: any) {
+      console.error("Stream extraction error:", err?.message);
+      res.status(500).json({ error: "Extraction failed", message: err?.message });
+    }
+  });
+
+  // ── Watch / Streaming Proxy (AllAnime fallback) ──────────────────────────
   // Public endpoint — no auth needed. Proxies AllAnime GraphQL to avoid CORS.
 
   const ALLANIME_API = "https://api.allanime.day/api";
