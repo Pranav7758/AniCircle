@@ -123,15 +123,33 @@ export function buildEpisodeUrl(animeId: string, episode: number): string {
   return `${GOGO_BASE}/${animeId}-episode-${episode}`;
 }
 
-// Check if a dub version exists for a show (convention: {id}-dub)
+// Check if a dub version exists for a show.
+// Strategy 1: try the simple "{id}-dub" convention.
+// Strategy 2: search Gogoanime for "{title} dub" and match a result with "dub" in its ID.
 export async function checkDubExists(animeId: string): Promise<string | null> {
-  const dubId = animeId.endsWith("-dub") ? animeId : `${animeId}-dub`;
+  // Strategy 1: simple suffix
+  const simpleDubId = animeId.endsWith("-dub") ? animeId : `${animeId}-dub`;
   try {
-    const range = await getGogoEpisodeList(dubId);
-    return range ? dubId : null;
-  } catch {
-    return null;
-  }
+    const range = await getGogoEpisodeList(simpleDubId);
+    if (range) return simpleDubId;
+  } catch {}
+
+  // Strategy 2: search "{title} dub" and find a matching dub result
+  try {
+    const title = animeId.replace(/-/g, " ");
+    const results = await searchGogoanime(`${title} dub`);
+    // Accept results whose ID ends with "-dub" or title contains "(Dub)"
+    const dubResult = results.find(r =>
+      r.id.endsWith("-dub") ||
+      r.title.toLowerCase().includes("(dub)")
+    );
+    if (dubResult) {
+      const range = await getGogoEpisodeList(dubResult.id);
+      if (range) return dubResult.id;
+    }
+  } catch {}
+
+  return null;
 }
 
 export async function extractStream(episodeUrl: string): Promise<StreamResult> {
