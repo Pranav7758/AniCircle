@@ -50,12 +50,13 @@ interface SkipInterval {
     type: "op" | "ed";
 }
 
-// ── AniSkip API ───────────────────────────────────────────────────────────────
+// ── AniSkip API (via server proxy to avoid CORS) ─────────────────────────────
 
 async function fetchSkipTimes(malId: number, episode: number): Promise<SkipInterval[]> {
     try {
-        const url = `https://api.aniskip.com/v2/skip-times/${malId}/${episode}?types[]=op&types[]=ed&episodeLength=0`;
-        const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+        const res = await fetch(`/api/aniskip?malId=${malId}&episode=${episode}`, {
+            signal: AbortSignal.timeout(8000),
+        });
         if (!res.ok) return [];
         const json = await res.json();
         if (!json.found || !Array.isArray(json.results)) return [];
@@ -69,16 +70,32 @@ async function fetchSkipTimes(malId: number, episode: number): Promise<SkipInter
     }
 }
 
+// Resolve MAL ID from AniList ID when malId is missing from the DB record
+async function resolveMALId(anilistId: number): Promise<number | null> {
+    try {
+        const res = await fetch(`/api/anilist-mal?anilistId=${anilistId}`, {
+            signal: AbortSignal.timeout(8000),
+        });
+        if (!res.ok) return null;
+        const json = await res.json();
+        return json.idMal ?? null;
+    } catch {
+        return null;
+    }
+}
+
 // ── HLS Player ────────────────────────────────────────────────────────────────
 
 function HlsPlayer({
     streamResult,
     malId,
+    anilistId,
     episode,
     onError,
 }: {
     streamResult: StreamResult;
     malId?: number | null;
+    anilistId?: number | null;
     episode: number;
     onError: () => void;
 }) {
@@ -88,11 +105,25 @@ function HlsPlayer({
     const [currentTime, setCurrentTime] = useState(0);
     const [skipIntervals, setSkipIntervals] = useState<SkipInterval[]>([]);
 
-    // Fetch AniSkip timestamps when malId / episode changes
+    // Fetch AniSkip timestamps — use malId directly, or resolve from anilistId if missing
     useEffect(() => {
-        if (!malId) { setSkipIntervals([]); return; }
-        fetchSkipTimes(malId, episode).then(setSkipIntervals);
-    }, [malId, episode]);
+        let cancelled = false;
+        async function load() {
+            let effectiveMalId = malId ?? null;
+
+            // If no malId but we have anilistId, resolve it server-side
+            if (!effectiveMalId && anilistId) {
+                effectiveMalId = await resolveMALId(anilistId);
+            }
+
+            if (cancelled || !effectiveMalId) { setSkipIntervals([]); return; }
+
+            const intervals = await fetchSkipTimes(effectiveMalId, episode);
+            if (!cancelled) setSkipIntervals(intervals);
+        }
+        load();
+        return () => { cancelled = true; };
+    }, [malId, anilistId, episode]);
 
     // Set up HLS / video source
     useEffect(() => {
@@ -322,6 +353,7 @@ function StreamPanel({
     watched,
     totalEps,
     malId,
+    anilistId,
     onEpisodeChange,
     onChangeSource,
 }: {
@@ -330,6 +362,7 @@ function StreamPanel({
     watched: number;
     totalEps: number;
     malId?: number | null;
+    anilistId?: number | null;
     onEpisodeChange: (ep: number) => void;
     onChangeSource: () => void;
 }) {
@@ -397,6 +430,7 @@ function StreamPanel({
                 <HlsPlayer
                     streamResult={streamResult}
                     malId={malId}
+                    anilistId={anilistId}
                     episode={episode}
                     onError={() => { setError("HLS playback error. Try re-extracting."); setState("error"); }}
                 />
@@ -451,6 +485,8 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
     const [selectedEp, setSelectedEp] = useState(1);
     const [lang, setLang] = useState<"sub" | "dub">("sub");
     const [showMatchPanel, setShowMatchPanel] = useState(false);
+    const [customDubId, setCustomDubId] = useState("");
+    const [showDubInput, setShowDubInput] = useState(false);
 
     const filtered = useMemo(() => {
         const q = search.toLowerCase().trim();
@@ -464,6 +500,8 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
         setShowMatchPanel(true);
         setLang("sub");
         setSelectedEp(Math.max(1, anime.episodesWatched || 0));
+        setCustomDubId("");
+        setShowDubInput(false);
     };
 
     const onGogoMatch = async (result: GogoResult) => {
@@ -478,10 +516,11 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
         setEpInfoLoading(false);
     };
 
-    // Active ID: use dubId when lang=dub, fall back to sub if no dub
-    const activeGogoId = lang === "dub" && epInfo?.dubId ? epInfo.dubId : (gogoMatch?.id || "");
-    const activeTotalEps = lang === "dub" && epInfo?.dubEnd ? epInfo.dubEnd : (epInfo?.end || selectedAnime?.totalEpisodes || 24);
-    const dubAvailable = !!epInfo?.dubId;
+    // Active ID: use customDubId (manual) > epInfo.dubId (auto) when lang=dub
+    const effectiveDubId = customDubId.trim() || epInfo?.dubId || null;
+    const activeGogoId = lang === "dub" && effectiveDubId ? effectiveDubId : (gogoMatch?.id || "");
+    const activeTotalEps = lang === "dub" && epInfo?.dubEnd && !customDubId ? epInfo.dubEnd : (epInfo?.end || selectedAnime?.totalEpisodes || 24);
+    const dubAvailable = !!effectiveDubId;
 
     return (
         <div className="space-y-6">
@@ -518,34 +557,71 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
 
                         {/* Sub / Dub toggle */}
                         {gogoMatch && (
-                            <div className="flex items-center gap-1 shrink-0">
-                                <button
-                                    onClick={() => setLang("sub")}
-                                    data-testid="button-type-sub"
-                                    className={`px-3 py-1 rounded-l-lg rounded-r-none border text-xs font-semibold transition-all ${lang === "sub" ? "bg-primary text-white border-primary" : "bg-muted/40 border-border/40 text-muted-foreground hover:text-foreground"}`}>
-                                    SUB
-                                </button>
-                                <button
-                                    onClick={() => { if (dubAvailable) setLang("dub"); }}
-                                    data-testid="button-type-dub"
-                                    disabled={!dubAvailable && !epInfoLoading}
-                                    title={!dubAvailable && !epInfoLoading ? "No English dub found on Gogoanime for this title" : "Switch to English dub"}
-                                    className={`px-3 py-1 rounded-r-lg rounded-l-none border text-xs font-semibold transition-all ${
-                                        lang === "dub"
-                                            ? "bg-primary text-white border-primary"
-                                            : dubAvailable
-                                                ? "bg-muted/40 border-border/40 text-muted-foreground hover:text-foreground"
-                                                : epInfoLoading
-                                                    ? "bg-muted/40 border-border/40 text-muted-foreground/60 cursor-wait"
-                                                    : "bg-muted/20 border-border/20 text-muted-foreground/30 cursor-not-allowed"
-                                    }`}>
-                                    {epInfoLoading
-                                        ? <Loader2 className="w-3 h-3 animate-spin" />
-                                        : dubAvailable
-                                            ? "DUB"
-                                            : <span className="flex items-center gap-1">DUB <span className="text-[9px] opacity-60">(N/A)</span></span>
-                                    }
-                                </button>
+                            <div className="flex flex-col items-end gap-1 shrink-0">
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        onClick={() => setLang("sub")}
+                                        data-testid="button-type-sub"
+                                        className={`px-3 py-1 rounded-l-lg rounded-r-none border text-xs font-semibold transition-all ${lang === "sub" ? "bg-primary text-white border-primary" : "bg-muted/40 border-border/40 text-muted-foreground hover:text-foreground"}`}>
+                                        SUB
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            if (dubAvailable) {
+                                                setLang("dub");
+                                            } else if (!epInfoLoading) {
+                                                setShowDubInput(v => !v);
+                                            }
+                                        }}
+                                        data-testid="button-type-dub"
+                                        title={dubAvailable ? "Switch to English dub" : "Click to enter a Gogoanime dub ID manually"}
+                                        className={`px-3 py-1 rounded-r-lg rounded-l-none border text-xs font-semibold transition-all ${
+                                            lang === "dub"
+                                                ? "bg-primary text-white border-primary"
+                                                : dubAvailable
+                                                    ? "bg-muted/40 border-border/40 text-muted-foreground hover:text-foreground"
+                                                    : epInfoLoading
+                                                        ? "bg-muted/40 border-border/40 text-muted-foreground/60 cursor-wait"
+                                                        : "bg-muted/30 border-border/30 text-muted-foreground/50 hover:text-muted-foreground"
+                                        }`}>
+                                        {epInfoLoading
+                                            ? <Loader2 className="w-3 h-3 animate-spin" />
+                                            : "DUB"
+                                        }
+                                    </button>
+                                </div>
+                                {/* Manual dub ID entry — shown when auto-detect failed */}
+                                {showDubInput && !epInfoLoading && (
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                        <Input
+                                            value={customDubId}
+                                            onChange={e => setCustomDubId(e.target.value)}
+                                            placeholder="e.g. naruto-dub"
+                                            className="h-6 text-[11px] w-44 px-2 bg-muted/30 border-border/50"
+                                            data-testid="input-custom-dub-id"
+                                            onKeyDown={e => {
+                                                if (e.key === "Enter" && customDubId.trim()) {
+                                                    setLang("dub");
+                                                    setShowDubInput(false);
+                                                }
+                                            }}
+                                        />
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-6 px-2 text-[11px]"
+                                            data-testid="button-apply-custom-dub"
+                                            onClick={() => {
+                                                if (customDubId.trim()) {
+                                                    setLang("dub");
+                                                    setShowDubInput(false);
+                                                }
+                                            }}
+                                        >
+                                            Use
+                                        </Button>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
@@ -564,6 +640,7 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                             watched={selectedAnime.episodesWatched || 0}
                             totalEps={activeTotalEps}
                             malId={selectedAnime.malId}
+                            anilistId={selectedAnime.anilistId}
                             onEpisodeChange={setSelectedEp}
                             onChangeSource={() => setShowMatchPanel(true)}
                         />

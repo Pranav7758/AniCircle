@@ -583,6 +583,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ── AniSkip Proxy ────────────────────────────────────────────────────────
+  // Proxies AniSkip API server-side to avoid CORS issues from the browser.
+  // GET /api/aniskip?malId=35849&episode=1
+
+  app.get("/api/aniskip", async (req: any, res) => {
+    const { malId, episode } = req.query;
+    if (!malId || !episode) return res.status(400).json({ error: "malId and episode are required" });
+
+    try {
+      const url = `https://api.aniskip.com/v2/skip-times/${malId}/${episode}?types[]=op&types[]=ed&episodeLength=0`;
+      const upstream = await fetch(url, {
+        headers: { "User-Agent": "AniCircle/1.0" },
+        signal: AbortSignal.timeout(8000),
+      });
+
+      if (!upstream.ok) {
+        return res.status(upstream.status).json({ found: false, results: [] });
+      }
+
+      const json = await upstream.json();
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.json(json);
+    } catch (err: any) {
+      console.error("AniSkip proxy error:", err?.message);
+      res.json({ found: false, results: [] });
+    }
+  });
+
+  // ── AniList MAL ID lookup ─────────────────────────────────────────────────
+  // Gets the MAL ID for an AniList ID (for skip times when malId is missing).
+  // GET /api/anilist-mal?anilistId=101759
+
+  app.get("/api/anilist-mal", async (req: any, res) => {
+    const { anilistId } = req.query;
+    if (!anilistId) return res.status(400).json({ error: "anilistId is required" });
+
+    try {
+      const body = JSON.stringify({
+        query: `query($id: Int) { Media(id: $id, type: ANIME) { idMal } }`,
+        variables: { id: parseInt(String(anilistId)) },
+      });
+      const upstream = await fetch("https://graphql.anilist.co", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body,
+        signal: AbortSignal.timeout(8000),
+      });
+      const json = await upstream.json() as any;
+      const idMal = json?.data?.Media?.idMal ?? null;
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.json({ idMal });
+    } catch (err: any) {
+      console.error("AniList MAL lookup error:", err?.message);
+      res.json({ idMal: null });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
