@@ -296,6 +296,7 @@ function StreamPanel({
     totalEps,
     malId,
     anilistId,
+    isDub,
     onEpisodeChange,
     onChangeSource,
 }: {
@@ -306,6 +307,7 @@ function StreamPanel({
     totalEps: number;
     malId?: number | null;
     anilistId?: number | null;
+    isDub?: boolean;
     onEpisodeChange: (ep: number) => void;
     onChangeSource: () => void;
 }) {
@@ -322,7 +324,15 @@ function StreamPanel({
 
         const timer = setInterval(() => setLogIdx(i => (i + 1) % EXTRACT_LOGS.length), 2800);
         try {
-            const res = await fetch(`/api/extract?id=${encodeURIComponent(gogoId)}&episode=${episode}`);
+            let url: string;
+            if (isDub) {
+                const params = new URLSearchParams({ title: animeTitle, episode: String(episode) });
+                if (malId) params.set("malId", String(malId));
+                url = `/api/extract/dub?${params}`;
+            } else {
+                url = `/api/extract?id=${encodeURIComponent(gogoId)}&episode=${episode}`;
+            }
+            const res = await fetch(url);
             const json = await res.json();
             clearInterval(timer);
             if (!res.ok) throw new Error(json.message || json.error || "Extraction failed");
@@ -333,9 +343,9 @@ function StreamPanel({
             setError(err.message || "Unknown error");
             setState("error");
         }
-    }, [gogoId, episode]);
+    }, [gogoId, animeTitle, episode, isDub, malId]);
 
-    useEffect(() => { extract(); }, [gogoId, episode]);
+    useEffect(() => { extract(); }, [gogoId, episode, isDub]);
 
     return (
         <div className="space-y-4">
@@ -468,11 +478,9 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
         ) || null;
     }, [gogoMatch, animeList]);
 
-    const dubGogoId = epInfo?.dubId || null;
-    const dubAvailable = !!dubGogoId;
-    // SUB: original Gogoanime ID · DUB: Gogoanime dub ID (e.g. "title-dub")
-    const activeGogoId = lang === "dub" && dubGogoId ? dubGogoId : (gogoMatch?.id || "");
-    const totalEps = (lang === "dub" && epInfo?.dubEnd ? epInfo.dubEnd : epInfo?.end) || listAnime?.totalEpisodes || 24;
+    // Sub uses Gogoanime · Dub uses AllAnime (always available to try)
+    const activeGogoId = gogoMatch?.id || "";
+    const totalEps = epInfo?.end || listAnime?.totalEpisodes || 24;
 
     return (
         <div className="space-y-6">
@@ -502,7 +510,7 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                             )}
                             {epInfo && !epInfoLoading && (
                                 <p className="text-[11px] text-muted-foreground">
-                                    {epInfo.end} episodes · {dubAvailable ? "Dub available" : "Sub only"}
+                                    {epInfo.end} episodes · Sub &amp; Dub
                                 </p>
                             )}
                         </div>
@@ -514,21 +522,20 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                                 SUB
                             </button>
                             <button
-                                onClick={() => { if (dubAvailable && lang !== "dub") { setLang("dub"); setSelectedEp(1); } }}
+                                onClick={() => { if (lang !== "dub") { setLang("dub"); setSelectedEp(1); } }}
                                 data-testid="button-type-dub"
-                                title={dubAvailable ? "Switch to English dub" : epInfoLoading ? "Checking for dub…" : "No dub available"}
+                                title="Switch to English dub"
                                 className={`px-3 py-1 rounded-r-lg rounded-l-none border text-xs font-semibold transition-all ${
                                     lang === "dub" ? "bg-primary text-white border-primary"
-                                    : dubAvailable ? "bg-muted/40 border-border/40 text-muted-foreground hover:text-foreground"
-                                    : "bg-muted/20 border-border/20 text-muted-foreground/30 cursor-not-allowed"
+                                    : "bg-muted/40 border-border/40 text-muted-foreground hover:text-foreground"
                                 }`}>
-                                {epInfoLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "DUB"}
+                                DUB
                             </button>
                         </div>
                     </div>
 
                     <StreamPanel
-                        key={`${activeGogoId}-${selectedEp}`}
+                        key={`${activeGogoId}-${lang}-${selectedEp}`}
                         gogoId={activeGogoId}
                         animeTitle={gogoMatch.title}
                         episode={selectedEp}
@@ -536,6 +543,7 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                         totalEps={totalEps}
                         malId={listAnime?.malId}
                         anilistId={listAnime?.anilistId}
+                        isDub={lang === "dub"}
                         onEpisodeChange={setSelectedEp}
                         onChangeSource={goBack}
                     />
