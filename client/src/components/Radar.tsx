@@ -181,10 +181,11 @@ export default function Radar({ userId, animeList, onAddAnime }: RadarProps) {
         loadWeekSchedule();
     }, [weekOffset]);
 
-    // Group schedule entries by day (0=Mon…6=Sun within weekDays)
+    // Group schedule entries by day — only include anime the user is tracking
     const scheduleByDay = useMemo(() => {
         const map: ScheduleEntry[][] = Array.from({ length: 7 }, () => []);
         for (const entry of weekSchedule) {
+            if (!allKnownAnilistIds.has(entry.media.id)) continue;
             const d = new Date(entry.airingAt * 1000);
             for (let i = 0; i < 7; i++) {
                 if (isSameDay(d, weekDays[i])) {
@@ -194,7 +195,7 @@ export default function Radar({ userId, animeList, onAddAnime }: RadarProps) {
             }
         }
         return map;
-    }, [weekSchedule, weekDays]);
+    }, [weekSchedule, weekDays, allKnownAnilistIds]);
 
     const todayDayIndex = useMemo(() => {
         for (let i = 0; i < 7; i++) {
@@ -233,8 +234,9 @@ export default function Radar({ userId, animeList, onAddAnime }: RadarProps) {
                 const cutoff = new Date();
                 cutoff.setMonth(cutoff.getMonth() - 36);
                 const filtered = sequelsArray.filter((seq: any) => {
-                    if (seq.status === "NOT_YET_RELEASED" || seq.status === "RELEASING" || seq.nextAiringEpisode) return true;
-                    if (seq.startDate?.year) {
+                    // Only show sequels that are currently airing or already finished — never unreleased
+                    if (seq.status === "RELEASING" || seq.nextAiringEpisode) return true;
+                    if (seq.status === "FINISHED" && seq.startDate?.year) {
                         const d = new Date(seq.startDate.year, seq.startDate.month ? seq.startDate.month - 1 : 0, seq.startDate.day || 1);
                         return d.getTime() >= cutoff.getTime();
                     }
@@ -291,13 +293,13 @@ export default function Radar({ userId, animeList, onAddAnime }: RadarProps) {
                 <div className="flex items-center gap-2.5 mb-1">
                     <CalendarDays className="h-5 w-5 text-primary drop-shadow-[0_0_8px_rgba(139,92,246,0.7)]" />
                     <h2 className="text-2xl font-bold">Broadcast Schedule</h2>
-                    {!loadingSchedule && weekSchedule.length > 0 && (
+                    {!loadingSchedule && scheduleByDay.flat().length > 0 && (
                         <span className="ml-auto text-xs bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full text-muted-foreground">
-                            {weekSchedule.length} episodes
+                            {scheduleByDay.flat().length} episodes
                         </span>
                     )}
                 </div>
-                <p className="text-muted-foreground text-sm mb-4">All currently airing anime by day — your tracked shows are highlighted.</p>
+                <p className="text-muted-foreground text-sm mb-4">Your tracked anime airing this week, by day.</p>
 
                 {/* Week Navigator */}
                 <div className="flex items-center justify-between mb-3">

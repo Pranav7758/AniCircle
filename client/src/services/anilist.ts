@@ -154,6 +154,7 @@ export const GET_ANIME_DETAILS_QUERY = `
             }
             type
             format
+            status
             episodes
             startDate {
               year

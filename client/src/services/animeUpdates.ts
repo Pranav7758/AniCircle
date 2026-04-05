@@ -108,9 +108,9 @@ export const checkAnimeUpdates = async (userId: string) => {
               }
 
               // It's a valid new season, fetch its details if needed or use the node data
-              if (entry.format === "TV") {
-                const sequelTitle = entry.title.english || entry.title.romaji;
-
+              // Only process sequels that are currently airing or have already finished
+              const isReleased = entry.status === "RELEASING" || entry.status === "FINISHED";
+              if (entry.format === "TV" && isReleased) {
                 updates.push({
                   animeId: firstSeason.id,
                   animeTitle: title,

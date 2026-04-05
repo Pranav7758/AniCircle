@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { getNotifications } from "@/services/supabaseData";
+import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ChevronRight, PlayCircle, Sparkles } from "lucide-react";
+import { ChevronRight, PlayCircle, Sparkles, X, CheckCheck } from "lucide-react";
 
 interface Notification {
     id: string;
@@ -25,13 +26,11 @@ export default function NewEpisodesBanner({ userId }: { userId: string }) {
         const fetchLatest = async () => {
             try {
                 const notifications = await getNotifications();
-                // Filter out read notifications or older ones - keeping it to recent unread ones for the banner
                 const recent = notifications?.filter(
                     (n: Notification) => !n.read &&
                         (n.notificationType === "episode_release" || n.notificationType === "season_release")
                 ) || [];
-
-                setNewReleases(recent.slice(0, 5)); // Show max 5
+                setNewReleases(recent.slice(0, 5));
             } catch (err) {
                 console.error("Failed to load new episodes banner", err);
             }
@@ -39,6 +38,20 @@ export default function NewEpisodesBanner({ userId }: { userId: string }) {
 
         fetchLatest();
     }, [userId]);
+
+    const dismissOne = async (id: string) => {
+        try {
+            await apiRequest("PATCH", `/api/notifications/${id}/read`, {});
+            setNewReleases(prev => prev.filter(n => n.id !== id));
+        } catch {}
+    };
+
+    const dismissAll = async () => {
+        try {
+            await apiRequest("POST", "/api/notifications/read-all", {});
+            setNewReleases([]);
+        } catch {}
+    };
 
     if (newReleases.length === 0) return null;
 
@@ -48,6 +61,16 @@ export default function NewEpisodesBanner({ userId }: { userId: string }) {
                 <CardTitle className="text-xl flex items-center gap-2">
                     <Sparkles className="h-5 w-5 text-primary" />
                     Fresh Drops & New Seasons
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={dismissAll}
+                        className="ml-auto text-xs text-muted-foreground gap-1.5 h-7"
+                        data-testid="button-dismiss-all-notifications"
+                    >
+                        <CheckCheck className="h-3.5 w-3.5" />
+                        Clear all
+                    </Button>
                 </CardTitle>
             </CardHeader>
             <CardContent>
@@ -75,8 +98,14 @@ export default function NewEpisodesBanner({ userId }: { userId: string }) {
                                     </div>
                                 </div>
                             </div>
-                            <Button variant="ghost" size="icon" className="shrink-0 h-8 w-8 rounded-full">
-                                <ChevronRight className="h-4 w-4" />
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="shrink-0 h-8 w-8 rounded-full"
+                                onClick={() => dismissOne(item.id)}
+                                data-testid={`button-dismiss-notification-${item.id}`}
+                            >
+                                <X className="h-4 w-4" />
                             </Button>
                         </div>
                     ))}
