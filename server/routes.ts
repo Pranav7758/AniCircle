@@ -507,12 +507,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }
 
-  // Search AllAnime shows by title, return edges with _id + malId
+  // Search AllAnime shows by title, return edges with _id + malId + episode counts + thumbnail
   async function searchAllAnime(title: string): Promise<any[]> {
     const body = JSON.stringify({
       query: `query($search: SearchInput) {
-        shows(search: $search, limit: 20, page: 1, translationType: sub, countryOrigin: JP) {
-          edges { _id name malId }
+        shows(search: $search, limit: 26, page: 1, translationType: sub, countryOrigin: JP) {
+          edges { _id name malId availableEpisodes { sub dub } thumbnail }
         }
       }`,
       variables: { search: { allowAdult: true, allowUnknown: true, query: title } },
@@ -521,6 +521,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const json = await res.json() as any;
     return json?.data?.shows?.edges || [];
   }
+
+  // Public AllAnime search endpoint — used by the Watch section
+  app.get("/api/allanime/search", async (req: any, res) => {
+    try {
+      const { q } = req.query;
+      if (!q) return res.status(400).json({ error: "q is required" });
+      const edges = await searchAllAnime(String(q));
+      const results = edges.map((s: any) => ({
+        id: s._id,
+        name: s.name,
+        malId: s.malId || null,
+        subEpisodes: s.availableEpisodes?.sub || 0,
+        dubEpisodes: s.availableEpisodes?.dub || 0,
+        thumbnail: s.thumbnail || null,
+      }));
+      res.json({ results });
+    } catch (err: any) {
+      console.error("AllAnime search error:", err?.message);
+      res.status(500).json({ error: "Search failed" });
+    }
+  });
 
   // Get episode source URLs from AllAnime
   async function getAllAnimeEpisodeSources(showId: string, episode: string, type: string): Promise<any[]> {
@@ -574,27 +595,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/watch/sources", async (req: any, res) => {
     try {
-      const { malId, title, episode = "1", type = "sub" } = req.query;
-      if (!title) return res.status(400).json({ error: "title is required" });
+      const { malId, title, showId: rawShowId, episode = "1", type = "sub" } = req.query;
 
-      // Search AllAnime and find the best match by MAL ID or title
-      const results = await searchAllAnime(String(title));
-      let show = malId
-        ? results.find((s: any) => String(s.malId) === String(malId))
-        : null;
-      // Fallback: first result
-      if (!show && results.length > 0) show = results[0];
-      if (!show) return res.status(404).json({ error: "Anime not found on AllAnime" });
+      let show: { _id: string; name: string } | null = null;
+
+      if (rawShowId) {
+        // Fast path: caller already has the AllAnime show ID
+        show = { _id: String(rawShowId), name: String(title || "") };
+      } else {
+        if (!title) return res.status(400).json({ error: "title or showId is required" });
+        const results = await searchAllAnime(String(title));
+        show = malId
+          ? results.find((s: any) => String(s.malId) === String(malId)) || null
+          : null;
+        if (!show && results.length > 0) show = results[0];
+        if (!show) return res.status(404).json({ error: "Anime not found on AllAnime" });
+      }
 
       const rawSources = await getAllAnimeEpisodeSources(show._id, String(episode), String(type));
 
-      // Filter & decode into embeddable iframe URLs
-      const SKIP_SOURCES = ["Yt-mp4"]; // YouTube blocks iframes
-      const sources: { url: string; sourceName: string; priority: number }[] = [];
+      const SKIP_SOURCES = ["Yt-mp4"];
+      const sources: { url: string; sourceName: string; priority: number; type: string }[] = [];
 
       for (const s of rawSources) {
         if (SKIP_SOURCES.includes(s.sourceName)) continue;
-        if (s.type !== "iframe") continue;
 
         let url: string = s.sourceUrl;
         if (url.startsWith("--")) {
@@ -605,7 +629,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (url.startsWith("//")) url = "https:" + url;
         if (!url.startsWith("http")) continue;
 
-        sources.push({ url, sourceName: s.sourceName, priority: s.priority ?? 0 });
+        // Classify the source type
+        const srcType = url.includes(".m3u8") ? "hls"
+          : /\.mp4(\?|#|$)/.test(url) ? "mp4"
+          : "iframe";
+
+        sources.push({ url, sourceName: s.sourceName, priority: s.priority ?? 0, type: srcType });
       }
 
       // Sort by priority descending
