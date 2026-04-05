@@ -1,0 +1,64 @@
+i opened my vercel deployed website
+anicricle.xyz
+
+and searched there in that watch section
+
+in console this was shown
+Auth event: SIGNED_IN
+index-nFN2CV0M.js:446 Auth event: INITIAL_SESSION
+/api/gogoanime/search?q=One%20piece:1 Failed to load resource: the server responded with a status of 404 ()Understand this error
+/api/gogoanime/search?q=gatcha:1 Failed to load resource: the server responded with a status of 404 ()Understand this error
+/api/gogoanime/search?q=gift:1 Failed to load resource: the server responded with a status of 404 ()
+
+12 minutes ago
+
+Analyzing Vercel API route configuration
+The /api/gogoanime/search routes are returning 404 on Vercel — that means the Express server routes aren't being reached. Let me check the Vercel routing config:
+
+
+3 actions
+The API routes are returning 404. The issue is that Vercel strips /api from the URL before passing to the handler function, but Express expects the full /api/... path. Let me verify:
+
+
+3 actions
+The function IS being reached (server responds with 404, not Vercel's own error). The problem is Vercel strips /api from the URL before passing it to the handler — so Express receives /gogoanime/search and can't match any route registered as /api/gogoanime/search. Let me fix this and also add error resilience:
+
+
+2 actions
+I can see two issues:
+
+Vercel strips /api from the URL before calling the handler, so Express receives /gogoanime/search and finds no match
+If initialization ever fails, the stale rejected promise is reused forever
+Let me fix both:
+
+
+2 actions
+Now let me also check if the extractor import could be causing initialization failures on Vercel:
+
+
+5 actions
+The extractor is dynamically imported (line 418), so initialization is clean. The URL fix is the right one. Let me restart and confirm everything still works locally:
+
+
+4 actions
+Both endpoints still work perfectly locally. The fix is clean.
+
+Here's exactly what was wrong and what I fixed:
+
+Root cause: Vercel strips the /api prefix from the URL before calling your serverless function. So when your Vercel app receives /api/gogoanime/search, Express inside the function sees /gogoanime/search — and since all routes are registered as /api/gogoanime/search, nothing matches → 404.
+
+What I changed in api/[...path].ts:
+
+URL prefix restoration — Added a check right before Express handles the request: if the URL doesn't start with /api (Vercel stripped it), prepend it back. This is safe — if Vercel ever preserves the prefix, it won't double-add it.
+
+Error resilience — If initialization ever fails (e.g., a cold-start issue), the old code would cache the failure and every subsequent request would also fail. Now it resets and allows the next request to retry.
+
+To apply the fix, you just need to redeploy to Vercel — push the changes or trigger a redeploy from the Vercel dashboard. Once deployed, all three searches ("One piece", "gatcha", "gift") should find results through the AllAnime fallback since Gogoanime is blocked on Vercel IPs.
+
+You've reached your daily free quota limit. It will reset at 12:00 AM UTC.
+
+
+Checkpoint made
+7 minutes ago
+
+Worked for 4 minutes
