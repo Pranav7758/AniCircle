@@ -45,11 +45,26 @@ async function ensureInitialized(): Promise<void> {
       res.status(status).json({ message });
     });
     initialized = true;
+  }).catch((err) => {
+    console.error("[vercel] registerRoutes failed:", err?.message || err);
+    initPromise = null;
+    throw err;
   });
   return initPromise;
 }
 
 export default async function handler(req: any, res: any) {
-  await ensureInitialized();
+  try {
+    await ensureInitialized();
+  } catch (err: any) {
+    return res.status(500).json({ error: "Server initialization failed", detail: err?.message });
+  }
+
+  // Vercel strips the /api prefix from req.url before calling the handler.
+  // Express routes are registered as /api/*, so we must restore the prefix.
+  if (req.url && !req.url.startsWith("/api")) {
+    req.url = "/api" + req.url;
+  }
+
   return app(req, res);
 }
