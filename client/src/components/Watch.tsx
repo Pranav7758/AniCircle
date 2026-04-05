@@ -3,7 +3,7 @@ import Hls from "hls.js";
 import {
     Search, Play, Pause, Loader2, Tv, ChevronLeft, ChevronRight,
     Film, RefreshCw, Maximize2, Minimize2, Volume2, VolumeX, Volume1,
-    SkipForward, AlertTriangle, Wifi, Settings
+    SkipForward, SkipBack, AlertTriangle, Wifi
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -121,6 +121,8 @@ function HlsPlayer({
     const [hoverX, setHoverX] = useState(0);
     const [skipIntervals, setSkipIntervals] = useState<SkipInterval[]>([]);
     const [buffered, setBuffered] = useState(0);
+    const [clickFlash, setClickFlash] = useState<"play" | "pause" | "rewind" | "forward" | null>(null);
+    const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Fetch skip timestamps
     useEffect(() => {
@@ -201,10 +203,35 @@ function HlsPlayer({
         hideTimer.current = setTimeout(() => setShowControls(false), 3000);
     }, []);
 
+    const flash = (type: "play" | "pause" | "rewind" | "forward") => {
+        setClickFlash(type);
+        if (flashTimer.current) clearTimeout(flashTimer.current);
+        flashTimer.current = setTimeout(() => setClickFlash(null), 600);
+    };
+
     const togglePlay = () => {
         const v = videoRef.current;
         if (!v) return;
-        v.paused ? v.play().catch(() => {}) : v.pause();
+        if (v.paused) { v.play().catch(() => {}); flash("play"); }
+        else { v.pause(); flash("pause"); }
+    };
+
+    const rewind5 = (e?: React.MouseEvent) => {
+        e?.stopPropagation();
+        const v = videoRef.current;
+        if (!v) return;
+        v.currentTime = Math.max(0, v.currentTime - 5);
+        flash("rewind");
+        showControlsTemp();
+    };
+
+    const forward10 = (e?: React.MouseEvent) => {
+        e?.stopPropagation();
+        const v = videoRef.current;
+        if (!v) return;
+        v.currentTime = Math.min(duration, v.currentTime + 10);
+        flash("forward");
+        showControlsTemp();
     };
 
     const toggleMute = () => {
@@ -230,6 +257,19 @@ function HlsPlayer({
         const v = videoRef.current;
         if (v) v.currentTime = Math.max(0, Math.min(time, duration));
     };
+
+    // Keyboard shortcuts
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            // Don't fire when typing in an input
+            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+            if (e.code === "Space") { e.preventDefault(); togglePlay(); }
+            if (e.code === "ArrowLeft") { e.preventDefault(); rewind5(); }
+            if (e.code === "ArrowRight") { e.preventDefault(); forward10(); }
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+    }, [duration]);
 
     // Seekbar interaction
     const getTimeFromEvent = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -286,8 +326,42 @@ function HlsPlayer({
                 data-testid="video-player"
             />
 
-            {/* Centre play/pause flash */}
-            {!playing && (
+            {/* Centre click flash (play/pause/rewind/forward) */}
+            {clickFlash && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+                    <div className="flex items-center gap-6">
+                        {clickFlash === "rewind" && (
+                            <div className="flex flex-col items-center gap-1 animate-ping-once">
+                                <div className="w-14 h-14 rounded-full bg-black/60 flex items-center justify-center backdrop-blur-sm">
+                                    <SkipBack className="w-7 h-7 text-white fill-white" />
+                                </div>
+                                <span className="text-white text-xs font-bold drop-shadow">-5s</span>
+                            </div>
+                        )}
+                        {(clickFlash === "play" || clickFlash === "pause") && (
+                            <div className="animate-ping-once">
+                                <div className="w-16 h-16 rounded-full bg-black/60 flex items-center justify-center backdrop-blur-sm">
+                                    {clickFlash === "play"
+                                        ? <Play className="w-8 h-8 text-white fill-white ml-1" />
+                                        : <Pause className="w-8 h-8 text-white fill-white" />
+                                    }
+                                </div>
+                            </div>
+                        )}
+                        {clickFlash === "forward" && (
+                            <div className="flex flex-col items-center gap-1 animate-ping-once">
+                                <div className="w-14 h-14 rounded-full bg-black/60 flex items-center justify-center backdrop-blur-sm">
+                                    <SkipForward className="w-7 h-7 text-white fill-white" />
+                                </div>
+                                <span className="text-white text-xs font-bold drop-shadow">+10s</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Paused state — static play icon (no flash) */}
+            {!playing && !clickFlash && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                     <div className="w-16 h-16 rounded-full bg-black/50 flex items-center justify-center backdrop-blur-sm">
                         <Play className="w-8 h-8 text-white fill-white ml-1" />
@@ -319,14 +393,13 @@ function HlsPlayer({
                 </button>
             )}
 
-            {/* Controls overlay */}
+            {/* Controls overlay — does NOT stopPropagation so clicking video area toggles play */}
             <div
                 className={`absolute inset-0 flex flex-col justify-end transition-opacity duration-300 ${showControls ? "opacity-100" : "opacity-0"}`}
                 style={{ background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.3) 40%, transparent 100%)" }}
-                onClick={e => e.stopPropagation()}
             >
-                {/* Seekbar */}
-                <div className="px-3 pb-1.5">
+                {/* Seekbar — stopPropagation so scrubbing doesn't trigger play/pause */}
+                <div className="px-3 pb-1.5" onClick={e => e.stopPropagation()}>
                     {/* Hover time tooltip */}
                     {hoverTime !== null && (
                         <div
@@ -402,8 +475,8 @@ function HlsPlayer({
                     </div>
                 </div>
 
-                {/* Bottom bar */}
-                <div className="flex items-center gap-2 px-3 pb-3">
+                {/* Bottom bar — stopPropagation here so clicks on controls don't toggle play */}
+                <div className="flex items-center gap-2 px-3 pb-3" onClick={e => e.stopPropagation()}>
                     {/* Play/Pause */}
                     <button
                         onClick={togglePlay}
@@ -414,6 +487,28 @@ function HlsPlayer({
                             ? <Pause className="w-5 h-5 fill-white" />
                             : <Play className="w-5 h-5 fill-white ml-0.5" />
                         }
+                    </button>
+
+                    {/* Rewind 5s */}
+                    <button
+                        onClick={rewind5}
+                        className="flex items-center gap-0.5 text-white hover:text-white/80 transition-colors"
+                        title="Rewind 5 seconds (←)"
+                        data-testid="button-rewind-5"
+                    >
+                        <SkipBack className="w-4 h-4 fill-white" />
+                        <span className="text-[10px] font-bold tabular-nums">5</span>
+                    </button>
+
+                    {/* Forward 10s */}
+                    <button
+                        onClick={forward10}
+                        className="flex items-center gap-0.5 text-white hover:text-white/80 transition-colors"
+                        title="Skip forward 10 seconds (→)"
+                        data-testid="button-forward-10"
+                    >
+                        <span className="text-[10px] font-bold tabular-nums">10</span>
+                        <SkipForward className="w-4 h-4 fill-white" />
                     </button>
 
                     {/* Time */}
