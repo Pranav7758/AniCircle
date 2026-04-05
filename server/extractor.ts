@@ -8,16 +8,16 @@ const REPLIT_CHROMIUM =
 
 async function getChromiumPath(): Promise<string> {
   if (process.env.CHROMIUM_PATH) return process.env.CHROMIUM_PATH;
-  // Vercel / AWS Lambda: use @sparticuz/chromium which downloads at runtime
-  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_VERSION) {
+  // Vercel / AWS Lambda / Render: use @sparticuz/chromium pre-compiled binary
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_VERSION || process.env.RENDER) {
     try {
       const chromium = await import("@sparticuz/chromium");
       return await chromium.default.executablePath();
     } catch {
-      throw new Error("Chromium not available in this serverless environment. Set CHROMIUM_PATH env var.");
+      throw new Error("Chromium not available. Set CHROMIUM_PATH env var.");
     }
   }
-  // Common Linux paths (Render, Ubuntu servers)
+  // Common Linux paths (self-hosted servers)
   const { existsSync } = await import("fs");
   const linuxPaths = [
     "/usr/bin/chromium",
