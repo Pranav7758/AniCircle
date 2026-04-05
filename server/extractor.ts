@@ -435,22 +435,85 @@ export async function extractFromIframe(iframeSrc: string, referer: string): Pro
       await new Promise(r => setTimeout(r, 3000));
     }
 
-    // Try clicking visible play buttons
+    // Strategy 1: Extract from JWPlayer API (works for otakuhg.site, otakuvid.online etc.)
     if (!streamUrl) {
       try {
+        const jwStream = await page.evaluate(() => {
+          try {
+            // @ts-ignore
+            const jw = (window as any).jwplayer?.();
+            if (!jw) return null;
+            // Try getPlaylistItem first (most reliable)
+            const item = jw.getPlaylistItem?.() ?? jw.getPlaylist?.()[0];
+            if (item?.sources?.length) {
+              const src = item.sources.find((s: any) => s.file?.includes(".m3u8"))
+                ?? item.sources.find((s: any) => s.file?.includes(".mp4"))
+                ?? item.sources[0];
+              return src?.file ?? null;
+            }
+            // Fallback: read setup config from script tags
+            const scripts = Array.from(document.querySelectorAll("script"));
+            for (const s of scripts) {
+              const m = s.textContent?.match(/["']file["']\s*:\s*["']([^"']+\.m3u8[^"']*)/);
+              if (m) return m[1];
+              const m2 = s.textContent?.match(/["']file["']\s*:\s*["']([^"']+\.mp4[^"']*)/);
+              if (m2) return m2[1];
+            }
+            return null;
+          } catch { return null; }
+        });
+        if (jwStream) {
+          streamUrl = jwStream;
+          streamType = jwStream.includes(".mp4") ? "mp4" : "hls";
+          console.log(`[Puppeteer] ✓ JWPlayer API: ${streamUrl!.substring(0, 100)}`);
+        }
+      } catch {}
+    }
+
+    // Strategy 2: Click visible play buttons and wait for network request
+    if (!streamUrl) {
+      try {
+        // Wait for JWPlayer display button to appear (up to 4s)
+        await page.waitForSelector(".jw-icon-display, .vjs-big-play-button, .play-button, #playButton", { timeout: 4000 }).catch(() => {});
         const clicked = await page.evaluate(() => {
           const selectors = [
-            ".jw-icon-display", ".play-button", "[class*=play-btn]",
+            ".jw-icon-display", ".jw-display-icon-container", ".jw-display",
+            ".play-button", "[class*=play-btn]",
             "button[class*=play]", ".vjs-big-play-button", "#playButton",
             ".plyr__control--overlaid", "[data-plyr=play]",
           ];
           for (const sel of selectors) {
             const el = document.querySelector(sel) as HTMLElement | null;
-            if (el) { el.click(); return true; }
+            if (el) { el.click(); return sel; }
           }
-          return false;
+          return null;
         });
-        if (clicked) await new Promise(r => setTimeout(r, 4000));
+        if (clicked) {
+          console.log(`[Puppeteer] Clicked: ${clicked} — waiting for stream…`);
+          await new Promise(r => setTimeout(r, 5000));
+          // After click, try JWPlayer API again (player may now have loaded source)
+          if (!streamUrl) {
+            const jwStream2 = await page.evaluate(() => {
+              try {
+                // @ts-ignore
+                const jw = (window as any).jwplayer?.();
+                const item = jw?.getPlaylistItem?.() ?? jw?.getPlaylist?.()[0];
+                if (item?.sources?.length) {
+                  const src = item.sources.find((s: any) => s.file?.includes(".m3u8"))
+                    ?? item.sources.find((s: any) => s.file?.includes(".mp4"))
+                    ?? item.sources[0];
+                  return src?.file ?? null;
+                }
+                return null;
+              } catch { return null; }
+            }).catch(() => null);
+            if (jwStream2) {
+              streamUrl = jwStream2;
+              streamType = jwStream2.includes(".mp4") ? "mp4" : "hls";
+              console.log(`[Puppeteer] ✓ JWPlayer API (post-click): ${streamUrl!.substring(0, 100)}`);
+            }
+          }
+        }
       } catch {}
     }
 
