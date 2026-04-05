@@ -339,62 +339,66 @@ function HlsPlayer({
 
                     <div
                         ref={seekbarRef}
-                        className="relative h-1 rounded-full cursor-pointer group/seek"
-                        style={{ background: "rgba(255,255,255,0.2)" }}
+                        className="relative cursor-pointer group/seek py-2 -my-2"
                         onMouseMove={onSeekbarMouseMove}
                         onMouseDown={onSeekbarMouseDown}
                         onMouseUp={onSeekbarMouseUp}
                         onMouseLeave={onSeekbarMouseLeave}
                         data-testid="seekbar"
                     >
-                        {/* Thicker on hover */}
-                        <div className="absolute inset-0 -my-1.5 group-hover/seek:opacity-100" />
+                        {/* Track */}
+                        <div className="relative h-1 group-hover/seek:h-[5px] transition-all duration-100 rounded-full" style={{ background: "rgba(255,255,255,0.18)" }}>
 
-                        {/* Buffered */}
-                        <div
-                            className="absolute left-0 top-0 h-full rounded-full"
-                            style={{ width: `${buffPct}%`, background: "rgba(255,255,255,0.25)" }}
-                        />
-
-                        {/* Intro strip (yellow) */}
-                        {intro && duration > 0 && (
+                            {/* Buffered */}
                             <div
-                                className="absolute top-0 h-full rounded-sm"
-                                style={{
-                                    left: `${(intro.start / duration) * 100}%`,
-                                    width: `${((intro.end - intro.start) / duration) * 100}%`,
-                                    background: "#f59e0b",
-                                    opacity: 0.8,
-                                }}
-                                title="Intro"
+                                className="absolute left-0 top-0 h-full rounded-full"
+                                style={{ width: `${buffPct}%`, background: "rgba(255,255,255,0.22)" }}
                             />
-                        )}
 
-                        {/* Outro strip (yellow) */}
-                        {outro && duration > 0 && (
+                            {/* Played */}
                             <div
-                                className="absolute top-0 h-full rounded-sm"
-                                style={{
-                                    left: `${(outro.start / duration) * 100}%`,
-                                    width: `${((outro.end - outro.start) / duration) * 100}%`,
-                                    background: "#f59e0b",
-                                    opacity: 0.8,
-                                }}
-                                title="Outro"
+                                className="absolute left-0 top-0 h-full rounded-full"
+                                style={{ width: `${pct}%`, background: "#a78bfa" }}
                             />
-                        )}
 
-                        {/* Played */}
-                        <div
-                            className="absolute left-0 top-0 h-full rounded-full"
-                            style={{ width: `${pct}%`, background: "#a78bfa" }}
-                        />
+                            {/* Intro strip — rendered last to be on top, extends above track */}
+                            {intro && duration > 0 && (
+                                <div
+                                    className="absolute rounded-[2px] pointer-events-none"
+                                    style={{
+                                        left: `${(intro.start / duration) * 100}%`,
+                                        width: `${Math.max(((intro.end - intro.start) / duration) * 100, 0.5)}%`,
+                                        top: "-3px",
+                                        bottom: "-3px",
+                                        background: "#f59e0b",
+                                        zIndex: 10,
+                                    }}
+                                    title={`Intro: ${formatTime(intro.start)}–${formatTime(intro.end)}`}
+                                />
+                            )}
 
-                        {/* Thumb */}
-                        <div
-                            className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white shadow-md opacity-0 group-hover/seek:opacity-100 transition-opacity pointer-events-none"
-                            style={{ left: `calc(${pct}% - 6px)` }}
-                        />
+                            {/* Outro strip — rendered last to be on top */}
+                            {outro && duration > 0 && (
+                                <div
+                                    className="absolute rounded-[2px] pointer-events-none"
+                                    style={{
+                                        left: `${(outro.start / duration) * 100}%`,
+                                        width: `${Math.max(((outro.end - outro.start) / duration) * 100, 0.5)}%`,
+                                        top: "-3px",
+                                        bottom: "-3px",
+                                        background: "#f59e0b",
+                                        zIndex: 10,
+                                    }}
+                                    title={`Outro: ${formatTime(outro.start)}–${formatTime(outro.end)}`}
+                                />
+                            )}
+
+                            {/* Thumb */}
+                            <div
+                                className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white shadow-md opacity-0 group-hover/seek:opacity-100 transition-opacity pointer-events-none"
+                                style={{ left: `calc(${pct}% - 6px)`, zIndex: 20 }}
+                            />
+                        </div>
                     </div>
                 </div>
 
