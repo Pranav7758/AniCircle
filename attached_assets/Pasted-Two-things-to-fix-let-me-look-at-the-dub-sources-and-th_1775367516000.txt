@@ -1,0 +1,65 @@
+Two things to fix — let me look at the dub sources and the Watch search flow simultaneously:
+
+
+3 actions
+I can see the core of both issues. Let me also check how GogoMatchPanel works and the Gogoanime search route:
+
+
+3 actions
+Now I have the full picture. Two separate root causes:
+
+DUB: AllAnime's embed sources (streamsb, vidstreaming, ok.ru) all have heavy anti-bot protection. The easy fix: Gogoanime already tracks dub IDs via epInfo.dubId — just reuse the same working Gogoanime extractor for dubs too.
+
+Watch UX: The flow makes you pick from your list first, then search Gogoanime. That's a pointless extra step. I'll make the search bar directly search Gogoanime so you can jump straight to watching.
+
+Let me read the type definitions first then rewrite both:
+
+
+2 actions
+I have everything I need. Going to do a full targeted rewrite of the Watch component — direct Gogoanime search, and dub via Gogoanime's own dub IDs instead of AllAnime. Reading the rest of the component first:
+
+
+2 actions
+Got the full picture. Now I'll rewrite the Watch component — direct Gogoanime search, and dub just uses the Gogoanime dub ID (already in epInfo.dubId), no AllAnime needed:
+
+
+Show less
+
+Opened client/src/components/Watch.tsx
+
+Planning Watch component rewrite (57 seconds)
+Now I'll make all the changes in one go. First, update StreamPanel to drop the AllAnime dub path (the right Gogoanime ID is now passed in directly), then replace the entire Watch body:
+
+
+2 actions
+Now fix the footer label (remove the old dubMode reference):
+
+
+2 actions
+Now replace the GogoMatchPanel (no longer needed) and the entire Watch function:
+
+
+2 actions
+Now replace the entire Watch main function:
+
+
+2 actions
+Clean up unused imports now that AlertTriangle and CheckCircle2 are gone:
+
+
+4 actions
+The dubMode is not defined error is a stale HMR artifact from the old cached version. Let me verify the file is clean:
+
+
+2 actions
+The client-side Watch.tsx is clean now. Let me also check what checkDubExists does on the server — that determines whether dub shows up for Gogoanime titles:
+
+
+Executed rg -A 25 -n checkDubExists .
+You've reached your daily free quota limit. It will reset at 12:00 AM UTC.
+
+
+Checkpoint made
+4 minutes ago
+
+Worked for 7 minutes
