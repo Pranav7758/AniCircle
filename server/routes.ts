@@ -512,7 +512,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const body = JSON.stringify({
       query: `query($search: SearchInput) {
         shows(search: $search, limit: 26, page: 1, translationType: sub, countryOrigin: JP) {
-          edges { _id name malId availableEpisodes { sub dub } thumbnail }
+          edges { _id name malId availableEpisodes thumbnail }
         }
       }`,
       variables: { search: { allowAdult: true, allowUnknown: true, query: title } },
