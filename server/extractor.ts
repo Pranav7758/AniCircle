@@ -3,9 +3,46 @@ import puppeteer from "puppeteer-core";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const CHROMIUM_PATH =
-  process.env.CHROMIUM_PATH ||
+const REPLIT_CHROMIUM =
   "/nix/store/5afrhwm7zqn1vb7p5z1mc2rkh2grsfgz-ungoogled-chromium-138.0.7204.100/bin/chromium";
+
+async function getChromiumPath(): Promise<string> {
+  if (process.env.CHROMIUM_PATH) return process.env.CHROMIUM_PATH;
+  // Vercel / AWS Lambda: use @sparticuz/chromium which downloads at runtime
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_VERSION) {
+    try {
+      const chromium = await import("@sparticuz/chromium");
+      return await chromium.default.executablePath();
+    } catch {
+      throw new Error("Chromium not available in this serverless environment. Set CHROMIUM_PATH env var.");
+    }
+  }
+  return REPLIT_CHROMIUM;
+}
+
+async function getChromiumArgs(): Promise<string[]> {
+  const base = [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu",
+    "--no-first-run",
+    "--no-zygote",
+    "--single-process",
+    "--disable-extensions",
+    "--disable-blink-features=AutomationControlled",
+    "--window-size=1280,720",
+    "--disable-web-security",
+    "--allow-running-insecure-content",
+  ];
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_VERSION) {
+    try {
+      const chromium = await import("@sparticuz/chromium");
+      return [...chromium.default.args, ...base];
+    } catch {}
+  }
+  return base;
+}
 
 const GOGO_BASE = "https://anitaku.to";
 
@@ -353,23 +390,14 @@ export async function extractFromIframe(iframeSrc: string, referer: string): Pro
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
 
   try {
+    const [executablePath, args] = await Promise.all([
+      getChromiumPath(),
+      getChromiumArgs(),
+    ]);
     browser = await puppeteer.launch({
-      executablePath: CHROMIUM_PATH,
+      executablePath,
       headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--no-first-run",
-        "--no-zygote",
-        "--single-process",
-        "--disable-extensions",
-        "--disable-blink-features=AutomationControlled",
-        "--window-size=1280,720",
-        "--disable-web-security",
-        "--allow-running-insecure-content",
-      ],
+      args,
     });
 
     const page = await browser.newPage();
