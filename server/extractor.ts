@@ -313,67 +313,48 @@ export async function extractDubFromAniwaves(
 }
 
 // ── Aniwaves Search ──────────────────────────────────────────────────────────
-// Searches aniwaves for an anime by title using Puppeteer (results are JS-rendered).
+// Uses aniwaves' AJAX search API (returns HTML fragment in JSON — no Puppeteer needed).
 // Returns {animeId, slug} for dub extraction.
 
 export async function searchAniwaves(title: string): Promise<{ animeId: string; slug: string; name: string } | null> {
   const ANIWAVES = "https://aniwaves.ru";
-  const searchUrl = `${ANIWAVES}/search?keyword=${encodeURIComponent(title)}&type=1`;
   console.log(`[Aniwaves search] Searching for: ${title}`);
 
-  let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
   try {
-    browser = await puppeteer.launch({
-      executablePath: CHROMIUM_PATH,
-      headless: true,
-      args: [
-        "--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage",
-        "--disable-gpu", "--no-first-run", "--no-zygote", "--single-process",
-        "--disable-extensions",
-      ],
+    const url = `${ANIWAVES}/ajax/anime/search?keyword=${encodeURIComponent(title)}`;
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": USER_AGENT,
+        "X-Requested-With": "XMLHttpRequest",
+        "Referer": ANIWAVES,
+      },
+      signal: AbortSignal.timeout(10000),
     });
 
-    const page = await browser.newPage();
-    await page.setUserAgent(USER_AGENT);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json() as any;
+    const html: string = json?.result?.html || "";
+    if (!html) return null;
 
-    try {
-      await page.goto(searchUrl, { waitUntil: "networkidle2", timeout: 20000 });
-    } catch {
-      // networkidle2 may timeout — continue anyway
-    }
+    // Parse the HTML fragment for watch links
+    const $ = cheerio.load(html);
+    const link = $("a[href*='/watch/']").first();
+    if (!link.length) return null;
 
-    // Wait a moment for results to render
-    await new Promise(r => setTimeout(r, 2000));
-
-    // Extract the first watch link from the rendered page
-    const result = await page.evaluate(() => {
-      const link = document.querySelector("a[href*='/watch/']") as HTMLAnchorElement | null;
-      if (!link) return null;
-      const href = link.href;
-      const titleEl = link.querySelector("[data-jqplot-series-shadowCanvasContext], .film-name, .name, h3, h2, .title") as HTMLElement | null;
-      const name = link.getAttribute("title") || titleEl?.textContent?.trim() || link.textContent?.trim() || "";
-      return { href, name };
-    });
-
-    if (!result) {
-      console.warn(`[Aniwaves search] No results found for: ${title}`);
-      return null;
-    }
-
-    const slugMatch = result.href.match(/\/watch\/([^/?#]+)/);
+    const href = link.attr("href") || "";
+    const slugMatch = href.match(/\/watch\/([^/?#]+)/);
     if (!slugMatch) return null;
     const slug = slugMatch[1];
     const idMatch = slug.match(/-(\d+)$/);
     if (!idMatch) return null;
     const animeId = idMatch[1];
+    const name = link.find("img").attr("alt") || link.text().trim() || title;
 
-    console.log(`[Aniwaves search] Found: ${result.name} → ${slug}`);
-    return { animeId, slug, name: result.name || title };
+    console.log(`[Aniwaves search] Found: ${name} → ${slug}`);
+    return { animeId, slug, name };
   } catch (err: any) {
     console.warn(`[Aniwaves search] ${err.message}`);
     return null;
-  } finally {
-    if (browser) { try { await browser.close(); } catch {} }
   }
 }
 
