@@ -3,7 +3,7 @@ import Hls from "hls.js";
 import {
     Search, Play, Loader2, Tv, ChevronLeft, ChevronRight,
     Film, RefreshCw, Maximize2, Volume2, VolumeX, Wifi,
-    SkipForward
+    SkipForward, AlertTriangle
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -509,12 +509,12 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
 
                         {/* Sub / Dub toggle */}
                         <div className="flex items-center gap-1 shrink-0">
-                            <button onClick={() => setLang("sub")} data-testid="button-type-sub"
+                            <button onClick={() => { if (lang !== "sub") { setLang("sub"); setSelectedEp(1); } }} data-testid="button-type-sub"
                                 className={`px-3 py-1 rounded-l-lg rounded-r-none border text-xs font-semibold transition-all ${lang === "sub" ? "bg-primary text-white border-primary" : "bg-muted/40 border-border/40 text-muted-foreground hover:text-foreground"}`}>
                                 SUB
                             </button>
                             <button
-                                onClick={() => dubAvailable && setLang("dub")}
+                                onClick={() => { if (dubAvailable && lang !== "dub") { setLang("dub"); setSelectedEp(1); } }}
                                 data-testid="button-type-dub"
                                 title={dubAvailable ? "Switch to English dub" : epInfoLoading ? "Checking for dub…" : "No dub available"}
                                 className={`px-3 py-1 rounded-r-lg rounded-l-none border text-xs font-semibold transition-all ${
