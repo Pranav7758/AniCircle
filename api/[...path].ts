@@ -32,12 +32,6 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  const status = err.status || err.statusCode || 500;
-  const message = err.message || "Internal Server Error";
-  res.status(status).json({ message });
-});
-
 let initialized = false;
 let initPromise: Promise<void> | null = null;
 
@@ -45,6 +39,11 @@ async function ensureInitialized(): Promise<void> {
   if (initialized) return;
   if (initPromise) return initPromise;
   initPromise = registerRoutes(app).then(() => {
+    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+      const status = err.status || err.statusCode || 500;
+      const message = err.message || "Internal Server Error";
+      res.status(status).json({ message });
+    });
     initialized = true;
   });
   return initPromise;
