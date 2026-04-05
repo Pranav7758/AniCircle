@@ -2,7 +2,8 @@ import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import Hls from "hls.js";
 import {
     Search, Play, Loader2, Tv, AlertTriangle, ChevronLeft, ChevronRight,
-    Film, RefreshCw, Maximize2, Volume2, VolumeX, CheckCircle2, Wifi
+    Film, RefreshCw, Maximize2, Volume2, VolumeX, CheckCircle2, Wifi,
+    SkipForward
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -43,13 +44,57 @@ interface StreamResult {
     source: string;
 }
 
+interface SkipInterval {
+    start: number;
+    end: number;
+    type: "op" | "ed";
+}
+
+// ── AniSkip API ───────────────────────────────────────────────────────────────
+
+async function fetchSkipTimes(malId: number, episode: number): Promise<SkipInterval[]> {
+    try {
+        const url = `https://api.aniskip.com/v2/skip-times/${malId}/${episode}?types[]=op&types[]=ed&episodeLength=0`;
+        const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+        if (!res.ok) return [];
+        const json = await res.json();
+        if (!json.found || !Array.isArray(json.results)) return [];
+        return json.results.map((r: any) => ({
+            start: r.interval.start_time,
+            end: r.interval.end_time,
+            type: r.skip_type as "op" | "ed",
+        }));
+    } catch {
+        return [];
+    }
+}
+
 // ── HLS Player ────────────────────────────────────────────────────────────────
 
-function HlsPlayer({ streamResult, onError }: { streamResult: StreamResult; onError: () => void }) {
+function HlsPlayer({
+    streamResult,
+    malId,
+    episode,
+    onError,
+}: {
+    streamResult: StreamResult;
+    malId?: number | null;
+    episode: number;
+    onError: () => void;
+}) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const hlsRef = useRef<Hls | null>(null);
     const [muted, setMuted] = useState(false);
+    const [currentTime, setCurrentTime] = useState(0);
+    const [skipIntervals, setSkipIntervals] = useState<SkipInterval[]>([]);
 
+    // Fetch AniSkip timestamps when malId / episode changes
+    useEffect(() => {
+        if (!malId) { setSkipIntervals([]); return; }
+        fetchSkipTimes(malId, episode).then(setSkipIntervals);
+    }, [malId, episode]);
+
+    // Set up HLS / video source
     useEffect(() => {
         const video = videoRef.current;
         if (!video) return;
@@ -80,6 +125,22 @@ function HlsPlayer({ streamResult, onError }: { streamResult: StreamResult; onEr
         return () => { if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; } };
     }, [streamResult.stream]);
 
+    // Track current playback time for skip buttons
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video) return;
+        const onTimeUpdate = () => setCurrentTime(video.currentTime);
+        video.addEventListener("timeupdate", onTimeUpdate);
+        return () => video.removeEventListener("timeupdate", onTimeUpdate);
+    }, []);
+
+    const skipTo = (time: number) => {
+        if (videoRef.current) videoRef.current.currentTime = time;
+    };
+
+    const activeIntro = skipIntervals.find(s => s.type === "op" && currentTime >= s.start && currentTime < s.end);
+    const activeOutro = skipIntervals.find(s => s.type === "ed" && currentTime >= s.start && currentTime < s.end);
+
     return (
         <div className="relative group rounded-xl overflow-hidden border border-border/50 bg-black aspect-video">
             <video
@@ -88,20 +149,50 @@ function HlsPlayer({ streamResult, onError }: { streamResult: StreamResult; onEr
                 controls playsInline autoPlay
                 data-testid="video-player"
             />
+
+            {/* Skip Intro button */}
+            {activeIntro && (
+                <button
+                    onClick={() => skipTo(activeIntro.end)}
+                    data-testid="button-skip-intro"
+                    className="absolute bottom-14 right-4 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/80 border border-white/20 text-white text-xs font-semibold hover:bg-black/95 transition-colors shadow-lg backdrop-blur-sm"
+                >
+                    <SkipForward className="w-3.5 h-3.5" />
+                    Skip Intro
+                </button>
+            )}
+
+            {/* Skip Outro button */}
+            {activeOutro && (
+                <button
+                    onClick={() => skipTo(activeOutro.end)}
+                    data-testid="button-skip-outro"
+                    className="absolute bottom-14 right-4 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/80 border border-white/20 text-white text-xs font-semibold hover:bg-black/95 transition-colors shadow-lg backdrop-blur-sm"
+                >
+                    <SkipForward className="w-3.5 h-3.5" />
+                    Skip Outro
+                </button>
+            )}
+
+            {/* Top-right controls */}
             <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
                     onClick={() => { if (videoRef.current) { videoRef.current.muted = !muted; setMuted(!muted); } }}
                     className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white transition-colors"
+                    data-testid="button-toggle-mute"
                 >
                     {muted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
                 </button>
                 <button
                     onClick={() => { const v = videoRef.current; if (!v) return; document.fullscreenElement ? document.exitFullscreen() : v.requestFullscreen(); }}
                     className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white transition-colors"
+                    data-testid="button-fullscreen"
                 >
                     <Maximize2 className="w-3.5 h-3.5" />
                 </button>
             </div>
+
+            {/* Source badge */}
             <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity">
                 <span className="px-2 py-0.5 rounded-md bg-black/70 text-[10px] text-emerald-400 font-mono">
                     {streamResult.type.toUpperCase()} · {streamResult.source}
@@ -225,9 +316,22 @@ const EXTRACT_LOGS = [
 
 type ExState = "idle" | "extracting" | "ready" | "error";
 
-function StreamPanel({ gogoId, episode, watched, totalEps, onEpisodeChange, onChangeSource }: {
-    gogoId: string; episode: number; watched: number; totalEps: number;
-    onEpisodeChange: (ep: number) => void; onChangeSource: () => void;
+function StreamPanel({
+    gogoId,
+    episode,
+    watched,
+    totalEps,
+    malId,
+    onEpisodeChange,
+    onChangeSource,
+}: {
+    gogoId: string;
+    episode: number;
+    watched: number;
+    totalEps: number;
+    malId?: number | null;
+    onEpisodeChange: (ep: number) => void;
+    onChangeSource: () => void;
 }) {
     const [state, setState] = useState<ExState>("idle");
     const [streamResult, setStreamResult] = useState<StreamResult | null>(null);
@@ -290,7 +394,12 @@ function StreamPanel({ gogoId, episode, watched, totalEps, onEpisodeChange, onCh
             )}
 
             {state === "ready" && streamResult && (
-                <HlsPlayer streamResult={streamResult} onError={() => { setError("HLS playback error. Try re-extracting."); setState("error"); }} />
+                <HlsPlayer
+                    streamResult={streamResult}
+                    malId={malId}
+                    episode={episode}
+                    onError={() => { setError("HLS playback error. Try re-extracting."); setState("error"); }}
+                />
             )}
 
             {state === "error" && (
@@ -410,17 +519,32 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                         {/* Sub / Dub toggle */}
                         {gogoMatch && (
                             <div className="flex items-center gap-1 shrink-0">
-                                <button onClick={() => setLang("sub")} data-testid="button-type-sub"
+                                <button
+                                    onClick={() => setLang("sub")}
+                                    data-testid="button-type-sub"
                                     className={`px-3 py-1 rounded-l-lg rounded-r-none border text-xs font-semibold transition-all ${lang === "sub" ? "bg-primary text-white border-primary" : "bg-muted/40 border-border/40 text-muted-foreground hover:text-foreground"}`}>
                                     SUB
                                 </button>
                                 <button
-                                    onClick={() => dubAvailable && setLang("dub")}
+                                    onClick={() => { if (dubAvailable) setLang("dub"); }}
                                     data-testid="button-type-dub"
                                     disabled={!dubAvailable && !epInfoLoading}
-                                    title={!dubAvailable && !epInfoLoading ? "Dub not available for this show" : ""}
-                                    className={`px-3 py-1 rounded-r-lg rounded-l-none border text-xs font-semibold transition-all ${lang === "dub" ? "bg-primary text-white border-primary" : dubAvailable ? "bg-muted/40 border-border/40 text-muted-foreground hover:text-foreground" : "bg-muted/20 border-border/20 text-muted-foreground/30 cursor-not-allowed"}`}>
-                                    {epInfoLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "DUB"}
+                                    title={!dubAvailable && !epInfoLoading ? "No English dub found on Gogoanime for this title" : "Switch to English dub"}
+                                    className={`px-3 py-1 rounded-r-lg rounded-l-none border text-xs font-semibold transition-all ${
+                                        lang === "dub"
+                                            ? "bg-primary text-white border-primary"
+                                            : dubAvailable
+                                                ? "bg-muted/40 border-border/40 text-muted-foreground hover:text-foreground"
+                                                : epInfoLoading
+                                                    ? "bg-muted/40 border-border/40 text-muted-foreground/60 cursor-wait"
+                                                    : "bg-muted/20 border-border/20 text-muted-foreground/30 cursor-not-allowed"
+                                    }`}>
+                                    {epInfoLoading
+                                        ? <Loader2 className="w-3 h-3 animate-spin" />
+                                        : dubAvailable
+                                            ? "DUB"
+                                            : <span className="flex items-center gap-1">DUB <span className="text-[9px] opacity-60">(N/A)</span></span>
+                                    }
                                 </button>
                             </div>
                         )}
@@ -439,6 +563,7 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                             episode={selectedEp}
                             watched={selectedAnime.episodesWatched || 0}
                             totalEps={activeTotalEps}
+                            malId={selectedAnime.malId}
                             onEpisodeChange={setSelectedEp}
                             onChangeSource={() => setShowMatchPanel(true)}
                         />
