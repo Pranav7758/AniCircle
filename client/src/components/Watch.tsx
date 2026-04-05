@@ -875,15 +875,21 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
         if (!q.trim()) return;
         setSearching(true);
         setSearched(false);
+        let found: GogoResult[] = [];
         try {
+            // Try gogoanime first
             const res = await fetch(`/api/gogoanime/search?q=${encodeURIComponent(q)}`);
-            const json = await res.json();
-            let found: GogoResult[] = json.results || [];
+            if (res.ok) {
+                const json = await res.json();
+                found = json.results || [];
+            }
+        } catch {}
 
-            // If Gogoanime is blocked (Vercel / cloud IPs), fall back to AllAnime
-            if (found.length === 0) {
-                try {
-                    const aaRes = await fetch(`/api/allanime/search?q=${encodeURIComponent(q)}`);
+        // If gogoanime failed or returned nothing (e.g. blocked on Vercel), fall back to AllAnime
+        if (found.length === 0) {
+            try {
+                const aaRes = await fetch(`/api/allanime/search?q=${encodeURIComponent(q)}`);
+                if (aaRes.ok) {
                     const aaJson = await aaRes.json();
                     found = (aaJson.results || []).map((r: any) => ({
                         id: r.id,
@@ -894,12 +900,13 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                         subEps: r.subEpisodes || 0,
                         dubEps: r.dubEpisodes || 0,
                     }));
-                } catch {}
-            }
+                }
+            } catch {}
+        }
 
-            setResults(found);
-        } catch { setResults([]); }
-        finally { setSearching(false); setSearched(true); }
+        setResults(found);
+        setSearching(false);
+        setSearched(true);
     }, []);
 
     const selectMatch = async (result: GogoResult) => {
