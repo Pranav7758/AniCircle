@@ -1,8 +1,8 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import Hls from "hls.js";
 import {
-    Search, Play, Loader2, Tv, AlertTriangle, ChevronLeft, ChevronRight,
-    Film, RefreshCw, Maximize2, Volume2, VolumeX, CheckCircle2, Wifi,
+    Search, Play, Loader2, Tv, ChevronLeft, ChevronRight,
+    Film, RefreshCw, Maximize2, Volume2, VolumeX, Wifi,
     SkipForward
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -277,65 +277,6 @@ function EpisodeGrid({ total, watched, selected, onSelect }: {
     );
 }
 
-// ── Gogoanime Match Panel ─────────────────────────────────────────────────────
-
-function GogoMatchPanel({ title, onSelect, onClose }: {
-    title: string;
-    onSelect: (result: GogoResult) => void;
-    onClose: () => void;
-}) {
-    const [query, setQuery] = useState(title);
-    const [results, setResults] = useState<GogoResult[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [searched, setSearched] = useState(false);
-
-    const doSearch = useCallback(async (q: string) => {
-        if (!q.trim()) return;
-        setLoading(true);
-        setSearched(false);
-        try {
-            const res = await fetch(`/api/gogoanime/search?q=${encodeURIComponent(q)}`);
-            const json = await res.json();
-            setResults(json.results || []);
-        } catch { setResults([]); }
-        finally { setLoading(false); setSearched(true); }
-    }, []);
-
-    useEffect(() => { doSearch(title); }, [title]);
-
-    return (
-        <div className="space-y-3 p-4 border border-border/50 rounded-xl bg-card/60">
-            <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold">Select match on Gogoanime</p>
-                <button onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground">Cancel</button>
-            </div>
-            <div className="flex gap-2">
-                <Input value={query} onChange={e => setQuery(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && doSearch(query)}
-                    placeholder="Search Gogoanime…" className="h-8 text-xs flex-1"
-                    data-testid="input-gogo-search" />
-                <Button size="sm" variant="outline" onClick={() => doSearch(query)} disabled={loading}
-                    className="h-8 px-3 shrink-0" data-testid="button-gogo-search">
-                    {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Search className="w-3 h-3" />}
-                </Button>
-            </div>
-            {loading && <p className="text-xs text-muted-foreground py-1">Searching…</p>}
-            {searched && !loading && results.length === 0 && <p className="text-xs text-muted-foreground py-1">No results. Try a shorter title.</p>}
-            {results.length > 0 && (
-                <div className="max-h-56 overflow-y-auto space-y-1 pr-1">
-                    {results.map(r => (
-                        <button key={r.id} onClick={() => onSelect(r)}
-                            data-testid={`button-gogo-result-${r.id}`}
-                            className="w-full flex items-center gap-2.5 p-2 rounded-lg hover:bg-primary/10 border border-transparent hover:border-primary/20 text-left transition-all">
-                            {r.image && <img src={r.image} alt={r.title} className="w-8 h-11 object-cover rounded shrink-0" />}
-                            <span className="text-xs font-medium line-clamp-2">{r.title}</span>
-                        </button>
-                    ))}
-                </div>
-            )}
-        </div>
-    );
-}
 
 // ── Stream Extraction Panel ───────────────────────────────────────────────────
 
@@ -355,7 +296,6 @@ function StreamPanel({
     totalEps,
     malId,
     anilistId,
-    dubMode,
     onEpisodeChange,
     onChangeSource,
 }: {
@@ -366,7 +306,6 @@ function StreamPanel({
     totalEps: number;
     malId?: number | null;
     anilistId?: number | null;
-    dubMode?: boolean;
     onEpisodeChange: (ep: number) => void;
     onChangeSource: () => void;
 }) {
@@ -383,16 +322,7 @@ function StreamPanel({
 
         const timer = setInterval(() => setLogIdx(i => (i + 1) % EXTRACT_LOGS.length), 2800);
         try {
-            let res: Response;
-            if (dubMode) {
-                // DUB: use AllAnime
-                const params = new URLSearchParams({ title: animeTitle, episode: String(episode) });
-                if (malId) params.set("malId", String(malId));
-                res = await fetch(`/api/extract/dub?${params}`);
-            } else {
-                // SUB: use Gogoanime
-                res = await fetch(`/api/extract?id=${encodeURIComponent(gogoId)}&episode=${episode}`);
-            }
+            const res = await fetch(`/api/extract?id=${encodeURIComponent(gogoId)}&episode=${episode}`);
             const json = await res.json();
             clearInterval(timer);
             if (!res.ok) throw new Error(json.message || json.error || "Extraction failed");
@@ -403,9 +333,9 @@ function StreamPanel({
             setError(err.message || "Unknown error");
             setState("error");
         }
-    }, [gogoId, animeTitle, episode, dubMode, malId]);
+    }, [gogoId, episode]);
 
-    useEffect(() => { extract(); }, [gogoId, animeTitle, episode, dubMode]);
+    useEffect(() => { extract(); }, [gogoId, episode]);
 
     return (
         <div className="space-y-4">
@@ -481,10 +411,7 @@ function StreamPanel({
 
             <p className="text-[11px] text-muted-foreground/40 flex items-center gap-1">
                 <Wifi className="w-3 h-3" />
-                {dubMode
-                    ? "Dub sourced from AllAnime via Puppeteer · Content belongs to respective rights holders."
-                    : "Sub sourced from Gogoanime via Puppeteer · Content belongs to respective rights holders."
-                }
+                Sourced from Gogoanime via Puppeteer · Content belongs to respective rights holders.
             </p>
         </div>
     );
@@ -494,33 +421,33 @@ function StreamPanel({
 
 export default function Watch({ animeList }: { animeList: Anime[] }) {
     const [search, setSearch] = useState("");
-    const [selectedAnime, setSelectedAnime] = useState<Anime | null>(null);
+    const [results, setResults] = useState<GogoResult[]>([]);
+    const [searching, setSearching] = useState(false);
+    const [searched, setSearched] = useState(false);
     const [gogoMatch, setGogoMatch] = useState<GogoResult | null>(null);
     const [epInfo, setEpInfo] = useState<EpisodeInfo | null>(null);
     const [epInfoLoading, setEpInfoLoading] = useState(false);
     const [selectedEp, setSelectedEp] = useState(1);
     const [lang, setLang] = useState<"sub" | "dub">("sub");
-    const [showMatchPanel, setShowMatchPanel] = useState(false);
 
-    const searchQuery = search.toLowerCase().trim();
-    const filtered = useMemo(() => {
-        return searchQuery ? animeList.filter(a => a.title.toLowerCase().includes(searchQuery)) : [];
-    }, [searchQuery, animeList]);
+    const doSearch = useCallback(async (q: string) => {
+        if (!q.trim()) return;
+        setSearching(true);
+        setSearched(false);
+        try {
+            const res = await fetch(`/api/gogoanime/search?q=${encodeURIComponent(q)}`);
+            const json = await res.json();
+            setResults(json.results || []);
+        } catch { setResults([]); }
+        finally { setSearching(false); setSearched(true); }
+    }, []);
 
-    const selectAnime = (anime: Anime) => {
-        setSelectedAnime(anime);
-        setGogoMatch(null);
-        setEpInfo(null);
-        setShowMatchPanel(true);
-        setLang("sub");
-        setSelectedEp(Math.max(1, anime.episodesWatched || 0));
-    };
-
-    const onGogoMatch = async (result: GogoResult) => {
+    const selectMatch = async (result: GogoResult) => {
         setGogoMatch(result);
-        setShowMatchPanel(false);
-        setEpInfoLoading(true);
         setLang("sub");
+        setSelectedEp(1);
+        setEpInfo(null);
+        setEpInfoLoading(true);
         try {
             const res = await fetch(`/api/gogoanime/episodes?id=${encodeURIComponent(result.id)}`);
             if (res.ok) setEpInfo(await res.json());
@@ -528,135 +455,141 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
         setEpInfoLoading(false);
     };
 
-    // SUB uses Gogoanime ID; DUB uses AllAnime (by title) — always available
-    const activeGogoId = gogoMatch?.id || "";
-    const activeTotalEps = epInfo?.end || selectedAnime?.totalEpisodes || 24;
+    const goBack = () => { setGogoMatch(null); setEpInfo(null); setLang("sub"); };
+
+    // Match the Gogoanime result to a list entry (for watched progress / AniSkip IDs)
+    const listAnime = useMemo(() => {
+        if (!gogoMatch) return null;
+        const t = gogoMatch.title.toLowerCase();
+        return animeList.find(a =>
+            a.title.toLowerCase() === t ||
+            t.includes(a.title.toLowerCase()) ||
+            a.title.toLowerCase().includes(t)
+        ) || null;
+    }, [gogoMatch, animeList]);
+
+    const dubGogoId = epInfo?.dubId || null;
+    const dubAvailable = !!dubGogoId;
+    // SUB: original Gogoanime ID · DUB: Gogoanime dub ID (e.g. "title-dub")
+    const activeGogoId = lang === "dub" && dubGogoId ? dubGogoId : (gogoMatch?.id || "");
+    const totalEps = (lang === "dub" && epInfo?.dubEnd ? epInfo.dubEnd : epInfo?.end) || listAnime?.totalEpisodes || 24;
 
     return (
         <div className="space-y-6">
             <div className="flex items-center gap-2.5">
                 <Film className="h-5 w-5 text-primary drop-shadow-[0_0_8px_rgba(139,92,246,0.7)]" />
                 <h2 className="text-2xl font-bold">Watch</h2>
-                <span className="ml-auto text-xs bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full text-muted-foreground">
-                    Gogoanime · {animeList.length} titles
-                </span>
             </div>
             <p className="text-muted-foreground text-sm -mt-4">
-                Direct HLS streams extracted from Gogoanime — native video player, sub &amp; dub.
+                Search any anime, pick an episode, and stream directly — sub &amp; dub.
             </p>
 
-            {selectedAnime ? (
+            {gogoMatch ? (
                 <div className="space-y-4">
                     {/* Back + header */}
                     <div className="flex items-center gap-3 flex-wrap">
-                        <Button variant="ghost" size="sm"
-                            onClick={() => { setSelectedAnime(null); setGogoMatch(null); setEpInfo(null); setShowMatchPanel(false); }}
+                        <Button variant="ghost" size="sm" onClick={goBack}
                             className="gap-1.5 -ml-2 h-8 text-muted-foreground hover:text-foreground shrink-0"
                             data-testid="button-back-to-list">
                             <ChevronLeft className="w-4 h-4" /> Back
                         </Button>
                         <div className="flex-1 min-w-0">
-                            <h3 className="font-bold text-base truncate">{selectedAnime.title}</h3>
-                            {gogoMatch && (
+                            <h3 className="font-bold text-base truncate">{gogoMatch.title}</h3>
+                            {epInfoLoading && (
                                 <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                                    <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
-                                    {gogoMatch.title}
+                                    <Loader2 className="w-3 h-3 animate-spin" /> Loading info…
+                                </p>
+                            )}
+                            {epInfo && !epInfoLoading && (
+                                <p className="text-[11px] text-muted-foreground">
+                                    {epInfo.end} episodes · {dubAvailable ? "Dub available" : "Sub only"}
                                 </p>
                             )}
                         </div>
 
-                        {/* Sub / Dub toggle — DUB always available via AllAnime */}
-                        {gogoMatch && (
-                            <div className="flex items-center gap-1 shrink-0">
-                                <button
-                                    onClick={() => setLang("sub")}
-                                    data-testid="button-type-sub"
-                                    className={`px-3 py-1 rounded-l-lg rounded-r-none border text-xs font-semibold transition-all ${lang === "sub" ? "bg-primary text-white border-primary" : "bg-muted/40 border-border/40 text-muted-foreground hover:text-foreground"}`}>
-                                    SUB
-                                </button>
-                                <button
-                                    onClick={() => setLang("dub")}
-                                    data-testid="button-type-dub"
-                                    title="English dub via AllAnime"
-                                    className={`px-3 py-1 rounded-r-lg rounded-l-none border text-xs font-semibold transition-all ${lang === "dub" ? "bg-primary text-white border-primary" : "bg-muted/40 border-border/40 text-muted-foreground hover:text-foreground"}`}>
-                                    DUB
-                                </button>
-                            </div>
-                        )}
+                        {/* Sub / Dub toggle */}
+                        <div className="flex items-center gap-1 shrink-0">
+                            <button onClick={() => setLang("sub")} data-testid="button-type-sub"
+                                className={`px-3 py-1 rounded-l-lg rounded-r-none border text-xs font-semibold transition-all ${lang === "sub" ? "bg-primary text-white border-primary" : "bg-muted/40 border-border/40 text-muted-foreground hover:text-foreground"}`}>
+                                SUB
+                            </button>
+                            <button
+                                onClick={() => dubAvailable && setLang("dub")}
+                                data-testid="button-type-dub"
+                                title={dubAvailable ? "Switch to English dub" : epInfoLoading ? "Checking for dub…" : "No dub available"}
+                                className={`px-3 py-1 rounded-r-lg rounded-l-none border text-xs font-semibold transition-all ${
+                                    lang === "dub" ? "bg-primary text-white border-primary"
+                                    : dubAvailable ? "bg-muted/40 border-border/40 text-muted-foreground hover:text-foreground"
+                                    : "bg-muted/20 border-border/20 text-muted-foreground/30 cursor-not-allowed"
+                                }`}>
+                                {epInfoLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "DUB"}
+                            </button>
+                        </div>
                     </div>
 
-                    {/* Match panel */}
-                    {showMatchPanel && (
-                        <GogoMatchPanel title={selectedAnime.title} onSelect={onGogoMatch} onClose={() => setShowMatchPanel(false)} />
-                    )}
-
-                    {/* Stream panel */}
-                    {gogoMatch && !showMatchPanel && (
-                        <StreamPanel
-                            key={`${activeGogoId}-${selectedEp}-${lang}`}
-                            gogoId={activeGogoId}
-                            animeTitle={selectedAnime.title}
-                            episode={selectedEp}
-                            watched={selectedAnime.episodesWatched || 0}
-                            totalEps={activeTotalEps}
-                            malId={selectedAnime.malId}
-                            anilistId={selectedAnime.anilistId}
-                            dubMode={lang === "dub"}
-                            onEpisodeChange={setSelectedEp}
-                            onChangeSource={() => setShowMatchPanel(true)}
-                        />
-                    )}
-
-                    {/* Waiting for match */}
-                    {!gogoMatch && !showMatchPanel && (
-                        <Card className="bg-muted/20 border-dashed">
-                            <CardContent className="flex items-center justify-center gap-3 p-8 text-muted-foreground">
-                                <AlertTriangle className="w-4 h-4 opacity-40" />
-                                <p className="text-sm">Select a match to start streaming.</p>
-                                <Button size="sm" variant="outline" onClick={() => setShowMatchPanel(true)}>Find match</Button>
-                            </CardContent>
-                        </Card>
-                    )}
+                    <StreamPanel
+                        key={`${activeGogoId}-${selectedEp}`}
+                        gogoId={activeGogoId}
+                        animeTitle={gogoMatch.title}
+                        episode={selectedEp}
+                        watched={listAnime?.episodesWatched || 0}
+                        totalEps={totalEps}
+                        malId={listAnime?.malId}
+                        anilistId={listAnime?.anilistId}
+                        onEpisodeChange={setSelectedEp}
+                        onChangeSource={goBack}
+                    />
                 </div>
             ) : (
                 <>
-                    <div className="relative max-w-sm">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input placeholder="Search your list…" value={search} onChange={e => setSearch(e.target.value)}
-                            className="pl-9 h-10 rounded-xl border-border/50 bg-muted/30"
-                            data-testid="input-watch-search" />
+                    {/* Direct Gogoanime search */}
+                    <div className="flex gap-2 max-w-sm">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <Input
+                                placeholder="Search anime to watch…"
+                                value={search}
+                                onChange={e => setSearch(e.target.value)}
+                                onKeyDown={e => e.key === "Enter" && doSearch(search)}
+                                className="pl-9 h-10 rounded-xl border-border/50 bg-muted/30"
+                                data-testid="input-watch-search" />
+                        </div>
+                        <Button variant="outline" onClick={() => doSearch(search)}
+                            disabled={searching || !search.trim()}
+                            className="h-10 px-3 shrink-0" data-testid="button-watch-search">
+                            {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                        </Button>
                     </div>
 
-                    {animeList.length === 0 ? (
-                        <Card className="bg-muted/30 border-dashed">
-                            <CardContent className="flex flex-col items-center justify-center p-12 text-center text-muted-foreground gap-3">
-                                <Tv className="h-10 w-10 mb-1 opacity-20" />
-                                <p className="font-medium">Your list is empty</p>
-                                <p className="text-xs">Add some anime first, then come back here to watch.</p>
-                            </CardContent>
-                        </Card>
-                    ) : !searchQuery ? (
-                        <p className="text-xs text-muted-foreground/50 text-center pt-2">Search your list to pick an anime to watch.</p>
-                    ) : filtered.length === 0 ? (
+                    {!searched && !searching && (
+                        <p className="text-xs text-muted-foreground/50 text-center pt-2">
+                            Search any anime title to start watching.
+                        </p>
+                    )}
+                    {searching && <p className="text-xs text-muted-foreground py-1">Searching Gogoanime…</p>}
+                    {searched && !searching && results.length === 0 && (
                         <Card className="bg-muted/30 border-dashed">
                             <CardContent className="flex flex-col items-center justify-center p-10 text-center text-muted-foreground gap-2">
                                 <Search className="h-8 w-8 mb-1 opacity-20" />
                                 <p className="font-medium">No results for "{search}"</p>
+                                <p className="text-xs">Try a shorter or different title.</p>
                             </CardContent>
                         </Card>
-                    ) : (
+                    )}
+                    {results.length > 0 && (
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-                            {filtered.map(anime => {
-                                const watched = anime.episodesWatched || 0;
-                                const total = anime.totalEpisodes;
-                                const pct = total ? Math.min(100, (watched / total) * 100) : 0;
+                            {results.map(r => {
+                                const listEntry = animeList.find(a =>
+                                    a.title.toLowerCase() === r.title.toLowerCase()
+                                );
+                                const watched = listEntry?.episodesWatched || 0;
                                 return (
-                                    <button key={anime.id} onClick={() => selectAnime(anime)}
-                                        data-testid={`button-watch-anime-${anime.id}`}
+                                    <button key={r.id} onClick={() => selectMatch(r)}
+                                        data-testid={`button-watch-result-${r.id}`}
                                         className="group relative rounded-xl overflow-hidden border border-border/40 bg-card hover:border-primary/50 transition-all hover:shadow-neon text-left">
                                         <div className="aspect-[3/4] overflow-hidden bg-muted/30 relative">
-                                            {anime.coverImage
-                                                ? <img src={anime.coverImage} alt={anime.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                            {r.image
+                                                ? <img src={r.image} alt={r.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                                                 : <div className="w-full h-full flex items-center justify-center"><Tv className="w-8 h-8 opacity-20" /></div>
                                             }
                                             <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -664,24 +597,15 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                                                     <Play className="w-5 h-5 text-white fill-white ml-0.5" />
                                                 </div>
                                             </div>
-                                            <div className="absolute top-1.5 left-1.5">
-                                                <Badge className={`text-[9px] px-1.5 py-0 h-4 ${anime.status === "watching" ? "bg-primary/80 text-white" : anime.status === "completed" ? "bg-emerald-500/80 text-white" : "bg-muted/80 text-muted-foreground"}`}>
-                                                    {anime.status === "plan_to_watch" ? "PTW" : anime.status.replace("_", " ")}
-                                                </Badge>
-                                            </div>
-                                        </div>
-                                        <div className="p-2 space-y-1">
-                                            <p className="text-xs font-semibold line-clamp-2 leading-tight">{anime.title}</p>
-                                            {total ? (
-                                                <div className="space-y-0.5">
-                                                    <div className="w-full bg-muted/40 rounded-full h-1 overflow-hidden">
-                                                        <div className="h-1 rounded-full bg-primary/60 transition-all" style={{ width: `${pct}%` }} />
-                                                    </div>
-                                                    <p className="text-[10px] text-muted-foreground">{watched}/{total} ep</p>
+                                            {listEntry && (
+                                                <div className="absolute top-1.5 left-1.5">
+                                                    <Badge className="text-[9px] px-1.5 py-0 h-4 bg-primary/80 text-white">In List</Badge>
                                                 </div>
-                                            ) : (
-                                                <p className="text-[10px] text-muted-foreground">{watched} ep watched</p>
                                             )}
+                                        </div>
+                                        <div className="p-2">
+                                            <p className="text-xs font-semibold line-clamp-2 leading-tight">{r.title}</p>
+                                            {watched > 0 && <p className="text-[10px] text-muted-foreground mt-0.5">{watched} ep watched</p>}
                                         </div>
                                     </button>
                                 );
