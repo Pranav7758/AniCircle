@@ -63,9 +63,9 @@ async function fetchSkipTimes(malId: number, episode: number): Promise<SkipInter
         const json = await res.json();
         if (!json.found || !Array.isArray(json.results)) return [];
         return json.results.map((r: any) => ({
-            start: r.interval.start_time,
-            end: r.interval.end_time,
-            type: r.skip_type as "op" | "ed",
+            start: r.interval.startTime,
+            end: r.interval.endTime,
+            type: r.skipType as "op" | "ed",
         }));
     } catch {
         return [];
