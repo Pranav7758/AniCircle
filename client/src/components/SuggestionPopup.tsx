@@ -62,7 +62,7 @@ const SuggestionPopup = () => {
 
   return (
     <Dialog open={open} onOpenChange={(val) => { if (!val) handleDismiss(); }}>
-      <DialogContent className="max-w-md" data-testid="dialog-suggestion-popup">
+      <DialogContent className="max-w-md w-[calc(100vw-2rem)] mx-4 sm:mx-auto" data-testid="dialog-suggestion-popup">
         <button
           onClick={handleDismiss}
           data-testid="button-close-suggestion"
