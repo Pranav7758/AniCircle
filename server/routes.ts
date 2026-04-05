@@ -565,7 +565,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const result = await extractDubFromAniwaves(animeId, parseInt(String(episode)), slug);
-      res.json(result);
+      res.json({ ...result, animeId, slug });
     } catch (err: any) {
       console.error("Dub extraction error:", err?.message);
       res.status(500).json({ error: "Dub extraction failed", message: err?.message });

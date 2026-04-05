@@ -42,6 +42,8 @@ interface StreamResult {
     stream: string;
     type: "hls" | "mp4";
     source: string;
+    animeId?: string;
+    slug?: string;
 }
 
 interface SkipInterval {
@@ -301,6 +303,7 @@ function StreamPanel({
     aniwavesSlug,
     onEpisodeChange,
     onChangeSource,
+    onAniwavesFound,
 }: {
     gogoId: string;
     animeTitle: string;
@@ -314,6 +317,7 @@ function StreamPanel({
     aniwavesSlug?: string;
     onEpisodeChange: (ep: number) => void;
     onChangeSource: () => void;
+    onAniwavesFound?: (animeId: string, slug: string) => void;
 }) {
     const [state, setState] = useState<ExState>("idle");
     const [streamResult, setStreamResult] = useState<StreamResult | null>(null);
@@ -347,6 +351,9 @@ function StreamPanel({
             if (!res.ok) throw new Error(json.message || json.error || "Extraction failed");
             setStreamResult(json);
             setState("ready");
+            if (isDub && json.animeId && json.slug) {
+                onAniwavesFound?.(json.animeId, json.slug);
+            }
         } catch (err: any) {
             clearInterval(timer);
             setError(err.message || "Unknown error");
@@ -560,6 +567,7 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                         aniwavesSlug={aniwavesInfo?.slug}
                         onEpisodeChange={setSelectedEp}
                         onChangeSource={goBack}
+                        onAniwavesFound={(animeId, slug) => setAniwavesInfo({ animeId, slug })}
                     />
                 </div>
             ) : (
