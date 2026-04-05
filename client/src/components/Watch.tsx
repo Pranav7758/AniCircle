@@ -1,9 +1,9 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import Hls from "hls.js";
 import {
-    Search, Play, Loader2, Tv, ChevronLeft, ChevronRight,
-    Film, RefreshCw, Maximize2, Volume2, VolumeX, Wifi,
-    SkipForward, AlertTriangle
+    Search, Play, Pause, Loader2, Tv, ChevronLeft, ChevronRight,
+    Film, RefreshCw, Maximize2, Minimize2, Volume2, VolumeX, Volume1,
+    SkipForward, AlertTriangle, Wifi, Settings
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -52,7 +52,7 @@ interface SkipInterval {
     type: "op" | "ed";
 }
 
-// ── AniSkip API (via server proxy to avoid CORS) ─────────────────────────────
+// ── AniSkip API ───────────────────────────────────────────────────────────────
 
 async function fetchSkipTimes(malId: number, episode: number): Promise<SkipInterval[]> {
     try {
@@ -72,21 +72,23 @@ async function fetchSkipTimes(malId: number, episode: number): Promise<SkipInter
     }
 }
 
-// Resolve MAL ID from AniList ID when malId is missing from the DB record
 async function resolveMALId(anilistId: number): Promise<number | null> {
     try {
-        const res = await fetch(`/api/anilist-mal?anilistId=${anilistId}`, {
-            signal: AbortSignal.timeout(8000),
-        });
+        const res = await fetch(`/api/anilist-mal?anilistId=${anilistId}`, { signal: AbortSignal.timeout(8000) });
         if (!res.ok) return null;
         const json = await res.json();
         return json.idMal ?? null;
-    } catch {
-        return null;
-    }
+    } catch { return null; }
 }
 
-// ── HLS Player ────────────────────────────────────────────────────────────────
+function formatTime(s: number): string {
+    if (!isFinite(s)) return "0:00";
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+}
+
+// ── Custom HLS Video Player ───────────────────────────────────────────────────
 
 function HlsPlayer({
     streamResult,
@@ -102,176 +104,427 @@ function HlsPlayer({
     onError: () => void;
 }) {
     const videoRef = useRef<HTMLVideoElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
     const hlsRef = useRef<Hls | null>(null);
-    const [muted, setMuted] = useState(false);
-    const [currentTime, setCurrentTime] = useState(0);
-    const [skipIntervals, setSkipIntervals] = useState<SkipInterval[]>([]);
+    const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const seekbarRef = useRef<HTMLDivElement>(null);
 
-    // Fetch AniSkip timestamps — use malId directly, or resolve from anilistId if missing
+    const [playing, setPlaying] = useState(false);
+    const [currentTime, setCurrentTime] = useState(0);
+    const [duration, setDuration] = useState(0);
+    const [volume, setVolume] = useState(1);
+    const [muted, setMuted] = useState(false);
+    const [fullscreen, setFullscreen] = useState(false);
+    const [showControls, setShowControls] = useState(true);
+    const [seeking, setSeeking] = useState(false);
+    const [hoverTime, setHoverTime] = useState<number | null>(null);
+    const [hoverX, setHoverX] = useState(0);
+    const [skipIntervals, setSkipIntervals] = useState<SkipInterval[]>([]);
+    const [buffered, setBuffered] = useState(0);
+
+    // Fetch skip timestamps
     useEffect(() => {
         let cancelled = false;
         async function load() {
-            let effectiveMalId = malId ?? null;
-
-            // If no malId but we have anilistId, resolve it server-side
-            if (!effectiveMalId && anilistId) {
-                effectiveMalId = await resolveMALId(anilistId);
-            }
-
-            if (cancelled || !effectiveMalId) { setSkipIntervals([]); return; }
-
-            const intervals = await fetchSkipTimes(effectiveMalId, episode);
+            let mid = malId ?? null;
+            if (!mid && anilistId) mid = await resolveMALId(anilistId);
+            if (cancelled || !mid) { setSkipIntervals([]); return; }
+            const intervals = await fetchSkipTimes(mid, episode);
             if (!cancelled) setSkipIntervals(intervals);
         }
         load();
         return () => { cancelled = true; };
     }, [malId, anilistId, episode]);
 
-    // Set up HLS / video source
+    // Set up HLS source
     useEffect(() => {
         const video = videoRef.current;
         if (!video) return;
-
         if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
-
-        const proxiedUrl = `/api/proxy/stream?url=${encodeURIComponent(streamResult.stream)}`;
-
+        const proxied = `/api/proxy/stream?url=${encodeURIComponent(streamResult.stream)}`;
         if (streamResult.type === "hls") {
             if (Hls.isSupported()) {
                 const hls = new Hls({ enableWorker: true, backBufferLength: 90 });
                 hlsRef.current = hls;
-                hls.loadSource(proxiedUrl);
+                hls.loadSource(proxied);
                 hls.attachMedia(video);
                 hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
-                hls.on(Hls.Events.ERROR, (_, data) => {
-                    if (data.fatal) { console.error("[HLS] Fatal:", data.type, data.details); onError(); }
-                });
+                hls.on(Hls.Events.ERROR, (_, data) => { if (data.fatal) onError(); });
             } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-                video.src = proxiedUrl;
+                video.src = proxied;
                 video.play().catch(() => {});
             } else { onError(); }
         } else {
-            video.src = proxiedUrl;
+            video.src = proxied;
             video.play().catch(() => {});
         }
-
         return () => { if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; } };
     }, [streamResult.stream]);
 
-    // Track current playback time for skip buttons
+    // Video event listeners
     useEffect(() => {
-        const video = videoRef.current;
-        if (!video) return;
-        const onTimeUpdate = () => setCurrentTime(video.currentTime);
-        video.addEventListener("timeupdate", onTimeUpdate);
-        return () => video.removeEventListener("timeupdate", onTimeUpdate);
+        const v = videoRef.current;
+        if (!v) return;
+        const onPlay = () => setPlaying(true);
+        const onPause = () => setPlaying(false);
+        const onTimeUpdate = () => {
+            setCurrentTime(v.currentTime);
+            if (v.buffered.length > 0) setBuffered(v.buffered.end(v.buffered.length - 1));
+        };
+        const onDurationChange = () => setDuration(v.duration);
+        const onVolumeChange = () => { setVolume(v.volume); setMuted(v.muted); };
+        v.addEventListener("play", onPlay);
+        v.addEventListener("pause", onPause);
+        v.addEventListener("timeupdate", onTimeUpdate);
+        v.addEventListener("durationchange", onDurationChange);
+        v.addEventListener("volumechange", onVolumeChange);
+        return () => {
+            v.removeEventListener("play", onPlay);
+            v.removeEventListener("pause", onPause);
+            v.removeEventListener("timeupdate", onTimeUpdate);
+            v.removeEventListener("durationchange", onDurationChange);
+            v.removeEventListener("volumechange", onVolumeChange);
+        };
     }, []);
 
-    const skipTo = (time: number) => {
-        if (videoRef.current) videoRef.current.currentTime = time;
+    // Fullscreen change listener
+    useEffect(() => {
+        const onChange = () => setFullscreen(!!document.fullscreenElement);
+        document.addEventListener("fullscreenchange", onChange);
+        return () => document.removeEventListener("fullscreenchange", onChange);
+    }, []);
+
+    // Auto-hide controls
+    const showControlsTemp = useCallback(() => {
+        setShowControls(true);
+        if (hideTimer.current) clearTimeout(hideTimer.current);
+        hideTimer.current = setTimeout(() => setShowControls(false), 3000);
+    }, []);
+
+    const togglePlay = () => {
+        const v = videoRef.current;
+        if (!v) return;
+        v.paused ? v.play().catch(() => {}) : v.pause();
     };
 
-    const activeIntro = skipIntervals.find(s => s.type === "op" && currentTime >= s.start && currentTime < s.end);
-    const activeOutro = skipIntervals.find(s => s.type === "ed" && currentTime >= s.start && currentTime < s.end);
+    const toggleMute = () => {
+        const v = videoRef.current;
+        if (!v) return;
+        v.muted = !v.muted;
+    };
+
+    const changeVolume = (val: number) => {
+        const v = videoRef.current;
+        if (!v) return;
+        v.volume = val;
+        v.muted = val === 0;
+    };
+
+    const toggleFullscreen = () => {
+        const el = containerRef.current;
+        if (!el) return;
+        document.fullscreenElement ? document.exitFullscreen() : el.requestFullscreen();
+    };
+
+    const seekTo = (time: number) => {
+        const v = videoRef.current;
+        if (v) v.currentTime = Math.max(0, Math.min(time, duration));
+    };
+
+    // Seekbar interaction
+    const getTimeFromEvent = (e: React.MouseEvent<HTMLDivElement>) => {
+        const rect = seekbarRef.current?.getBoundingClientRect();
+        if (!rect || !duration) return null;
+        const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        return ratio * duration;
+    };
+
+    const onSeekbarMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+        const t = getTimeFromEvent(e);
+        if (t !== null) { setHoverTime(t); setHoverX(e.clientX - (seekbarRef.current?.getBoundingClientRect().left ?? 0)); }
+        if (seeking) seekTo(t ?? 0);
+    };
+
+    const onSeekbarMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+        setSeeking(true);
+        const t = getTimeFromEvent(e);
+        if (t !== null) seekTo(t);
+    };
+
+    const onSeekbarMouseUp = () => setSeeking(false);
+    const onSeekbarMouseLeave = () => { setHoverTime(null); if (seeking) setSeeking(false); };
+
+    const skipTo = (time: number) => seekTo(time);
+
+    const pct = duration > 0 ? (currentTime / duration) * 100 : 0;
+    const buffPct = duration > 0 ? (buffered / duration) * 100 : 0;
+
+    const intro = skipIntervals.find(s => s.type === "op");
+    const outro = skipIntervals.find(s => s.type === "ed");
+    const activeIntro = intro && currentTime >= intro.start && currentTime < intro.end;
+    const activeOutro = outro && currentTime >= outro.start && currentTime < outro.end;
+
+    const VolumeIcon = muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
 
     return (
-        <div className="relative group rounded-xl overflow-hidden border border-border/50 bg-black aspect-video">
+        <div
+            ref={containerRef}
+            className="relative bg-black rounded-xl overflow-hidden aspect-video select-none group"
+            onMouseMove={showControlsTemp}
+            onMouseEnter={showControlsTemp}
+            onMouseLeave={() => {
+                if (hideTimer.current) clearTimeout(hideTimer.current);
+                hideTimer.current = setTimeout(() => setShowControls(false), 1000);
+            }}
+            onClick={togglePlay}
+            data-testid="player-container"
+        >
             <video
                 ref={videoRef}
                 className="w-full h-full object-contain"
-                controls playsInline autoPlay
+                playsInline
                 data-testid="video-player"
             />
 
-            {/* Skip Intro button */}
+            {/* Centre play/pause flash */}
+            {!playing && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="w-16 h-16 rounded-full bg-black/50 flex items-center justify-center backdrop-blur-sm">
+                        <Play className="w-8 h-8 text-white fill-white ml-1" />
+                    </div>
+                </div>
+            )}
+
+            {/* Skip intro button */}
             {activeIntro && (
                 <button
-                    onClick={() => skipTo(activeIntro.end)}
+                    onClick={e => { e.stopPropagation(); skipTo(intro!.end); }}
                     data-testid="button-skip-intro"
-                    className="absolute bottom-14 right-4 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/80 border border-white/20 text-white text-xs font-semibold hover:bg-black/95 transition-colors shadow-lg backdrop-blur-sm"
+                    className="absolute bottom-20 right-4 flex items-center gap-2 px-4 py-2 rounded-lg bg-black/80 border border-white/30 text-white text-sm font-semibold hover:bg-white hover:text-black transition-all shadow-xl backdrop-blur-sm z-10"
                 >
-                    <SkipForward className="w-3.5 h-3.5" />
+                    <SkipForward className="w-4 h-4" />
                     Skip Intro
                 </button>
             )}
 
-            {/* Skip Outro button */}
+            {/* Skip outro button */}
             {activeOutro && (
                 <button
-                    onClick={() => skipTo(activeOutro.end)}
+                    onClick={e => { e.stopPropagation(); skipTo(outro!.end); }}
                     data-testid="button-skip-outro"
-                    className="absolute bottom-14 right-4 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/80 border border-white/20 text-white text-xs font-semibold hover:bg-black/95 transition-colors shadow-lg backdrop-blur-sm"
+                    className="absolute bottom-20 right-4 flex items-center gap-2 px-4 py-2 rounded-lg bg-black/80 border border-white/30 text-white text-sm font-semibold hover:bg-white hover:text-black transition-all shadow-xl backdrop-blur-sm z-10"
                 >
-                    <SkipForward className="w-3.5 h-3.5" />
+                    <SkipForward className="w-4 h-4" />
                     Skip Outro
                 </button>
             )}
 
-            {/* Top-right controls */}
-            <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                    onClick={() => { if (videoRef.current) { videoRef.current.muted = !muted; setMuted(!muted); } }}
-                    className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white transition-colors"
-                    data-testid="button-toggle-mute"
-                >
-                    {muted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-                </button>
-                <button
-                    onClick={() => { const v = videoRef.current; if (!v) return; document.fullscreenElement ? document.exitFullscreen() : v.requestFullscreen(); }}
-                    className="p-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white transition-colors"
-                    data-testid="button-fullscreen"
-                >
-                    <Maximize2 className="w-3.5 h-3.5" />
-                </button>
-            </div>
+            {/* Controls overlay */}
+            <div
+                className={`absolute inset-0 flex flex-col justify-end transition-opacity duration-300 ${showControls ? "opacity-100" : "opacity-0"}`}
+                style={{ background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.3) 40%, transparent 100%)" }}
+                onClick={e => e.stopPropagation()}
+            >
+                {/* Seekbar */}
+                <div className="px-3 pb-1.5">
+                    {/* Hover time tooltip */}
+                    {hoverTime !== null && (
+                        <div
+                            className="absolute bottom-14 text-[11px] font-mono text-white bg-black/80 px-1.5 py-0.5 rounded pointer-events-none z-20 -translate-x-1/2"
+                            style={{ left: hoverX + 12 }}
+                        >
+                            {formatTime(hoverTime)}
+                        </div>
+                    )}
 
-            {/* Source badge */}
-            <div className="absolute bottom-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <span className="px-2 py-0.5 rounded-md bg-black/70 text-[10px] text-emerald-400 font-mono">
-                    {streamResult.type.toUpperCase()} · {streamResult.source}
-                </span>
+                    <div
+                        ref={seekbarRef}
+                        className="relative h-1 rounded-full cursor-pointer group/seek"
+                        style={{ background: "rgba(255,255,255,0.2)" }}
+                        onMouseMove={onSeekbarMouseMove}
+                        onMouseDown={onSeekbarMouseDown}
+                        onMouseUp={onSeekbarMouseUp}
+                        onMouseLeave={onSeekbarMouseLeave}
+                        data-testid="seekbar"
+                    >
+                        {/* Thicker on hover */}
+                        <div className="absolute inset-0 -my-1.5 group-hover/seek:opacity-100" />
+
+                        {/* Buffered */}
+                        <div
+                            className="absolute left-0 top-0 h-full rounded-full"
+                            style={{ width: `${buffPct}%`, background: "rgba(255,255,255,0.25)" }}
+                        />
+
+                        {/* Intro strip (yellow) */}
+                        {intro && duration > 0 && (
+                            <div
+                                className="absolute top-0 h-full rounded-sm"
+                                style={{
+                                    left: `${(intro.start / duration) * 100}%`,
+                                    width: `${((intro.end - intro.start) / duration) * 100}%`,
+                                    background: "#f59e0b",
+                                    opacity: 0.8,
+                                }}
+                                title="Intro"
+                            />
+                        )}
+
+                        {/* Outro strip (yellow) */}
+                        {outro && duration > 0 && (
+                            <div
+                                className="absolute top-0 h-full rounded-sm"
+                                style={{
+                                    left: `${(outro.start / duration) * 100}%`,
+                                    width: `${((outro.end - outro.start) / duration) * 100}%`,
+                                    background: "#f59e0b",
+                                    opacity: 0.8,
+                                }}
+                                title="Outro"
+                            />
+                        )}
+
+                        {/* Played */}
+                        <div
+                            className="absolute left-0 top-0 h-full rounded-full"
+                            style={{ width: `${pct}%`, background: "#a78bfa" }}
+                        />
+
+                        {/* Thumb */}
+                        <div
+                            className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white shadow-md opacity-0 group-hover/seek:opacity-100 transition-opacity pointer-events-none"
+                            style={{ left: `calc(${pct}% - 6px)` }}
+                        />
+                    </div>
+                </div>
+
+                {/* Bottom bar */}
+                <div className="flex items-center gap-2 px-3 pb-3">
+                    {/* Play/Pause */}
+                    <button
+                        onClick={togglePlay}
+                        className="text-white hover:text-white/80 transition-colors"
+                        data-testid="button-play-pause"
+                    >
+                        {playing
+                            ? <Pause className="w-5 h-5 fill-white" />
+                            : <Play className="w-5 h-5 fill-white ml-0.5" />
+                        }
+                    </button>
+
+                    {/* Time */}
+                    <span className="text-white text-xs font-mono shrink-0 tabular-nums">
+                        {formatTime(currentTime)} / {formatTime(duration)}
+                    </span>
+
+                    <div className="flex-1" />
+
+                    {/* Volume */}
+                    <div className="flex items-center gap-1.5 group/vol">
+                        <button onClick={e => { e.stopPropagation(); toggleMute(); }} className="text-white hover:text-white/80 transition-colors" data-testid="button-toggle-mute">
+                            <VolumeIcon className="w-4 h-4" />
+                        </button>
+                        <input
+                            type="range" min={0} max={1} step={0.05}
+                            value={muted ? 0 : volume}
+                            onChange={e => changeVolume(parseFloat(e.target.value))}
+                            onClick={e => e.stopPropagation()}
+                            className="w-0 group-hover/vol:w-16 transition-all duration-200 accent-violet-400 cursor-pointer"
+                            data-testid="input-volume"
+                        />
+                    </div>
+
+                    {/* Source badge */}
+                    <span className="hidden sm:inline px-1.5 py-0.5 rounded text-[9px] font-mono text-emerald-400 bg-black/40">
+                        {streamResult.type.toUpperCase()} · {streamResult.source}
+                    </span>
+
+                    {/* Fullscreen */}
+                    <button
+                        onClick={e => { e.stopPropagation(); toggleFullscreen(); }}
+                        className="text-white hover:text-white/80 transition-colors"
+                        data-testid="button-fullscreen"
+                    >
+                        {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                    </button>
+                </div>
             </div>
         </div>
     );
 }
 
-// ── Episode Grid ──────────────────────────────────────────────────────────────
+// ── HiAnime-Style Episode List ────────────────────────────────────────────────
 
-function EpisodeGrid({ total, watched, selected, onSelect }: {
+function EpisodeList({ total, watched, selected, onSelect }: {
     total: number; watched: number; selected: number; onSelect: (ep: number) => void;
 }) {
-    const PER_PAGE = 60;
-    const pages = Math.ceil(total / PER_PAGE);
-    const [page, setPage] = useState(Math.ceil(selected / PER_PAGE) || 1);
-    const start = (page - 1) * PER_PAGE + 1;
-    const end = Math.min(page * PER_PAGE, total);
+    const PER_RANGE = 100;
+    const ranges = Math.ceil(total / PER_RANGE);
+    const initRange = Math.ceil(selected / PER_RANGE) || 1;
+    const [range, setRange] = useState(initRange);
+
+    const start = (range - 1) * PER_RANGE + 1;
+    const end = Math.min(range * PER_RANGE, total);
+
+    // Scroll selected episode into view
+    const selRef = useRef<HTMLButtonElement>(null);
+    useEffect(() => {
+        selRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }, [selected]);
 
     return (
-        <div className="space-y-3">
-            {pages > 1 && (
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-                    {Array.from({ length: pages }, (_, i) => i + 1).map(p => (
-                        <button key={p} onClick={() => setPage(p)}
-                            className={`shrink-0 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${p === page ? "bg-primary text-primary-foreground" : "bg-muted/40 text-muted-foreground hover:bg-muted/70"}`}>
-                            {(p - 1) * PER_PAGE + 1}–{Math.min(p * PER_PAGE, total)}
+        <div className="space-y-2">
+            {/* Range selector */}
+            {ranges > 1 && (
+                <div className="flex flex-wrap gap-1.5">
+                    {Array.from({ length: ranges }, (_, i) => i + 1).map(r => (
+                        <button
+                            key={r}
+                            onClick={() => setRange(r)}
+                            className={`px-2.5 py-0.5 rounded text-xs font-medium transition-all ${r === range
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted/50 text-muted-foreground hover:bg-muted/80 border border-border/30"
+                            }`}
+                        >
+                            {(r - 1) * PER_RANGE + 1}–{Math.min(r * PER_RANGE, total)}
                         </button>
                     ))}
                 </div>
             )}
-            <div className="grid grid-cols-8 sm:grid-cols-10 md:grid-cols-12 gap-1.5">
+
+            {/* Episode scroll list */}
+            <div className="max-h-52 overflow-y-auto rounded-xl border border-border/30 bg-muted/10 divide-y divide-border/20">
                 {Array.from({ length: end - start + 1 }, (_, i) => start + i).map(ep => {
                     const isWatched = ep <= watched;
                     const isSel = ep === selected;
                     return (
-                        <button key={ep} onClick={() => onSelect(ep)}
+                        <button
+                            key={ep}
+                            ref={isSel ? selRef : undefined}
+                            onClick={() => onSelect(ep)}
                             data-testid={`button-episode-${ep}`}
-                            title={`Episode ${ep}${isWatched ? " (watched)" : ""}`}
-                            className={`h-8 rounded-md text-xs font-semibold transition-all ${isSel
-                                ? "bg-primary text-primary-foreground shadow-neon ring-2 ring-primary/30"
-                                : isWatched
-                                    ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/20"
-                                    : "bg-muted/40 text-muted-foreground hover:bg-muted/70 hover:text-foreground border border-border/30"
-                            }`}>{ep}</button>
+                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-all hover:bg-muted/40 ${
+                                isSel
+                                    ? "bg-primary/15 border-l-2 border-primary text-primary font-semibold"
+                                    : isWatched
+                                        ? "text-muted-foreground/70"
+                                        : "text-foreground"
+                            }`}
+                        >
+                            <span className={`text-xs font-mono w-8 shrink-0 ${isSel ? "text-primary" : "text-muted-foreground/60"}`}>
+                                {ep}
+                            </span>
+                            <span className="flex-1 truncate">Episode {ep}</span>
+                            {isWatched && !isSel && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/60 shrink-0" />
+                            )}
+                            {isSel && (
+                                <span className="flex items-center gap-1 text-[10px] text-primary/80 shrink-0">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                                    Playing
+                                </span>
+                            )}
+                        </button>
                     );
                 })}
             </div>
@@ -279,44 +532,27 @@ function EpisodeGrid({ total, watched, selected, onSelect }: {
     );
 }
 
-
 // ── Stream Extraction Panel ───────────────────────────────────────────────────
 
 const EXTRACT_LOGS = [
-    "Launching browser…", "Loading episode page…",
-    "Connecting to stream server…", "Intercepting network requests…",
+    "Fetching stream servers…",
+    "Connecting to video host…",
+    "Intercepting network requests…",
     "Decoding video stream…",
+    "Almost there…",
 ];
 
 type ExState = "idle" | "extracting" | "ready" | "error";
 
 function StreamPanel({
-    gogoId,
-    animeTitle,
-    episode,
-    watched,
-    totalEps,
-    malId,
-    anilistId,
-    isDub,
-    aniwavesAnimeId,
-    aniwavesSlug,
-    onEpisodeChange,
-    onChangeSource,
-    onAniwavesFound,
+    gogoId, animeTitle, episode, watched, totalEps,
+    malId, anilistId, isDub, aniwavesAnimeId, aniwavesSlug,
+    onEpisodeChange, onChangeSource, onAniwavesFound,
 }: {
-    gogoId: string;
-    animeTitle: string;
-    episode: number;
-    watched: number;
-    totalEps: number;
-    malId?: number | null;
-    anilistId?: number | null;
-    isDub?: boolean;
-    aniwavesAnimeId?: string;
-    aniwavesSlug?: string;
-    onEpisodeChange: (ep: number) => void;
-    onChangeSource: () => void;
+    gogoId: string; animeTitle: string; episode: number; watched: number; totalEps: number;
+    malId?: number | null; anilistId?: number | null; isDub?: boolean;
+    aniwavesAnimeId?: string; aniwavesSlug?: string;
+    onEpisodeChange: (ep: number) => void; onChangeSource: () => void;
     onAniwavesFound?: (animeId: string, slug: string) => void;
 }) {
     const [state, setState] = useState<ExState>("idle");
@@ -329,8 +565,7 @@ function StreamPanel({
         setStreamResult(null);
         setError("");
         setLogIdx(0);
-
-        const timer = setInterval(() => setLogIdx(i => (i + 1) % EXTRACT_LOGS.length), 2800);
+        const timer = setInterval(() => setLogIdx(i => (i + 1) % EXTRACT_LOGS.length), 2500);
         try {
             let url: string;
             if (isDub) {
@@ -359,57 +594,63 @@ function StreamPanel({
             setError(err.message || "Unknown error");
             setState("error");
         }
-    }, [gogoId, animeTitle, episode, isDub, malId]);
+    }, [gogoId, animeTitle, episode, isDub, aniwavesAnimeId, aniwavesSlug]);
 
     useEffect(() => { extract(); }, [gogoId, episode, isDub]);
 
     return (
         <div className="space-y-4">
+            {/* Prev / Next */}
             <div className="flex items-center justify-between gap-2">
                 <Button variant="outline" size="sm" disabled={episode <= 1}
                     onClick={() => onEpisodeChange(episode - 1)}
-                    className="gap-1.5" data-testid="button-prev-episode">
+                    className="gap-1.5 h-8" data-testid="button-prev-episode">
                     <ChevronLeft className="w-3.5 h-3.5" /> Prev
                 </Button>
-                <span className="text-sm text-muted-foreground font-medium">Episode {episode}</span>
+                <span className="text-sm font-semibold">Episode {episode}</span>
                 <Button variant="outline" size="sm" disabled={episode >= totalEps}
                     onClick={() => onEpisodeChange(episode + 1)}
-                    className="gap-1.5" data-testid="button-next-episode">
+                    className="gap-1.5 h-8" data-testid="button-next-episode">
                     Next <ChevronRight className="w-3.5 h-3.5" />
                 </Button>
             </div>
 
+            {/* Extracting state */}
             {state === "extracting" && (
-                <div className="aspect-video rounded-xl border border-border/50 bg-black flex flex-col items-center justify-center gap-4 p-6">
+                <div className="aspect-video rounded-xl border border-border/40 bg-black flex flex-col items-center justify-center gap-5">
                     <div className="relative">
-                        <div className="w-16 h-16 rounded-full border-2 border-primary/20 flex items-center justify-center">
-                            <Loader2 className="w-7 h-7 animate-spin text-primary" />
+                        <div className="w-14 h-14 rounded-full border-2 border-primary/20 flex items-center justify-center">
+                            <Loader2 className="w-6 h-6 animate-spin text-primary" />
                         </div>
-                        <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-primary animate-pulse" />
+                        <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-primary animate-pulse" />
                     </div>
-                    <div className="text-center space-y-1">
-                        <p className="text-sm font-semibold">Extracting stream</p>
+                    <div className="text-center space-y-1.5">
+                        <p className="text-sm font-semibold text-white">Loading stream</p>
                         <p className="text-xs text-muted-foreground font-mono">{EXTRACT_LOGS[logIdx]}</p>
                     </div>
-                    <p className="text-[11px] text-muted-foreground/50">Takes 5–15 seconds…</p>
+                    <div className="w-48 h-0.5 bg-muted/30 rounded-full overflow-hidden">
+                        <div className="h-full bg-primary/60 rounded-full animate-pulse w-2/3" />
+                    </div>
                 </div>
             )}
 
+            {/* Player */}
             {state === "ready" && streamResult && (
                 <HlsPlayer
                     streamResult={streamResult}
                     malId={malId}
                     anilistId={anilistId}
                     episode={episode}
-                    onError={() => { setError("HLS playback error. Try re-extracting."); setState("error"); }}
+                    onError={() => { setError("Playback error. Try retrying."); setState("error"); }}
                 />
             )}
 
+            {/* Error state */}
             {state === "error" && (
                 <div className="aspect-video rounded-xl border border-orange-500/20 bg-black flex flex-col items-center justify-center gap-4 p-6 text-center">
                     <AlertTriangle className="h-10 w-10 text-orange-400 opacity-60" />
                     <div>
-                        <p className="font-semibold">Stream failed</p>
+                        <p className="font-semibold text-white">Stream failed</p>
                         <p className="text-xs text-muted-foreground mt-1 max-w-xs line-clamp-3">{error}</p>
                     </div>
                     <div className="flex gap-2 flex-wrap justify-center">
@@ -423,21 +664,24 @@ function StreamPanel({
                 </div>
             )}
 
+            {/* Episode list */}
             <div className="space-y-2">
                 <div className="flex items-center justify-between">
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Episodes</p>
-                    <button onClick={onChangeSource}
+                    <button
+                        onClick={onChangeSource}
                         className="text-[11px] text-muted-foreground/60 hover:text-primary transition-colors"
-                        data-testid="button-change-gogo-source">
+                        data-testid="button-change-gogo-source"
+                    >
                         Change source
                     </button>
                 </div>
-                <EpisodeGrid total={totalEps} watched={watched} selected={episode} onSelect={onEpisodeChange} />
+                <EpisodeList total={totalEps} watched={watched} selected={episode} onSelect={onEpisodeChange} />
             </div>
 
             <p className="text-[11px] text-muted-foreground/40 flex items-center gap-1">
                 <Wifi className="w-3 h-3" />
-                Sourced from Gogoanime via Puppeteer · Content belongs to respective rights holders.
+                Sub via Gogoanime · Dub via Aniwaves · Content belongs to respective rights holders.
             </p>
         </div>
     );
@@ -455,7 +699,6 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
     const [epInfoLoading, setEpInfoLoading] = useState(false);
     const [selectedEp, setSelectedEp] = useState(1);
     const [lang, setLang] = useState<"sub" | "dub">("sub");
-    // Aniwaves dub: cache the slug+id so we only look them up once per anime
     const [aniwavesInfo, setAniwavesInfo] = useState<{ animeId: string; slug: string } | null>(null);
 
     const doSearch = useCallback(async (q: string) => {
@@ -486,7 +729,6 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
 
     const goBack = () => { setGogoMatch(null); setEpInfo(null); setLang("sub"); setAniwavesInfo(null); };
 
-    // Match the Gogoanime result to a list entry (for watched progress / AniSkip IDs)
     const listAnime = useMemo(() => {
         if (!gogoMatch) return null;
         const t = gogoMatch.title.toLowerCase();
@@ -497,7 +739,6 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
         ) || null;
     }, [gogoMatch, animeList]);
 
-    // Sub uses Gogoanime · Dub uses AllAnime (always available to try)
     const activeGogoId = gogoMatch?.id || "";
     const totalEps = epInfo?.end || listAnime?.totalEpisodes || 24;
 
@@ -513,7 +754,7 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
 
             {gogoMatch ? (
                 <div className="space-y-4">
-                    {/* Back + header */}
+                    {/* Header */}
                     <div className="flex items-center gap-3 flex-wrap">
                         <Button variant="ghost" size="sm" onClick={goBack}
                             className="gap-1.5 -ml-2 h-8 text-muted-foreground hover:text-foreground shrink-0"
@@ -529,25 +770,24 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                             )}
                             {epInfo && !epInfoLoading && (
                                 <p className="text-[11px] text-muted-foreground">
-                                    {epInfo.end} episodes · Sub &amp; Dub
+                                    {epInfo.end} episodes · Sub &amp; Dub available
                                 </p>
                             )}
                         </div>
 
                         {/* Sub / Dub toggle */}
-                        <div className="flex items-center gap-1 shrink-0">
-                            <button onClick={() => { if (lang !== "sub") { setLang("sub"); setSelectedEp(1); } }} data-testid="button-type-sub"
-                                className={`px-3 py-1 rounded-l-lg rounded-r-none border text-xs font-semibold transition-all ${lang === "sub" ? "bg-primary text-white border-primary" : "bg-muted/40 border-border/40 text-muted-foreground hover:text-foreground"}`}>
+                        <div className="flex items-center shrink-0 rounded-lg border border-border/50 overflow-hidden">
+                            <button
+                                onClick={() => { if (lang !== "sub") { setLang("sub"); setSelectedEp(1); } }}
+                                data-testid="button-type-sub"
+                                className={`px-3 py-1.5 text-xs font-semibold transition-all ${lang === "sub" ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground hover:bg-muted/40"}`}>
                                 SUB
                             </button>
+                            <div className="w-px h-4 bg-border/50" />
                             <button
                                 onClick={() => { if (lang !== "dub") { setLang("dub"); setSelectedEp(1); } }}
                                 data-testid="button-type-dub"
-                                title="Switch to English dub"
-                                className={`px-3 py-1 rounded-r-lg rounded-l-none border text-xs font-semibold transition-all ${
-                                    lang === "dub" ? "bg-primary text-white border-primary"
-                                    : "bg-muted/40 border-border/40 text-muted-foreground hover:text-foreground"
-                                }`}>
+                                className={`px-3 py-1.5 text-xs font-semibold transition-all ${lang === "dub" ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground hover:bg-muted/40"}`}>
                                 DUB
                             </button>
                         </div>
@@ -572,7 +812,7 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                 </div>
             ) : (
                 <>
-                    {/* Direct Gogoanime search */}
+                    {/* Search */}
                     <div className="flex gap-2 max-w-sm">
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -582,7 +822,8 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                                 onChange={e => setSearch(e.target.value)}
                                 onKeyDown={e => e.key === "Enter" && doSearch(search)}
                                 className="pl-9 h-10 rounded-xl border-border/50 bg-muted/30"
-                                data-testid="input-watch-search" />
+                                data-testid="input-watch-search"
+                            />
                         </div>
                         <Button variant="outline" onClick={() => doSearch(search)}
                             disabled={searching || !search.trim()}
@@ -596,7 +837,7 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                             Search any anime title to start watching.
                         </p>
                     )}
-                    {searching && <p className="text-xs text-muted-foreground py-1">Searching Gogoanime…</p>}
+                    {searching && <p className="text-xs text-muted-foreground py-1">Searching…</p>}
                     {searched && !searching && results.length === 0 && (
                         <Card className="bg-muted/30 border-dashed">
                             <CardContent className="flex flex-col items-center justify-center p-10 text-center text-muted-foreground gap-2">
@@ -609,10 +850,8 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                     {results.length > 0 && (
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                             {results.map(r => {
-                                const listEntry = animeList.find(a =>
-                                    a.title.toLowerCase() === r.title.toLowerCase()
-                                );
-                                const watched = listEntry?.episodesWatched || 0;
+                                const listEntry = animeList.find(a => a.title.toLowerCase() === r.title.toLowerCase());
+                                const watchedEps = listEntry?.episodesWatched || 0;
                                 return (
                                     <button key={r.id} onClick={() => selectMatch(r)}
                                         data-testid={`button-watch-result-${r.id}`}
@@ -635,7 +874,7 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                                         </div>
                                         <div className="p-2">
                                             <p className="text-xs font-semibold line-clamp-2 leading-tight">{r.title}</p>
-                                            {watched > 0 && <p className="text-[10px] text-muted-foreground mt-0.5">{watched} ep watched</p>}
+                                            {watchedEps > 0 && <p className="text-[10px] text-muted-foreground mt-0.5">{watchedEps} ep watched</p>}
                                         </div>
                                     </button>
                                 );
