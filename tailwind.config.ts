@@ -108,6 +108,11 @@ export default {
             transform: "translateY(0)",
           },
         },
+        "ping-once": {
+          "0%": { opacity: "1", transform: "scale(1)" },
+          "50%": { opacity: "0.8", transform: "scale(1.15)" },
+          "100%": { opacity: "0", transform: "scale(0.9)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -115,6 +120,7 @@ export default {
         "fade-in": "fade-in 0.5s ease-out",
         "scale-in": "scale-in 0.3s ease-out",
         "slide-up": "slide-up 0.3s ease-out",
+        "ping-once": "ping-once 0.6s ease-out forwards",
       },
       backgroundImage: {
         "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
