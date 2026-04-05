@@ -192,12 +192,8 @@ const Footer = () => {
 
         {/* Bottom Bar */}
         <div className="mt-8 pt-5 border-t border-border/50">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-3 text-xs text-muted-foreground">
+          <div className="flex items-center justify-center text-xs text-muted-foreground">
             <p>© {new Date().getFullYear()} AniCircle. All rights reserved.</p>
-            <p>
-              Built with ❤️ by{" "}
-              <span className="text-violet-400 font-medium">Pranav Borse</span>
-            </p>
           </div>
         </div>
       </div>
