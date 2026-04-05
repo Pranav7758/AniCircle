@@ -704,6 +704,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/admin/feedback", requireAuth, async (req: any, res) => {
+    if (req.userEmail !== "borsepranav700@gmail.com") {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    try {
+      const all = await storage.getAllFeedback();
+      res.json(all);
+    } catch (err: any) {
+      res.status(500).json({ error: "Failed to fetch feedback" });
+    }
+  });
+
   app.post("/api/feedback", async (req, res) => {
     try {
       const { type, name, email, message } = req.body;

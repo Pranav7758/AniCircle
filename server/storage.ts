@@ -37,6 +37,7 @@ export interface IStorage {
   logActivity(userId: string, type: string, animeTitle: string, coverImage?: string | null, seasonNumber?: number | null, rating?: number | null): Promise<void>;
 
   saveFeedback(data: InsertFeedback): Promise<Feedback>;
+  getAllFeedback(): Promise<Feedback[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -232,6 +233,10 @@ export class DatabaseStorage implements IStorage {
   async saveFeedback(data: InsertFeedback): Promise<Feedback> {
     const [result] = await db.insert(feedback).values(data).returning();
     return result;
+  }
+
+  async getAllFeedback(): Promise<Feedback[]> {
+    return db.select().from(feedback).orderBy(desc(feedback.createdAt));
   }
 }
 

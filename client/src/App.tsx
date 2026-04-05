@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import PublicProfile from "./pages/PublicProfile";
+import FeedbackAdmin from "./pages/FeedbackAdmin";
 import { Loader2 } from "lucide-react";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -64,6 +65,9 @@ function Router() {
       </Route>
       <Route path="/u/:shortId">
         {(params) => <PublicProfile />}
+      </Route>
+      <Route path="/admin/feedback">
+        <ProtectedRoute><FeedbackAdmin /></ProtectedRoute>
       </Route>
       <Route component={NotFound} />
     </Switch>

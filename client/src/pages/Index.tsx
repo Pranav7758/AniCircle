@@ -6,7 +6,7 @@ import { fetchAniList, GET_ANALYTICS_QUERY } from "@/services/anilist";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LogOut, Plus, Search, Sparkles, Trophy, Users, Settings, PieChart, Play, CheckCircle2, Clock, ArrowUpDown, Tag, Compass, Share2, Loader2 } from "lucide-react";
+import { LogOut, Plus, Search, Sparkles, Trophy, Users, Settings, PieChart, Play, CheckCircle2, Clock, ArrowUpDown, Tag, Compass, Share2, Loader2, Inbox } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import AnimeRanking from "@/components/AnimeRanking";
@@ -469,6 +469,18 @@ const Index = () => {
             </div>
             <div className="flex items-center gap-1.5">
               {user && <Notifications userId={user.id} />}
+              {user?.email === "borsepranav700@gmail.com" && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  title="Feedback Inbox"
+                  data-testid="button-feedback-inbox"
+                  className="h-8 w-8 hover:bg-muted/50 text-muted-foreground hover:text-violet-400 rounded-xl"
+                  onClick={() => window.location.href = "/admin/feedback"}
+                >
+                  <Inbox className="w-4 h-4" />
+                </Button>
+              )}
               {user?.shortId && (
                 <Button
                   variant="ghost"
