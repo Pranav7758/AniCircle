@@ -58,7 +58,7 @@ app.use((req, res, next) => {
   // Start background workers
   startAnimeChecker();
 
-  const port = 5000;
+  const port = parseInt(process.env.PORT || "5000", 10);
   server.listen({
     port,
     host: "0.0.0.0",

@@ -17,6 +17,17 @@ async function getChromiumPath(): Promise<string> {
       throw new Error("Chromium not available in this serverless environment. Set CHROMIUM_PATH env var.");
     }
   }
+  // Common Linux paths (Render, Ubuntu servers)
+  const { existsSync } = await import("fs");
+  const linuxPaths = [
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
+  ];
+  for (const p of linuxPaths) {
+    if (existsSync(p)) return p;
+  }
   return REPLIT_CHROMIUM;
 }
 
