@@ -240,7 +240,7 @@ export async function extractFromIframe(iframeSrc: string, referer: string): Pro
           streamUrl = url;
           streamType = "hls";
           console.log(`[Puppeteer] ✓ Captured HLS: ${url.substring(0, 100)}`);
-        } else if (url.includes(".mp4") && !url.includes("thumbnail") && !url.includes("poster")) {
+        } else if (/\.mp4(\?|#|$)/.test(url) && !url.includes("thumbnail") && !url.includes("poster")) {
           streamUrl = url;
           streamType = "mp4";
           console.log(`[Puppeteer] ✓ Captured MP4: ${url.substring(0, 100)}`);

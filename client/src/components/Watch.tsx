@@ -502,10 +502,10 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
     const [lang, setLang] = useState<"sub" | "dub">("sub");
     const [showMatchPanel, setShowMatchPanel] = useState(false);
 
+    const searchQuery = search.toLowerCase().trim();
     const filtered = useMemo(() => {
-        const q = search.toLowerCase().trim();
-        return q ? animeList.filter(a => a.title.toLowerCase().includes(q)) : animeList;
-    }, [search, animeList]);
+        return searchQuery ? animeList.filter(a => a.title.toLowerCase().includes(searchQuery)) : [];
+    }, [searchQuery, animeList]);
 
     const selectAnime = (anime: Anime) => {
         setSelectedAnime(anime);
@@ -635,6 +635,8 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                                 <p className="text-xs">Add some anime first, then come back here to watch.</p>
                             </CardContent>
                         </Card>
+                    ) : !searchQuery ? (
+                        <p className="text-xs text-muted-foreground/50 text-center pt-2">Search your list to pick an anime to watch.</p>
                     ) : filtered.length === 0 ? (
                         <Card className="bg-muted/30 border-dashed">
                             <CardContent className="flex flex-col items-center justify-center p-10 text-center text-muted-foreground gap-2">
