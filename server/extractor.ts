@@ -202,9 +202,13 @@ export async function extractStream(episodeUrl: string): Promise<StreamResult> {
   throw new Error(`No valid stream URL captured from ${iframeUrls.length} server(s). All servers failed.`);
 }
 
+// Cache for dub streams (keyed by animeId+episode)
+const dubStreamCache = new Map<string, { result: StreamResult; at: number }>();
+
 // ── Aniwaves Dub Extractor ────────────────────────────────────────────────────
-// Loads the aniwaves dub page in Puppeteer, intercepts the ajax/sources call
-// to get the server iframe URL, then extracts the HLS/MP4 stream from it.
+// Uses plain HTTP for all aniwaves API steps, then only launches Puppeteer
+// for the final video-player iframe to intercept the HLS/MP4 stream.
+// This is much faster than loading the full aniwaves page in a browser.
 
 export async function extractDubFromAniwaves(
   animeId: string,  // numeric aniwaves anime ID e.g. "80015"
@@ -213,103 +217,90 @@ export async function extractDubFromAniwaves(
 ): Promise<StreamResult> {
   const ANIWAVES = "https://aniwaves.ru";
   const pageUrl = `${ANIWAVES}/watch/${slug}/ep-${episode}`;
-  console.log(`[Aniwaves] Loading dub page: ${pageUrl}`);
+  const cacheKey = `${animeId}:${episode}`;
 
-  let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
-  try {
-    browser = await puppeteer.launch({
-      executablePath: CHROMIUM_PATH,
-      headless: true,
-      args: [
-        "--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage",
-        "--disable-gpu", "--no-first-run", "--no-zygote", "--single-process",
-        "--disable-extensions", "--disable-blink-features=AutomationControlled",
-        "--window-size=1280,720",
-      ],
-    });
-
-    const page = await browser.newPage();
-    await page.setUserAgent(USER_AGENT);
-    await page.evaluateOnNewDocument(() => {
-      Object.defineProperty(navigator, "webdriver", { get: () => undefined });
-    });
-
-    // Step 1: Load the page and wait for the server list to render
-    try {
-      await page.goto(pageUrl, { waitUntil: "networkidle2", timeout: 30000 });
-    } catch {
-      // may timeout — continue anyway
-    }
-    // Give the server list AJAX time to fire and render
-    await new Promise(r => setTimeout(r, 4000));
-
-    // Step 2: Pull the server list for this episode from the page context
-    // The page fetches /ajax/server/list?servers={animeId}&eps={episode}
-    const serverList = await page.evaluate(async (aid: string, ep: number) => {
-      const res = await fetch(`/ajax/server/list?servers=${aid}&eps=${ep}`, {
-        headers: { "X-Requested-With": "XMLHttpRequest" },
-      });
-      const j = await res.json() as any;
-      return j.result as string;
-    }, animeId, episode);
-
-    if (!serverList) throw new Error("No server list returned from aniwaves");
-
-    // Step 3: Parse the server list HTML to find dub server link-ids
-    const dubLinks: { name: string; linkId: string }[] = await page.evaluate((html: string) => {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, "text/html");
-      const links: { name: string; linkId: string }[] = [];
-      doc.querySelectorAll(".type").forEach(typeEl => {
-        const type = typeEl.getAttribute("data-type");
-        if (type !== "dub") return;
-        typeEl.querySelectorAll("li[data-link-id]").forEach(li => {
-          const linkId = li.getAttribute("data-link-id") || "";
-          const name = li.textContent?.trim() || "";
-          if (linkId) links.push({ name, linkId });
-        });
-      });
-      return links;
-    }, serverList);
-
-    if (!dubLinks.length) throw new Error("No dub servers found for this episode on aniwaves");
-    console.log(`[Aniwaves] Found ${dubLinks.length} dub server(s):`, dubLinks.map(l => l.name).join(", "));
-
-    // Step 4: For each dub server, call ajax/sources to get the iframe URL
-    for (const server of dubLinks) {
-      try {
-        console.log(`[Aniwaves] Trying dub server: ${server.name}`);
-        const sourcesData = await page.evaluate(async (linkId: string) => {
-          const res = await fetch(`/ajax/sources?id=${linkId}&asi=0&autoPlay=0`, {
-            headers: { "X-Requested-With": "XMLHttpRequest" },
-          });
-          return res.json() as Promise<any>;
-        }, server.linkId);
-
-        if (!sourcesData || sourcesData.status !== 200 || !sourcesData.result?.url) {
-          console.warn(`[Aniwaves] ${server.name}: sources returned status ${sourcesData?.status}`);
-          continue;
-        }
-
-        const iframeUrl: string = sourcesData.result.url;
-        console.log(`[Aniwaves] ${server.name} iframe: ${iframeUrl.substring(0, 80)}`);
-
-        // Step 5: Extract stream from the iframe using the existing extractor
-        const result = await extractFromIframe(iframeUrl, pageUrl);
-        if (result) {
-          console.log(`[Aniwaves] ✓ Got stream from ${server.name}`);
-          return result;
-        }
-        console.warn(`[Aniwaves] ${server.name}: no stream captured`);
-      } catch (err: any) {
-        console.warn(`[Aniwaves] ${server.name} failed: ${err.message}`);
-      }
-    }
-
-    throw new Error(`All ${dubLinks.length} aniwaves dub server(s) failed`);
-  } finally {
-    if (browser) { try { await browser.close(); } catch {} }
+  // Check dub cache first
+  const cached = dubStreamCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
+    console.log(`[Aniwaves] Cache hit: ep ${episode}`);
+    return cached.result;
   }
+
+  console.log(`[Aniwaves] Fetching dub servers for ep ${episode} (animeId=${animeId})`);
+
+  // Step 1: Get the server list via plain HTTP (no browser needed)
+  const serverListRes = await fetch(
+    `${ANIWAVES}/ajax/server/list?servers=${animeId}&eps=${episode}`,
+    {
+      headers: {
+        "User-Agent": USER_AGENT,
+        "X-Requested-With": "XMLHttpRequest",
+        "Referer": pageUrl,
+      },
+      signal: AbortSignal.timeout(10000),
+    }
+  );
+  if (!serverListRes.ok) throw new Error(`Server list HTTP ${serverListRes.status}`);
+  const serverListJson = await serverListRes.json() as any;
+  const serverListHtml: string = serverListJson?.result || "";
+  if (!serverListHtml) throw new Error("Empty server list from aniwaves");
+
+  // Step 2: Parse HTML to find dub server link-ids
+  const $sl = cheerio.load(serverListHtml);
+  const dubLinks: { name: string; linkId: string }[] = [];
+  $sl(".type[data-type='dub'] li[data-link-id]").each((_, el) => {
+    const linkId = $sl(el).attr("data-link-id") || "";
+    const name = $sl(el).text().trim();
+    if (linkId) dubLinks.push({ name, linkId });
+  });
+
+  if (!dubLinks.length) throw new Error("No dub servers found for this episode on aniwaves");
+  console.log(`[Aniwaves] Found ${dubLinks.length} dub server(s):`, dubLinks.map(l => l.name).join(", "));
+
+  // Step 3: For each dub server, get the iframe URL via plain HTTP, then extract stream
+  for (const server of dubLinks) {
+    try {
+      console.log(`[Aniwaves] Trying dub server: ${server.name}`);
+
+      // Get iframe URL via plain HTTP (no browser needed)
+      const sourcesRes = await fetch(
+        `${ANIWAVES}/ajax/sources?id=${encodeURIComponent(server.linkId)}&asi=0&autoPlay=0`,
+        {
+          headers: {
+            "User-Agent": USER_AGENT,
+            "X-Requested-With": "XMLHttpRequest",
+            "Referer": pageUrl,
+          },
+          signal: AbortSignal.timeout(10000),
+        }
+      );
+      if (!sourcesRes.ok) {
+        console.warn(`[Aniwaves] ${server.name}: sources HTTP ${sourcesRes.status}`);
+        continue;
+      }
+      const sourcesData = await sourcesRes.json() as any;
+      if (!sourcesData || sourcesData.status !== 200 || !sourcesData.result?.url) {
+        console.warn(`[Aniwaves] ${server.name}: sources status ${sourcesData?.status}`);
+        continue;
+      }
+
+      const iframeUrl: string = sourcesData.result.url;
+      console.log(`[Aniwaves] ${server.name} iframe: ${iframeUrl.substring(0, 80)}`);
+
+      // Step 4: Only now launch Puppeteer — just for the video player iframe
+      const result = await extractFromIframe(iframeUrl, pageUrl);
+      if (result) {
+        console.log(`[Aniwaves] ✓ Got stream from ${server.name}`);
+        dubStreamCache.set(cacheKey, { result, at: Date.now() });
+        return result;
+      }
+      console.warn(`[Aniwaves] ${server.name}: no stream captured from iframe`);
+    } catch (err: any) {
+      console.warn(`[Aniwaves] ${server.name} failed: ${err.message}`);
+    }
+  }
+
+  throw new Error(`All ${dubLinks.length} aniwaves dub server(s) failed`);
 }
 
 // ── Aniwaves Search ──────────────────────────────────────────────────────────
