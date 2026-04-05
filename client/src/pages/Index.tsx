@@ -20,6 +20,8 @@ import Radar from "@/components/Radar";
 import AnalyticsDashboard from "@/components/AnalyticsDashboard";
 import Discover from "@/components/Discover";
 import Watch from "@/components/Watch";
+import Footer from "@/components/Footer";
+import SuggestionPopup from "@/components/SuggestionPopup";
 
 interface Anime {
   id: string;
@@ -881,6 +883,9 @@ const Index = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      <Footer />
+      <SuggestionPopup />
     </div>
   );
 };

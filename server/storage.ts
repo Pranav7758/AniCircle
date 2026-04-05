@@ -1,9 +1,10 @@
 import { 
-  profiles, anime, friends, notifications, activityFeed,
+  profiles, anime, friends, notifications, activityFeed, feedback,
   type Profile, type InsertProfile, 
   type Anime, type InsertAnime,
   type Friend, type InsertFriend,
-  type Notification, type InsertNotification
+  type Notification, type InsertNotification,
+  type Feedback, type InsertFeedback
 } from "../shared/schema";
 import { db } from "./db";
 import { eq, or, and, desc, asc, inArray } from "drizzle-orm";
@@ -34,6 +35,8 @@ export interface IStorage {
 
   getActivityFeed(friendIds: string[]): Promise<any[]>;
   logActivity(userId: string, type: string, animeTitle: string, coverImage?: string | null, seasonNumber?: number | null, rating?: number | null): Promise<void>;
+
+  saveFeedback(data: InsertFeedback): Promise<Feedback>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -224,6 +227,11 @@ export class DatabaseStorage implements IStorage {
       seasonNumber: seasonNumber ?? null,
       rating: rating ?? null,
     });
+  }
+
+  async saveFeedback(data: InsertFeedback): Promise<Feedback> {
+    const [result] = await db.insert(feedback).values(data).returning();
+    return result;
   }
 }
 

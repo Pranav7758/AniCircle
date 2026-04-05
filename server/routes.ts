@@ -704,6 +704,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/feedback", async (req, res) => {
+    try {
+      const { type, name, email, message } = req.body;
+      if (!message || !type) {
+        return res.status(400).json({ error: "Message and type are required" });
+      }
+      const saved = await storage.saveFeedback({ type, name: name || null, email: email || null, message });
+      res.json({ success: true, id: saved.id });
+    } catch (err: any) {
+      console.error("Feedback error:", err?.message);
+      res.status(500).json({ error: "Failed to save feedback" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
