@@ -22,6 +22,7 @@ import Discover from "@/components/Discover";
 import Watch from "@/components/Watch";
 import Footer from "@/components/Footer";
 import SuggestionPopup from "@/components/SuggestionPopup";
+import FloatingSocialBar from "@/components/FloatingSocialBar";
 
 interface Anime {
   id: string;
@@ -898,6 +899,7 @@ const Index = () => {
 
       <Footer />
       <SuggestionPopup />
+      <FloatingSocialBar />
     </div>
   );
 };
