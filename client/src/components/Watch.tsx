@@ -703,28 +703,57 @@ function StreamPanel({
                 return;
             }
 
-            // ── Original Gogoanime / Puppeteer path ──────────────────────────
-            let url: string;
-            if (isDub) {
-                const params = new URLSearchParams({ episode: String(episode) });
-                if (aniwavesAnimeId && aniwavesSlug) {
-                    params.set("animeId", aniwavesAnimeId);
-                    params.set("slug", aniwavesSlug);
+            // ── Gogoanime / Puppeteer path (with AllAnime fallback) ──────────
+            let puppeteerOk = false;
+            try {
+                let url: string;
+                if (isDub) {
+                    const params = new URLSearchParams({ episode: String(episode) });
+                    if (aniwavesAnimeId && aniwavesSlug) {
+                        params.set("animeId", aniwavesAnimeId);
+                        params.set("slug", aniwavesSlug);
+                    } else {
+                        params.set("title", animeTitle);
+                    }
+                    url = `/api/extract/dub?${params}`;
                 } else {
-                    params.set("title", animeTitle);
+                    url = `/api/extract?id=${encodeURIComponent(gogoId)}&episode=${episode}`;
                 }
-                url = `/api/extract/dub?${params}`;
-            } else {
-                url = `/api/extract?id=${encodeURIComponent(gogoId)}&episode=${episode}`;
-            }
-            const res = await fetch(url);
-            const json = await res.json();
-            clearInterval(timer);
-            if (!res.ok) throw new Error(json.message || json.error || "Extraction failed");
-            setStreamResult(json);
-            setState("ready");
-            if (isDub && json.animeId && json.slug) {
-                onAniwavesFound?.(json.animeId, json.slug);
+                const res = await fetch(url);
+                const json = await res.json();
+                if (res.ok) {
+                    clearInterval(timer);
+                    setStreamResult(json);
+                    setState("ready");
+                    if (isDub && json.animeId && json.slug) {
+                        onAniwavesFound?.(json.animeId, json.slug);
+                    }
+                    puppeteerOk = true;
+                }
+            } catch {}
+
+            // If Puppeteer extraction failed (e.g. Chromium not available on server),
+            // fall back to AllAnime which uses a plain API — no Puppeteer needed.
+            if (!puppeteerOk) {
+                const params = new URLSearchParams({
+                    title: animeTitle,
+                    episode: String(episode),
+                    type: isDub ? "dub" : "sub",
+                });
+                const res = await fetch(`/api/watch/sources?${params}`);
+                const json = await res.json();
+                clearInterval(timer);
+                if (!res.ok) throw new Error(json.error || "Playback failed");
+                const sources: AllAnimeSource[] = json.sources || [];
+                if (sources.length === 0) throw new Error("No sources available for this episode");
+                const direct = sources.find(s => s.type === "hls" || s.type === "mp4");
+                if (direct) {
+                    setStreamResult({ stream: direct.url, type: direct.type as "hls" | "mp4", source: direct.sourceName });
+                    setState("ready");
+                } else {
+                    setAllAnimeSources(sources);
+                    setState("ready");
+                }
             }
         } catch (err: any) {
             clearInterval(timer);
