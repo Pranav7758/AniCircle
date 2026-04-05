@@ -202,6 +202,145 @@ export async function extractStream(episodeUrl: string): Promise<StreamResult> {
   throw new Error(`No valid stream URL captured from ${iframeUrls.length} server(s). All servers failed.`);
 }
 
+// ── Aniwaves Dub Extractor ────────────────────────────────────────────────────
+// Loads the aniwaves dub page in Puppeteer, intercepts the ajax/sources call
+// to get the server iframe URL, then extracts the HLS/MP4 stream from it.
+
+export async function extractDubFromAniwaves(
+  animeId: string,  // numeric aniwaves anime ID e.g. "80015"
+  episode: number,
+  slug: string,     // url slug e.g. "darling-in-the-franxx-80015"
+): Promise<StreamResult> {
+  const ANIWAVES = "https://aniwaves.ru";
+  const pageUrl = `${ANIWAVES}/watch/${slug}/ep-${episode}`;
+  console.log(`[Aniwaves] Loading dub page: ${pageUrl}`);
+
+  let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
+  try {
+    browser = await puppeteer.launch({
+      executablePath: CHROMIUM_PATH,
+      headless: true,
+      args: [
+        "--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage",
+        "--disable-gpu", "--no-first-run", "--no-zygote", "--single-process",
+        "--disable-extensions", "--disable-blink-features=AutomationControlled",
+        "--window-size=1280,720",
+      ],
+    });
+
+    const page = await browser.newPage();
+    await page.setUserAgent(USER_AGENT);
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+    });
+
+    // Step 1: Load the page and wait for the server list to render
+    try {
+      await page.goto(pageUrl, { waitUntil: "networkidle2", timeout: 30000 });
+    } catch {
+      // may timeout — continue anyway
+    }
+    // Give the server list AJAX time to fire and render
+    await new Promise(r => setTimeout(r, 4000));
+
+    // Step 2: Pull the server list for this episode from the page context
+    // The page fetches /ajax/server/list?servers={animeId}&eps={episode}
+    const serverList = await page.evaluate(async (aid: string, ep: number) => {
+      const res = await fetch(`/ajax/server/list?servers=${aid}&eps=${ep}`, {
+        headers: { "X-Requested-With": "XMLHttpRequest" },
+      });
+      const j = await res.json() as any;
+      return j.result as string;
+    }, animeId, episode);
+
+    if (!serverList) throw new Error("No server list returned from aniwaves");
+
+    // Step 3: Parse the server list HTML to find dub server link-ids
+    const dubLinks: { name: string; linkId: string }[] = await page.evaluate((html: string) => {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
+      const links: { name: string; linkId: string }[] = [];
+      doc.querySelectorAll(".type").forEach(typeEl => {
+        const type = typeEl.getAttribute("data-type");
+        if (type !== "dub") return;
+        typeEl.querySelectorAll("li[data-link-id]").forEach(li => {
+          const linkId = li.getAttribute("data-link-id") || "";
+          const name = li.textContent?.trim() || "";
+          if (linkId) links.push({ name, linkId });
+        });
+      });
+      return links;
+    }, serverList);
+
+    if (!dubLinks.length) throw new Error("No dub servers found for this episode on aniwaves");
+    console.log(`[Aniwaves] Found ${dubLinks.length} dub server(s):`, dubLinks.map(l => l.name).join(", "));
+
+    // Step 4: For each dub server, call ajax/sources to get the iframe URL
+    for (const server of dubLinks) {
+      try {
+        console.log(`[Aniwaves] Trying dub server: ${server.name}`);
+        const sourcesData = await page.evaluate(async (linkId: string) => {
+          const res = await fetch(`/ajax/sources?id=${linkId}&asi=0&autoPlay=0`, {
+            headers: { "X-Requested-With": "XMLHttpRequest" },
+          });
+          return res.json() as Promise<any>;
+        }, server.linkId);
+
+        if (!sourcesData || sourcesData.status !== 200 || !sourcesData.result?.url) {
+          console.warn(`[Aniwaves] ${server.name}: sources returned status ${sourcesData?.status}`);
+          continue;
+        }
+
+        const iframeUrl: string = sourcesData.result.url;
+        console.log(`[Aniwaves] ${server.name} iframe: ${iframeUrl.substring(0, 80)}`);
+
+        // Step 5: Extract stream from the iframe using the existing extractor
+        const result = await extractFromIframe(iframeUrl, pageUrl);
+        if (result) {
+          console.log(`[Aniwaves] ✓ Got stream from ${server.name}`);
+          return result;
+        }
+        console.warn(`[Aniwaves] ${server.name}: no stream captured`);
+      } catch (err: any) {
+        console.warn(`[Aniwaves] ${server.name} failed: ${err.message}`);
+      }
+    }
+
+    throw new Error(`All ${dubLinks.length} aniwaves dub server(s) failed`);
+  } finally {
+    if (browser) { try { await browser.close(); } catch {} }
+  }
+}
+
+// ── Aniwaves Search ──────────────────────────────────────────────────────────
+// Searches aniwaves for an anime by title and returns {animeId, slug} for dub extraction.
+
+export async function searchAniwaves(title: string): Promise<{ animeId: string; slug: string; name: string } | null> {
+  const ANIWAVES = "https://aniwaves.ru";
+  const query = encodeURIComponent(title);
+  const searchUrl = `${ANIWAVES}/search?keyword=${query}&type=1`;
+  try {
+    const html = await fetchHtml(searchUrl, ANIWAVES);
+    const $ = cheerio.load(html);
+    const first = $(".film-list .item, .flw-item, .film_list-wrap .flw-item, .film-poster, .item").first();
+    // Try multiple selectors for the anime link
+    const link = $("a[href*='/watch/']").first();
+    if (!link.length) return null;
+    const href = link.attr("href") || "";
+    const slugMatch = href.match(/\/watch\/([^/?#]+)/);
+    if (!slugMatch) return null;
+    const slug = slugMatch[1];
+    const idMatch = slug.match(/-(\d+)$/);
+    if (!idMatch) return null;
+    const animeId = idMatch[1];
+    const name = link.attr("title") || link.text().trim() || title;
+    return { animeId, slug, name };
+  } catch (err: any) {
+    console.warn(`[Aniwaves search] ${err.message}`);
+    return null;
+  }
+}
+
 export async function extractFromIframe(iframeSrc: string, referer: string): Promise<StreamResult | null> {
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
 

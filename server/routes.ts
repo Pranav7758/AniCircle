@@ -415,7 +415,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ── Gogoanime Scraper Endpoints ──────────────────────────────────────────
   // Public endpoints — no auth needed.
 
-  const { searchGogoanime, getGogoEpisodeList, extractStream, buildEpisodeUrl, checkDubExists } = await import("./extractor.js");
+  const { searchGogoanime, getGogoEpisodeList, extractStream, buildEpisodeUrl, checkDubExists, extractDubFromAniwaves, searchAniwaves } = await import("./extractor.js");
 
   // Search anime on Gogoanime by title
   app.get("/api/gogoanime/search", async (req: any, res) => {
@@ -537,71 +537,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return json?.data?.episode?.sourceUrls || [];
   }
 
-  // ── AllAnime Dub Extraction ───────────────────────────────────────────────
-  // Searches AllAnime for a dub version of the show, then runs Puppeteer on
-  // the best iframe source to extract a direct HLS stream.
-  // GET /api/extract/dub?title=Naruto&episode=1&malId=20
+  // ── Aniwaves Dub Extraction ───────────────────────────────────────────────
+  // Searches aniwaves.ru for the show, then uses Puppeteer to load the dub
+  // page, grab the server iframe URL, and extract the HLS/MP4 stream.
+  // GET /api/extract/dub?title=Attack+on+Titan&episode=1
+  // GET /api/extract/dub?animeId=80015&slug=darling-in-the-franxx-80015&episode=1  (fast path)
 
   app.get("/api/extract/dub", async (req: any, res) => {
-    const { title, episode = "1", malId } = req.query;
-    if (!title) return res.status(400).json({ error: "title is required" });
-
-    const { extractFromIframe } = await import("./extractor.js");
+    const { title, episode = "1", animeId: rawAnimeId, slug: rawSlug } = req.query;
+    if (!title && (!rawAnimeId || !rawSlug)) {
+      return res.status(400).json({ error: "Provide title OR (animeId + slug)" });
+    }
 
     try {
-      // 1. Search AllAnime for the show
-      const results = await searchAllAnime(String(title));
-      let show = malId
-        ? results.find((s: any) => String(s.malId) === String(malId))
-        : null;
-      if (!show && results.length > 0) show = results[0];
-      if (!show) return res.status(404).json({ error: "Anime not found on AllAnime" });
+      let animeId = rawAnimeId ? String(rawAnimeId) : "";
+      let slug = rawSlug ? String(rawSlug) : "";
 
-      // 2. Get dub episode source URLs
-      const rawSources = await getAllAnimeEpisodeSources(show._id, String(episode), "dub");
-      if (!rawSources.length) {
-        return res.status(404).json({ error: `No dub sources for episode ${episode}` });
-      }
-
-      // 3. Decode & filter iframe sources
-      const SKIP = ["Yt-mp4", "Youtube-mp4"];
-      const sources: { url: string; name: string; priority: number }[] = [];
-      for (const s of rawSources) {
-        if (SKIP.includes(s.sourceName)) continue;
-        if (s.type !== "iframe") continue;
-        let url: string = s.sourceUrl;
-        if (url.startsWith("--")) {
-          const decoded = decodeAllAnimeUrl(url);
-          if (!decoded) continue;
-          url = decoded;
+      if (!animeId || !slug) {
+        console.log(`[extract/dub] Searching aniwaves for: ${title}`);
+        const found = await searchAniwaves(String(title));
+        if (!found) {
+          return res.status(404).json({ error: `"${title}" not found on aniwaves` });
         }
-        if (url.startsWith("//")) url = "https:" + url;
-        if (!url.startsWith("http")) continue;
-        sources.push({ url, name: s.sourceName, priority: s.priority ?? 0 });
-      }
-      sources.sort((a, b) => b.priority - a.priority);
-
-      if (!sources.length) {
-        return res.status(404).json({ error: "No valid dub iframe sources found" });
+        animeId = found.animeId;
+        slug = found.slug;
+        console.log(`[extract/dub] Found: ${found.name} → ${slug}`);
       }
 
-      // 4. Try each source with Puppeteer until a stream is captured
-      console.log(`[extract/dub] ${show.name} ep${episode} — trying ${sources.length} source(s)`);
-      let lastErr = "All dub sources failed";
-      for (const src of sources.slice(0, 5)) {
-        try {
-          console.log(`[extract/dub] Trying: ${src.name} → ${src.url.substring(0, 80)}`);
-          const result = await extractFromIframe(src.url, "https://allanime.to/");
-          if (result) {
-            console.log(`[extract/dub] ✓ Got stream from ${src.name}`);
-            return res.json(result);
-          }
-        } catch (err: any) {
-          lastErr = err.message || lastErr;
-          console.warn(`[extract/dub] ${src.name} failed: ${err.message}`);
-        }
-      }
-      res.status(500).json({ error: "Dub extraction failed", message: lastErr });
+      const result = await extractDubFromAniwaves(animeId, parseInt(String(episode)), slug);
+      res.json(result);
     } catch (err: any) {
       console.error("Dub extraction error:", err?.message);
       res.status(500).json({ error: "Dub extraction failed", message: err?.message });

@@ -297,6 +297,8 @@ function StreamPanel({
     malId,
     anilistId,
     isDub,
+    aniwavesAnimeId,
+    aniwavesSlug,
     onEpisodeChange,
     onChangeSource,
 }: {
@@ -308,6 +310,8 @@ function StreamPanel({
     malId?: number | null;
     anilistId?: number | null;
     isDub?: boolean;
+    aniwavesAnimeId?: string;
+    aniwavesSlug?: string;
     onEpisodeChange: (ep: number) => void;
     onChangeSource: () => void;
 }) {
@@ -326,8 +330,13 @@ function StreamPanel({
         try {
             let url: string;
             if (isDub) {
-                const params = new URLSearchParams({ title: animeTitle, episode: String(episode) });
-                if (malId) params.set("malId", String(malId));
+                const params = new URLSearchParams({ episode: String(episode) });
+                if (aniwavesAnimeId && aniwavesSlug) {
+                    params.set("animeId", aniwavesAnimeId);
+                    params.set("slug", aniwavesSlug);
+                } else {
+                    params.set("title", animeTitle);
+                }
                 url = `/api/extract/dub?${params}`;
             } else {
                 url = `/api/extract?id=${encodeURIComponent(gogoId)}&episode=${episode}`;
@@ -439,6 +448,8 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
     const [epInfoLoading, setEpInfoLoading] = useState(false);
     const [selectedEp, setSelectedEp] = useState(1);
     const [lang, setLang] = useState<"sub" | "dub">("sub");
+    // Aniwaves dub: cache the slug+id so we only look them up once per anime
+    const [aniwavesInfo, setAniwavesInfo] = useState<{ animeId: string; slug: string } | null>(null);
 
     const doSearch = useCallback(async (q: string) => {
         if (!q.trim()) return;
@@ -457,6 +468,7 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
         setLang("sub");
         setSelectedEp(1);
         setEpInfo(null);
+        setAniwavesInfo(null);
         setEpInfoLoading(true);
         try {
             const res = await fetch(`/api/gogoanime/episodes?id=${encodeURIComponent(result.id)}`);
@@ -465,7 +477,7 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
         setEpInfoLoading(false);
     };
 
-    const goBack = () => { setGogoMatch(null); setEpInfo(null); setLang("sub"); };
+    const goBack = () => { setGogoMatch(null); setEpInfo(null); setLang("sub"); setAniwavesInfo(null); };
 
     // Match the Gogoanime result to a list entry (for watched progress / AniSkip IDs)
     const listAnime = useMemo(() => {
@@ -544,6 +556,8 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                         malId={listAnime?.malId}
                         anilistId={listAnime?.anilistId}
                         isDub={lang === "dub"}
+                        aniwavesAnimeId={aniwavesInfo?.animeId}
+                        aniwavesSlug={aniwavesInfo?.slug}
                         onEpisodeChange={setSelectedEp}
                         onChangeSource={goBack}
                     />
