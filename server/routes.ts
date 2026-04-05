@@ -537,6 +537,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return json?.data?.episode?.sourceUrls || [];
   }
 
+  // ── AllAnime Dub Extraction ───────────────────────────────────────────────
+  // Searches AllAnime for a dub version of the show, then runs Puppeteer on
+  // the best iframe source to extract a direct HLS stream.
+  // GET /api/extract/dub?title=Naruto&episode=1&malId=20
+
+  app.get("/api/extract/dub", async (req: any, res) => {
+    const { title, episode = "1", malId } = req.query;
+    if (!title) return res.status(400).json({ error: "title is required" });
+
+    const { extractFromIframe } = await import("./extractor.js");
+
+    try {
+      // 1. Search AllAnime for the show
+      const results = await searchAllAnime(String(title));
+      let show = malId
+        ? results.find((s: any) => String(s.malId) === String(malId))
+        : null;
+      if (!show && results.length > 0) show = results[0];
+      if (!show) return res.status(404).json({ error: "Anime not found on AllAnime" });
+
+      // 2. Get dub episode source URLs
+      const rawSources = await getAllAnimeEpisodeSources(show._id, String(episode), "dub");
+      if (!rawSources.length) {
+        return res.status(404).json({ error: `No dub sources for episode ${episode}` });
+      }
+
+      // 3. Decode & filter iframe sources
+      const SKIP = ["Yt-mp4", "Youtube-mp4"];
+      const sources: { url: string; name: string; priority: number }[] = [];
+      for (const s of rawSources) {
+        if (SKIP.includes(s.sourceName)) continue;
+        if (s.type !== "iframe") continue;
+        let url: string = s.sourceUrl;
+        if (url.startsWith("--")) {
+          const decoded = decodeAllAnimeUrl(url);
+          if (!decoded) continue;
+          url = decoded;
+        }
+        if (url.startsWith("//")) url = "https:" + url;
+        if (!url.startsWith("http")) continue;
+        sources.push({ url, name: s.sourceName, priority: s.priority ?? 0 });
+      }
+      sources.sort((a, b) => b.priority - a.priority);
+
+      if (!sources.length) {
+        return res.status(404).json({ error: "No valid dub iframe sources found" });
+      }
+
+      // 4. Try each source with Puppeteer until a stream is captured
+      console.log(`[extract/dub] ${show.name} ep${episode} — trying ${sources.length} source(s)`);
+      let lastErr = "All dub sources failed";
+      for (const src of sources.slice(0, 5)) {
+        try {
+          console.log(`[extract/dub] Trying: ${src.name} → ${src.url.substring(0, 80)}`);
+          const result = await extractFromIframe(src.url, "https://allanime.to/");
+          if (result) {
+            console.log(`[extract/dub] ✓ Got stream from ${src.name}`);
+            return res.json(result);
+          }
+        } catch (err: any) {
+          lastErr = err.message || lastErr;
+          console.warn(`[extract/dub] ${src.name} failed: ${err.message}`);
+        }
+      }
+      res.status(500).json({ error: "Dub extraction failed", message: lastErr });
+    } catch (err: any) {
+      console.error("Dub extraction error:", err?.message);
+      res.status(500).json({ error: "Dub extraction failed", message: err?.message });
+    }
+  });
+
   app.get("/api/watch/sources", async (req: any, res) => {
     try {
       const { malId, title, episode = "1", type = "sub" } = req.query;

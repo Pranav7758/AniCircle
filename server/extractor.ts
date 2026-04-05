@@ -184,7 +184,7 @@ export async function extractStream(episodeUrl: string): Promise<StreamResult> {
   throw new Error(`No valid stream URL captured from ${iframeUrls.length} server(s). All servers failed.`);
 }
 
-async function extractFromIframe(iframeSrc: string, referer: string): Promise<StreamResult | null> {
+export async function extractFromIframe(iframeSrc: string, referer: string): Promise<StreamResult | null> {
   let browser: Awaited<ReturnType<typeof puppeteer.launch>> | null = null;
 
   try {
