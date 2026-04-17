@@ -60,6 +60,12 @@ function Router() {
       <Route path="/">
         <ProtectedRoute><Index /></ProtectedRoute>
       </Route>
+      <Route path="/anime/:id">
+        <ProtectedRoute><AnimeDetail /></ProtectedRoute>
+      </Route>
+      <Route path="/watch/:id/:epId">
+        <ProtectedRoute><AnimeWatch /></ProtectedRoute>
+      </Route>
       <Route path="/auth">
         <PublicRoute><Auth /></PublicRoute>
       </Route>
