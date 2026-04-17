@@ -92,63 +92,69 @@ const AnimeGroupCard = ({
     <div className={`group relative flex flex-col rounded-2xl overflow-hidden border border-border/40 bg-card transition-all duration-400 cursor-default perspective-1000 card-3d-hover ${neon}`}>
 
       {/* ── Cover art ── */}
-      <div className="aspect-[3/4] relative overflow-hidden">
-        {coverImage ? (
-          <img
-            src={coverImage}
-            alt={title}
-            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center gradient-hero">
-            <span className="text-5xl opacity-10">📺</span>
-          </div>
-        )}
-
-        {/* Gradient overlay */}
-        <div className="absolute inset-0 poster-overlay" />
-
-        {/* Top badges */}
-        <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-1 z-10">
-          <span className={`inline-flex items-center gap-1.5 text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full font-semibold backdrop-blur-sm ${cfg.badgeClass}`}>
-            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cfg.dotClass}`} />
-            {cfg.label}
-          </span>
-          {seasons.length > 1 && (
-            <span className="text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full font-bold bg-black/50 text-white/80 backdrop-blur-sm border border-white/10">
-              {seasons.length}S
-            </span>
-          )}
-        </div>
-
-        {/* Bottom info overlay */}
-        <div className="absolute bottom-0 left-0 right-0 z-10 p-2.5 sm:p-3">
-          <h3 className="font-bold text-[11px] sm:text-sm text-white leading-tight line-clamp-2 drop-shadow-lg mb-1.5">
-            {title}
-          </h3>
-
-          {avgRating && <StarRating rating={avgRating} />}
-
-          {totalEpisodes > 0 && (
-            <div className="mt-1.5">
-              <div className="flex justify-between text-[9px] text-white/60 mb-1">
-                <span>{totalEpisodesWatched} ep watched</span>
-                <span>{Math.round(overallProgress)}%</span>
-              </div>
-              <div className="w-full h-0.5 sm:h-1 rounded-full bg-white/10 overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all"
-                  style={{
-                    width: `${overallProgress}%`,
-                    background: 'linear-gradient(90deg, hsl(268 88% 62%), hsl(215 90% 58%))',
-                    boxShadow: '0 0 6px hsl(268 88% 62% / 0.6)',
-                  }}
-                />
-              </div>
+      <Link href={`/anime/${encodeURIComponent(title)}`}>
+        <a className="aspect-[3/4] relative overflow-hidden group/link block">
+          {coverImage ? (
+            <img
+              src={coverImage}
+              alt={title}
+              className="w-full h-full object-cover transition-transform duration-500 group-hover/link:scale-110 group-hover:scale-110"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center gradient-hero">
+              <span className="text-5xl opacity-10">📺</span>
             </div>
           )}
-        </div>
-      </div>
+          
+          <div className="absolute inset-0 bg-black/0 group-hover/link:bg-black/20 transition-colors flex items-center justify-center">
+            <Play className="w-12 h-12 text-white opacity-0 group-hover/link:opacity-100 transition-opacity drop-shadow-lg" />
+          </div>
+
+          {/* Gradient overlay */}
+          <div className="absolute inset-0 poster-overlay" />
+
+          {/* Top badges */}
+          <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-1 z-10">
+            <span className={`inline-flex items-center gap-1.5 text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full font-semibold backdrop-blur-sm ${cfg.badgeClass}`}>
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cfg.dotClass}`} />
+              {cfg.label}
+            </span>
+            {seasons.length > 1 && (
+              <span className="text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full font-bold bg-black/50 text-white/80 backdrop-blur-sm border border-white/10">
+                {seasons.length}S
+              </span>
+            )}
+          </div>
+
+          {/* Bottom info overlay */}
+          <div className="absolute bottom-0 left-0 right-0 z-10 p-2.5 sm:p-3">
+            <h3 className="font-bold text-[11px] sm:text-sm text-white leading-tight line-clamp-2 drop-shadow-lg mb-1.5 group-hover/link:underline">
+              {title}
+            </h3>
+
+            {avgRating && <StarRating rating={avgRating} />}
+
+            {totalEpisodes > 0 && (
+              <div className="mt-1.5">
+                <div className="flex justify-between text-[9px] text-white/60 mb-1">
+                  <span>{totalEpisodesWatched} ep watched</span>
+                  <span>{Math.round(overallProgress)}%</span>
+                </div>
+                <div className="w-full h-0.5 sm:h-1 rounded-full bg-white/10 overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${overallProgress}%`,
+                      background: 'linear-gradient(90deg, hsl(268 88% 62%), hsl(215 90% 58%))',
+                      boxShadow: '0 0 6px hsl(268 88% 62% / 0.6)',
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </a>
+      </Link>
 
       {/* ── Expandable seasons ── */}
       <div className="bg-card/95 backdrop-blur-sm">
