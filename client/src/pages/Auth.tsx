@@ -145,63 +145,107 @@ const Auth = () => {
   return (
     <div className="min-h-screen flex overflow-hidden bg-background">
 
-      {/* ── Floating orbs ── */}
+      {/* ── Global background treatment ── */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute inset-0 opacity-[0.04]"
+        {/* Subtle grid */}
+        <div className="absolute inset-0 opacity-[0.035]"
           style={{
-            backgroundImage: `repeating-linear-gradient(45deg, hsl(45 64% 52% / 0.35) 0 1px, transparent 1px 14px),
-                              repeating-linear-gradient(-45deg, hsl(45 64% 52% / 0.22) 0 1px, transparent 1px 14px)`,
+            backgroundImage: `repeating-linear-gradient(45deg, hsl(45 64% 52% / 0.4) 0 1px, transparent 1px 14px),
+                              repeating-linear-gradient(-45deg, hsl(45 64% 52% / 0.25) 0 1px, transparent 1px 14px)`,
           }}
         />
+        {/* Ambient glow blobs */}
+        <div className="absolute -top-32 -left-32 w-[500px] h-[500px] orb orb-purple opacity-20" />
+        <div className="absolute bottom-0 right-0 w-[400px] h-[400px] orb orb-blue opacity-15" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full opacity-[0.04] border border-primary/30" />
+
+        {/* Floating stars */}
+        {[
+          { size: 2, top: "12%", left: "8%", delay: "0s", dur: "4s" },
+          { size: 1.5, top: "28%", left: "22%", delay: "1.2s", dur: "5s" },
+          { size: 2.5, top: "65%", left: "5%", delay: "0.6s", dur: "6s" },
+          { size: 1, top: "80%", left: "18%", delay: "2s", dur: "4.5s" },
+          { size: 2, top: "45%", left: "35%", delay: "1.8s", dur: "5.5s" },
+          { size: 1.5, top: "15%", right: "10%", delay: "0.3s", dur: "5s" },
+          { size: 2, top: "55%", right: "8%", delay: "1.5s", dur: "4s" },
+          { size: 1, top: "75%", right: "25%", delay: "0.9s", dur: "6s" },
+          { size: 3, top: "35%", right: "40%", delay: "2.5s", dur: "7s" },
+        ].map((s, i) => (
+          <div
+            key={i}
+            className="absolute rounded-full bg-primary/60"
+            style={{
+              width: `${s.size}px`,
+              height: `${s.size}px`,
+              top: s.top,
+              left: (s as any).left,
+              right: (s as any).right,
+              animation: `glow-pulse ${s.dur} ease-in-out ${s.delay} infinite, float ${parseFloat(s.dur) + 2}s ease-in-out ${s.delay} infinite`,
+              boxShadow: `0 0 ${s.size * 3}px hsl(45 64% 52% / 0.8)`,
+            }}
+          />
+        ))}
       </div>
 
       {/* ── Left panel (desktop only) ── */}
       <div className="hidden lg:flex lg:w-[52%] relative flex-col items-center justify-center p-12 overflow-hidden">
 
+        {/* Left panel ambient bg */}
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.04] via-transparent to-violet-900/[0.06]" />
+        </div>
+
         {/* Decorative circles */}
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full border border-primary/8" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[380px] h-[380px] rounded-full border border-primary/12" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[260px] h-[260px] rounded-full border border-primary/20" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[520px] h-[520px] rounded-full border border-primary/8" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[390px] h-[390px] rounded-full border border-primary/12" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[270px] h-[270px] rounded-full border border-primary/22" />
           {/* Orbiting dot */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[380px] h-[380px]">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[390px] h-[390px]">
             <div className="animate-orbit absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-primary shadow-neon" />
+          </div>
+          {/* Second orbiting dot, opposite direction */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[270px] h-[270px]" style={{ animation: "orbit 14s linear infinite reverse" }}>
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-violet-400/80" style={{ boxShadow: "0 0 8px hsl(268 88% 62% / 0.6)" }} />
           </div>
         </div>
 
         {/* Content */}
-          <div className="relative z-10 text-center space-y-8 max-w-md deco-card deco-corners p-8">
-          <div className="flex flex-col items-center gap-4">
+          <div className="relative z-10 text-center space-y-8 max-w-md deco-card deco-corners p-10" style={{ background: "hsl(0 0% 5% / 0.85)", backdropFilter: "blur(20px)" }}>
+          <div className="flex flex-col items-center gap-5">
             <div className="relative">
-              <div className="absolute inset-0 rounded-full bg-primary/20 blur-xl animate-glow-pulse" />
-              <img src="/logo.png" alt="AniCircle" className="relative h-24 w-24 rounded-full shadow-neon animate-neon-flicker" />
+              <div className="absolute inset-0 rounded-full bg-primary/30 blur-2xl animate-glow-pulse scale-150" />
+              <div className="absolute inset-0 rounded-full bg-violet-500/15 blur-xl animate-float" />
+              <img src="/logo.png" alt="AniCircle" className="relative h-28 w-28 rounded-full shadow-neon animate-neon-flicker ring-2 ring-primary/30 ring-offset-2 ring-offset-background" />
             </div>
             <div>
-              <h1 className="text-6xl font-black text-gradient mb-2">AniCircle</h1>
-              <p className="text-lg text-muted-foreground font-light tracking-wide">
-                Your anime universe, organized.
-              </p>
+              <h1 className="text-6xl font-black text-gradient mb-3 tracking-wider">AniCircle</h1>
+              <div className="deco-divider justify-center mb-2">
+                <p className="text-sm text-muted-foreground/80 font-light tracking-[0.2em] uppercase">
+                  Your Anime Universe
+                </p>
+              </div>
             </div>
           </div>
 
           {/* Feature pills */}
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2.5">
             {[
-              { icon: Eye, label: "Track every episode with real-time progress" },
-              { icon: Zap, label: "Radar — never miss a sequel or new season" },
-              { icon: Star, label: "Rate and rank your all-time favourites" },
-            ].map(({ icon: Icon, label }, i) => (
-              <div key={label} className="flex items-center gap-3 rounded-none px-4 py-3 border border-primary/35 bg-card/65 animate-stagger-in" style={{ animationDelay: `${i * 120 + 200}ms` }}>
-                <div className="shrink-0 w-7 h-7 rounded-none bg-primary/20 flex items-center justify-center border border-primary/45">
-                  <Icon className="w-4 h-4 text-primary" />
+              { icon: Eye, label: "Track every episode with real-time progress", color: "text-violet-400", bg: "bg-violet-500/15 border-violet-500/35" },
+              { icon: Zap, label: "Radar — never miss a sequel or new season", color: "text-amber-400", bg: "bg-amber-500/15 border-amber-500/35" },
+              { icon: Star, label: "Rate and rank your all-time favourites", color: "text-primary", bg: "bg-primary/15 border-primary/35" },
+            ].map(({ icon: Icon, label, color, bg }, i) => (
+              <div key={label} className="flex items-center gap-3.5 rounded-none px-4 py-3.5 border border-primary/25 bg-card/50 animate-stagger-in group hover:border-primary/50 transition-all duration-200" style={{ animationDelay: `${i * 120 + 200}ms` }}>
+                <div className={`shrink-0 w-8 h-8 rounded-none flex items-center justify-center border ${bg}`}>
+                  <Icon className={`w-4 h-4 ${color}`} />
                 </div>
-                <span className="text-sm text-muted-foreground text-left">{label}</span>
+                <span className="text-sm text-muted-foreground/80 text-left group-hover:text-foreground transition-colors">{label}</span>
               </div>
             ))}
           </div>
 
-          <p className="text-xs text-muted-foreground/50 tracking-widest uppercase">
-            Built for anime lovers
+          <p className="text-[10px] text-muted-foreground/40 tracking-[0.3em] uppercase">
+            ✦ Built for Anime Lovers ✦
           </p>
         </div>
       </div>
@@ -220,7 +264,7 @@ const Auth = () => {
           </div>
 
           {/* Card */}
-          <div className="deco-card deco-corners p-6 shadow-[0_24px_80px_-12px_hsl(45_64%_52%/0.2)] animate-scale-in">
+          <div className="deco-card deco-corners p-7 shadow-[0_24px_80px_-12px_hsl(45_64%_52%/0.25),0_0_0_1px_hsl(45_64%_52%/0.08)] animate-scale-in" style={{ background: "hsl(0 0% 6% / 0.95)", backdropFilter: "blur(24px)" }}>
 
             {isRecoveryMode ? (
               <div className="space-y-5">

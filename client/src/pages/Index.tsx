@@ -59,24 +59,42 @@ const StatsBar = ({ animeList }: { animeList: Anime[] }) => {
   const uniqueTitles = new Set(animeList.map(a => a.title)).size;
 
   const stats = [
-    { icon: Play, label: "Watching", value: watching, color: "text-primary" },
-    { icon: CheckCircle2, label: "Completed", value: completed, color: "text-emerald-400" },
-    { icon: Trophy, label: "Total Shows", value: uniqueTitles, color: "text-amber-400" },
-    { icon: Clock, label: "Episodes", value: totalEps.toLocaleString(), color: "text-yellow-300" },
+    {
+      icon: Play, label: "Watching", value: watching,
+      color: "text-violet-400", iconBg: "bg-violet-500/15 border-violet-500/30",
+      glow: "shadow-[0_0_18px_hsl(268_88%_62%/0.18)]",
+    },
+    {
+      icon: CheckCircle2, label: "Completed", value: completed,
+      color: "text-emerald-400", iconBg: "bg-emerald-500/15 border-emerald-500/30",
+      glow: "shadow-[0_0_18px_hsl(142_70%_50%/0.15)]",
+    },
+    {
+      icon: Trophy, label: "Total Shows", value: uniqueTitles,
+      color: "text-amber-400", iconBg: "bg-amber-500/15 border-amber-500/30",
+      glow: "shadow-[0_0_18px_hsl(45_90%_56%/0.15)]",
+    },
+    {
+      icon: Clock, label: "Episodes", value: totalEps.toLocaleString(),
+      color: "text-primary", iconBg: "bg-primary/15 border-primary/30",
+      glow: "shadow-[0_0_18px_hsl(45_64%_52%/0.15)]",
+    },
   ];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-      {stats.map(({ icon: Icon, label, value, color }, i) => (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-5">
+      {stats.map(({ icon: Icon, label, value, color, iconBg, glow }, i) => (
         <div
           key={label}
-          className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-muted/30 border border-border/40 holo-glass animate-stagger-in"
+          className={`flex items-center gap-3 px-3.5 py-3 rounded-none border border-border/30 bg-card/60 backdrop-blur-sm animate-stagger-in ${glow} transition-all duration-200 hover:-translate-y-0.5`}
           style={{ animationDelay: `${i * 80}ms` }}
         >
-          <Icon className={`w-4 h-4 shrink-0 ${color}`} />
+          <div className={`shrink-0 w-9 h-9 rounded-none border flex items-center justify-center ${iconBg}`}>
+            <Icon className={`w-4 h-4 ${color}`} />
+          </div>
           <div className="min-w-0">
-            <p className={`text-base font-black leading-none ${color} animate-stagger-in`} style={{ animationDelay: `${i * 80 + 100}ms` }}>{value}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{label}</p>
+            <p className={`text-xl font-black leading-none tabular-nums ${color}`}>{value}</p>
+            <p className="text-[10px] text-muted-foreground/70 mt-0.5 uppercase tracking-wider">{label}</p>
           </div>
         </div>
       ))}
