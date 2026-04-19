@@ -1,0 +1,295 @@
+Create a complete modern frontend website for a project named:
+
+“Smart Study Planner”
+
+⚠️ Important:
+The website must NOT look like a typical AI website.
+Do NOT use blue-white default AI style.
+Do NOT use basic student template design.
+Make it premium, modern, and bold.
+
+🎨 DESIGN STYLE
+
+Theme: Luxury Dark Mode
+
+Primary Colors:
+
+Deep Matte Black (#0F0F0F)
+Rich Gold (#D4AF37)
+Soft Warm White (#F5F5F5)
+Subtle Dark Gray gradients
+
+Design Feel:
+
+Premium
+Elegant
+Slightly futuristic
+Smooth animations
+Clean spacing
+Glassmorphism or soft blur effects
+Modern rounded cards
+Soft glowing hover effects (gold glow)
+
+Use modern fonts:
+
+Poppins / Montserrat / Inter
+Headings bold and strong.
+Body text clean and readable.
+
+✨ ANIMATIONS & EFFECTS
+
+Add smooth transitions everywhere:
+
+• Page fade-in on load
+• Slide-in animations when scrolling
+• Smooth hover glow effect on buttons
+• Cards should slightly lift on hover
+• Sidebar should slide in/out smoothly
+• Dashboard elements animate when loaded
+• When task is marked complete → smooth slide + fade out effect
+• Use smooth easing (ease-in-out)
+
+Use CSS transitions and subtle motion.
+No cheap bouncing animations.
+
+📱 FULL WEBSITE STRUCTURE (Frontend Only)
+
+Create these pages with proper routing:
+
+1️⃣ Landing Page (Home)
+
+Sections:
+
+Hero section with bold heading
+
+Tagline: “Plan Smart. Study Better.”
+
+Animated gold underline
+
+Call to Action button (Start Planning)
+
+Features Section (3 premium cards):
+
+• Smart Planning
+• Daily Quiz
+• Performance Tracking
+
+Smooth scroll effects
+Dark background with gold accent lines
+
+2️⃣ Login / Register Page
+
+Centered glass-style card
+Black background with soft gold border glow
+Smooth input focus animation
+Floating labels
+Animated submit button
+Subtle background gradient
+
+3️⃣ Setup Page (VERY IMPORTANT CORE FEATURE)
+
+After login, user must first complete setup.
+
+This page must include dynamic step-by-step flow:
+
+Step 1 – Select Course
+Dropdown options:
+• Diploma
+• BE
+• BTech
+
+When user selects Diploma → next field appears with smooth slide-down animation.
+
+Step 2 – Select Year
+Options:
+• First Year
+• Second Year
+• Third Year
+
+When Third Year is selected → next field appears.
+
+Step 3 – Select Semester
+Options:
+• Semester 5
+• Semester 6
+
+When user selects:
+Diploma → Third Year → Semester 6
+
+Automatically load MSBTE Diploma Computer Engineering Semester 6 subjects.
+
+Use these subjects:
+
+• Management
+• Programming with Python
+• Software Testing
+• Client Side Scripting
+• Mobile Application Development
+• Capstone Project
+• Digital Forensics & Hacking
+• Emerging Trends in IT
+
+Each subject must appear inside animated premium cards with:
+
+• Subject name
+• Short description
+• Estimated study hours
+• Difficulty badge (Easy / Medium / Hard)
+• Checkbox to include/exclude subject
+• Hover glow effect
+
+Subject cards should appear with stagger animation.
+
+Study Time Configuration Section (Below Subjects)
+
+User must enter:
+
+• Daily free time (start time & end time picker)
+• Daily study hours slider
+• Target completion date picker (calendar UI)
+• Toggle: Include weekends
+
+Add helper text under each input explaining its purpose.
+
+4️⃣ Study Planner Page
+
+Show:
+
+Weekly timetable in modern grid style
+Cards with subject name + topic + time duration
+Hover glow effect
+Smooth transition when switching weeks
+
+Add:
+
+Button to regenerate plan
+Animated confirmation effect
+
+When user clicks “Generate Smart Plan”:
+
+Show animated modal with steps:
+
+• Analyzing Subjects
+• Dividing Syllabus
+• Optimizing Schedule
+• Finalizing Plan
+
+Then render full timetable with stagger animation.
+
+5️⃣ Dashboard Page
+
+Layout:
+
+Left side vertical navigation (collapsible)
+Main content area
+Clean spacing
+
+Sidebar:
+
+• Dashboard
+• Study Plan
+• Quiz
+• Progress
+• Settings
+
+Sidebar should:
+
+Slide smoothly
+Highlight active item with gold line
+
+Dashboard must show:
+
+• Today's Study Time
+• Weekly Completion %
+• Total Hours Studied
+• Predicted Final Score (highlighted in gold)
+• Circular animated progress bar
+
+6️⃣ Quiz Page
+
+Modern question card
+Options as animated selection buttons
+
+On select → smooth highlight with gold border
+On submit → slide transition to next question
+
+After quiz:
+
+Show score with animated counter
+Show improvement suggestion
+
+7️⃣ Progress Page
+
+Animated circular progress bars
+Gold progress lines
+Performance stats cards
+Smooth count-up animation
+
+Show:
+
+• Subject-wise performance
+• Study consistency
+• Weak subjects
+• Performance prediction improvement suggestion
+
+🧠 PERFORMANCE PREDICTION LOGIC (Frontend Simulation)
+
+Display predicted score using formula:
+
+Predicted Score =
+(Quiz Accuracy × 0.6) +
+(Study Consistency × 0.3) +
+(Syllabus Completion % × 0.1)
+
+Show result as animated gold percentage.
+
+🧩 COMPONENT STRUCTURE
+
+Use reusable components:
+
+• SubjectCard
+• Stepper
+• TimetableGrid
+• Sidebar
+• ProgressCircle
+• QuizCard
+• LoadingModal
+
+Organize folders:
+
+/src
+/components
+/pages
+/data
+/utils
+
+🧠 DATA
+
+Include local data file for MSBTE Diploma Semester 6 subjects.
+
+Include demo user:
+
+Name: Demo Student
+College: Gautam Polytechnic Institute
+Course: Diploma
+Semester: 6
+
+📱 RESPONSIVENESS
+
+Fully responsive for mobile and desktop.
+Hamburger menu with smooth slide animation.
+Maintain premium look on all devices.
+
+🎯 FINAL LOOK
+
+The website should look like:
+
+A premium productivity app
+Slightly luxury
+Not a college mini project
+Not childish
+Not overly colorful
+Strong black + gold aesthetic
+Smooth, classy transitions
+
+It should feel like a paid app worth ₹999/month.

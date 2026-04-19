@@ -1,0 +1,56 @@
+node_modules
+dist/
+
+# Environment variables - NEVER commit!
+.env
+.env.local
+.env.*.local
+
+# Temp debug files
+test-anilist.ts
+test-anomaly.ts
+test-ids.ts
+test-sort.js
+output_node.json
+output.json
+rezero_relations.json
+anime_rows.csv
+
+# OS files
+.DS_Store
+Thumbs.db
+dist/
+
+# Environment variables - NEVER commit!
+.env
+.env.local
+.env.*.local
+
+# Temp debug files
+test-anilist.ts
+test-anomaly.ts
+test-ids.ts
+test-sort.js
+output_node.json
+output.json
+rezero_relations.json
+anime_rows.csv
+
+# OS files
+.DS_Store
+Thumbs.db
+
+dist/
+.env
+.env.local
+.env.*.local
+test-anilist.ts
+test-anomaly.ts
+test-ids.ts
+test-sort.js
+output_node.json
+output.json
+rezero_relations.json
+anime_rows.csv
+.DS_Store
+Thumbs.db
