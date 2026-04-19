@@ -38,6 +38,11 @@
 
     --radius: 0.125rem;
 
+    /* Derived primary shades (updated by theme system) */
+    --primary-light: 45 64% 62%;
+    --primary-dark: 45 64% 40%;
+    --primary-dim: 45 44% 34%;
+
     /* Extended anime color palette */
     --neon-purple: 45 64% 52%;
     --neon-blue: 209 50% 23%;
@@ -47,18 +52,18 @@
     --neon-amber: 45 64% 52%;
     --neon-red: 0 84% 60%;
 
-    /* Gradients */
-    --gradient-primary: linear-gradient(135deg, hsl(45 64% 62%), hsl(45 64% 40%));
-    --gradient-accent: linear-gradient(135deg, hsl(45 64% 60%), hsl(209 50% 23%));
-    --gradient-cyan: linear-gradient(135deg, hsl(45 64% 58%), hsl(45 64% 40%));
+    /* Gradients — reactive to --primary */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary-light)), hsl(var(--primary-dark)));
+    --gradient-accent: linear-gradient(135deg, hsl(var(--primary-light)), hsl(var(--primary-dark)));
+    --gradient-cyan: linear-gradient(135deg, hsl(var(--primary-light)), hsl(var(--primary-dark)));
     --gradient-card: linear-gradient(180deg, hsl(0 0% 10%), hsl(0 0% 7%));
-    --gradient-hero: linear-gradient(135deg, hsl(45 64% 52% / 0.08), hsl(209 50% 23% / 0.08));
-    --gradient-glow: radial-gradient(ellipse at 50% 0%, hsl(45 64% 52% / 0.2) 0%, transparent 65%);
+    --gradient-hero: linear-gradient(135deg, hsl(var(--primary) / 0.08), hsl(var(--primary-dark) / 0.08));
+    --gradient-glow: radial-gradient(ellipse at 50% 0%, hsl(var(--primary) / 0.2) 0%, transparent 65%);
 
-    /* Shadows */
-    --shadow-glow: 0 0 28px hsl(45 64% 52% / 0.22), 0 0 60px hsl(45 64% 52% / 0.1);
+    /* Shadows — reactive to --primary */
+    --shadow-glow: 0 0 28px hsl(var(--primary) / 0.22), 0 0 60px hsl(var(--primary) / 0.1);
     --shadow-card: 0 4px 24px hsl(0 0% 2% / 0.75);
-    --shadow-neon: 0 0 10px hsl(45 64% 52% / 0.48), 0 0 24px hsl(45 64% 52% / 0.2);
+    --shadow-neon: 0 0 10px hsl(var(--primary) / 0.48), 0 0 24px hsl(var(--primary) / 0.2);
     --shadow-blue: 0 0 10px hsl(209 50% 23% / 0.5), 0 0 24px hsl(209 50% 23% / 0.22);
 
     /* Transitions */
@@ -121,9 +126,9 @@
     font-family: 'Josefin Sans', system-ui, -apple-system, sans-serif;
     overflow-x: hidden;
     background-image:
-      repeating-linear-gradient(45deg, hsl(45 64% 52% / 0.03) 0 1px, transparent 1px 12px),
-      repeating-linear-gradient(-45deg, hsl(45 64% 52% / 0.02) 0 1px, transparent 1px 12px),
-      radial-gradient(circle at 50% 0%, hsl(45 64% 52% / 0.12), transparent 45%);
+      repeating-linear-gradient(45deg, hsl(var(--primary) / 0.03) 0 1px, transparent 1px 12px),
+      repeating-linear-gradient(-45deg, hsl(var(--primary) / 0.02) 0 1px, transparent 1px 12px),
+      radial-gradient(circle at 50% 0%, hsl(var(--primary) / 0.12), transparent 45%);
     background-attachment: fixed;
   }
 
@@ -244,11 +249,11 @@
       hsl(0 0% 6% / 0.88) 100%);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
-    border: 1px solid hsl(45 64% 52% / 0.28);
+    border: 1px solid hsl(var(--primary) / 0.28);
     box-shadow:
       0 10px 28px hsl(0 0% 0% / 0.45),
-      0 0 18px hsl(45 64% 52% / 0.1),
-      inset 0 1px 0 hsl(45 64% 90% / 0.08);
+      0 0 18px hsl(var(--primary) / 0.1),
+      inset 0 1px 0 hsl(var(--primary-light) / 0.08);
   }
 
   .holo-glass::before {
@@ -260,8 +265,8 @@
     height: 100%;
     background: linear-gradient(to right,
       transparent,
-      hsl(45 64% 52% / 0.08),
-      hsl(45 64% 40% / 0.08),
+      hsl(var(--primary) / 0.08),
+      hsl(var(--primary-dark) / 0.08),
       transparent);
     transform: skewX(-20deg);
     transition: left 0.6s ease;
@@ -283,10 +288,10 @@
   .card-3d-hover:hover {
     transform: translateY(-10px) scale(1.02) rotateX(2deg);
     box-shadow:
-      0 20px 60px -10px hsl(45 64% 52% / 0.26),
-      0 8px 24px -8px hsl(45 64% 40% / 0.18),
+      0 20px 60px -10px hsl(var(--primary) / 0.26),
+      0 8px 24px -8px hsl(var(--primary-dark) / 0.18),
       inset 0 1px 0 hsl(0 0% 100% / 0.08);
-    border-color: hsl(45 64% 52% / 0.55);
+    border-color: hsl(var(--primary) / 0.55);
     z-index: 10;
   }
 

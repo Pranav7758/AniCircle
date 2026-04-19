@@ -23,6 +23,7 @@ import Watch from "@/components/Watch";
 import Footer from "@/components/Footer";
 import SuggestionPopup from "@/components/SuggestionPopup";
 import FloatingSocialBar from "@/components/FloatingSocialBar";
+import ThemePicker from "@/components/ThemePicker";
 
 interface Anime {
   id: string;
@@ -648,6 +649,7 @@ const Index = () => {
                   </span>
                 )}
               </Button>
+              <ThemePicker />
               <Button
                 variant="ghost"
                 size="icon"

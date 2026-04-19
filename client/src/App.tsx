@@ -5,12 +5,18 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "@/lib/queryClient";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
+import { useTheme } from "@/hooks/use-theme";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import PublicProfile from "./pages/PublicProfile";
 import FeedbackAdmin from "./pages/FeedbackAdmin";
 import { Loader2 } from "lucide-react";
+
+function ThemeInitializer() {
+  useTheme();
+  return null;
+}
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -19,7 +25,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-4 deco-card deco-corners px-8 py-7">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+          <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
           <p className="text-muted-foreground text-sm uppercase tracking-[0.14em]">Loading AniCircle</p>
         </div>
       </div>
@@ -40,7 +46,7 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-4 deco-card deco-corners px-8 py-7">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+          <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
           <p className="text-muted-foreground text-sm uppercase tracking-[0.14em]">Loading AniCircle</p>
         </div>
       </div>
@@ -64,7 +70,7 @@ function Router() {
         <PublicRoute><Auth /></PublicRoute>
       </Route>
       <Route path="/u/:shortId">
-        {(params) => <PublicProfile />}
+        {() => <PublicProfile />}
       </Route>
       <Route path="/admin/feedback">
         <ProtectedRoute><FeedbackAdmin /></ProtectedRoute>
@@ -78,6 +84,7 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <TooltipProvider>
+        <ThemeInitializer />
         <Toaster />
         <Sonner />
         <Router />
