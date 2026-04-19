@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { getAnimeList, createAnime, updateAnime, deleteAnime, logActivity, upsertUserPresence, type AnimeData } from "@/services/supabaseData";
+import { getAnimeList, createAnime, updateAnime, deleteAnime, logActivity, upsertUserPresence, getFriends, getFriendsUserPresence, type AnimeData } from "@/services/supabaseData";
 import { fetchAniList, GET_ANALYTICS_QUERY } from "@/services/anilist";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -103,6 +103,7 @@ const Index = () => {
   const [editingAnime, setEditingAnime] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("list");
+  const [onlineFriendsCount, setOnlineFriendsCount] = useState(0);
   const [gridSize, setGridSize] = useState<string>(() => {
     const saved = localStorage.getItem("animeGridSize");
     return saved || "medium";
@@ -121,6 +122,43 @@ const Index = () => {
       fetchAnimeList();
     }
   }, [user, activeTab]);
+
+  useEffect(() => {
+    if (!user) {
+      setOnlineFriendsCount(0);
+      return;
+    }
+
+    let cancelled = false;
+    const refreshOnlineCount = async () => {
+      try {
+        const friends = await getFriends();
+        const friendUserIds = friends.map((f) =>
+          f.userId === user.id ? f.friendId : f.userId
+        );
+        if (friendUserIds.length === 0) {
+          if (!cancelled) setOnlineFriendsCount(0);
+          return;
+        }
+        const onlineRows = await getFriendsUserPresence(friendUserIds);
+        const now = Date.now();
+        const count = onlineRows.filter((row) => {
+          const ts = new Date(row.updatedAt).getTime();
+          return now - ts < 2 * 60 * 1000;
+        }).length;
+        if (!cancelled) setOnlineFriendsCount(count);
+      } catch {
+        if (!cancelled) setOnlineFriendsCount(0);
+      }
+    };
+
+    refreshOnlineCount();
+    const iv = setInterval(refreshOnlineCount, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+    };
+  }, [user?.id]);
 
   // Lightweight online heartbeat for friends list "online" indicator.
   useEffect(() => {
@@ -555,6 +593,21 @@ const Index = () => {
                   <Share2 className="w-4 h-4" />
                 </Button>
               )}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setActiveTab("friends")}
+                title="Friends Activity"
+                className="relative h-8 w-8 hover:bg-muted/50 text-muted-foreground hover:text-foreground rounded-xl"
+                data-testid="button-friends-quick"
+              >
+                <Users className="w-4 h-4" />
+                {onlineFriendsCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-emerald-500 text-[10px] leading-4 text-white font-semibold text-center border border-background">
+                    {onlineFriendsCount > 9 ? "9+" : onlineFriendsCount}
+                  </span>
+                )}
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"
