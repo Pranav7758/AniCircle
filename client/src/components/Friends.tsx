@@ -205,8 +205,7 @@ const Friends = ({ currentUserId }: FriendsProps) => {
     setFilteredFriendAnimeList(filtered);
   }, [friendAnimeList, friendSearchQuery, friendStatusFilter, friendHentaiFilter, friendRankingFilter]);
 
-  const groupedFriendAnime = useMemo(() => (
-    {
+  const groupedFriendAnime = useMemo(() => {
       const groups = filteredFriendAnimeList.reduce((acc, anime) => {
         const title = anime.title;
         if (!acc[title]) acc[title] = [];
@@ -254,8 +253,7 @@ const Friends = ({ currentUserId }: FriendsProps) => {
       }
 
       return Object.fromEntries(entries);
-    }
-  ), [filteredFriendAnimeList, friendSortBy]);
+  }, [filteredFriendAnimeList, friendSortBy]);
 
   const handleSendFriendRequest = async () => {
     if (!searchShortId || searchShortId.trim().length !== 5) {
