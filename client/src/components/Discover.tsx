@@ -101,7 +101,7 @@ function AnimeCard({ anime, isInList, onAdd, onPlay, adding, rank }: {
       data-testid={`card-anime-${anime.id}`}
       onClick={() => onPlay?.(anime)}
     >
-      <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-muted/30">
+      <div className="relative aspect-[2/3] rounded-none overflow-hidden bg-muted/30 border border-primary/30">
         {anime.coverImage?.large || anime.coverImage?.extraLarge ? (
           <img
             src={anime.coverImage.extraLarge || anime.coverImage.large}
@@ -115,12 +115,12 @@ function AnimeCard({ anime, isInList, onAdd, onPlay, adding, rank }: {
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/10 to-transparent" />
         {rank !== undefined && (
-          <div className="absolute top-2 left-2 w-6 h-6 rounded-full bg-black/70 backdrop-blur-sm flex items-center justify-center text-[10px] font-black text-white">
+          <div className="absolute top-2 left-2 w-6 h-6 rounded-none bg-black/80 border border-primary/50 backdrop-blur-sm flex items-center justify-center text-[10px] font-black text-white">
             {rank}
           </div>
         )}
         {score && (
-          <div className="absolute top-2 right-2 flex items-center gap-0.5 bg-black/70 backdrop-blur-sm rounded-full px-1.5 py-0.5 text-[10px] font-bold text-amber-400">
+          <div className="absolute top-2 right-2 flex items-center gap-0.5 bg-black/80 border border-primary/45 backdrop-blur-sm rounded-none px-1.5 py-0.5 text-[10px] font-bold text-amber-300">
             <Star className="w-2.5 h-2.5 fill-amber-400" />{score}
           </div>
         )}
@@ -130,7 +130,7 @@ function AnimeCard({ anime, isInList, onAdd, onPlay, adding, rank }: {
         </div>
         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/25">
           {isInList ? (
-            <div className="bg-emerald-500 rounded-full px-3 py-1.5 flex items-center gap-1 text-white text-xs font-bold shadow-lg">
+            <div className="bg-emerald-500 rounded-none border border-emerald-300/70 px-3 py-1.5 flex items-center gap-1 text-white text-xs font-bold shadow-lg">
               <Check className="w-3 h-3" /> In List
             </div>
           ) : (
@@ -138,7 +138,7 @@ function AnimeCard({ anime, isInList, onAdd, onPlay, adding, rank }: {
               onClick={(e) => { e.stopPropagation(); onAdd(); }}
               disabled={adding}
               data-testid={`button-add-${anime.id}`}
-              className="bg-white text-black rounded-full px-3 py-1.5 flex items-center gap-1 text-xs font-bold hover:bg-white/90 transition-colors shadow-lg"
+              className="bg-[#D4AF37] border border-[#F4DE9A] text-black rounded-none px-3 py-1.5 flex items-center gap-1 text-xs font-bold hover:bg-[#f0d98c] transition-colors shadow-lg"
             >
               {adding ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
               Add
@@ -221,7 +221,7 @@ function Hero({ animes, allKnownIds, onAdd, onPlay, addingId }: {
 
   return (
     <div
-      className="relative rounded-xl overflow-hidden border border-border/30 cursor-pointer"
+      className="relative deco-card deco-corners overflow-hidden cursor-pointer"
       style={{ height: 260 }}
       onClick={() => onPlay?.(a)}
       role="button"
@@ -685,9 +685,9 @@ export function DiscoverSections({ animeList, onAddAnime, showMature = false, on
       )}
 
       {/* ── Genre Browser ── */}
-      <section>
+      <section className="deco-card deco-corners p-4">
         <div className="mb-3">
-          <span className="text-sm font-bold text-foreground">Browse Genres</span>
+          <span className="text-sm font-bold text-foreground deco-divider">Browse Genres</span>
           <p className="text-xs text-muted-foreground mt-0.5">Pick a genre — we'll show the best anime you haven't seen yet</p>
         </div>
         <div className="flex flex-wrap gap-2 mb-5">
@@ -731,18 +731,20 @@ export function DiscoverSections({ animeList, onAddAnime, showMature = false, on
       </section>
 
       {/* ── Find Similar ── */}
-      <FindSimilar
-        animeList={animeList}
-        allKnownIds={allKnownIds}
-        showMature={showMature}
-        onAdd={handleAdd}
-        onPlay={triggerPlay}
-        addingId={addingId}
-      />
+      <div className="deco-card deco-corners p-4">
+        <FindSimilar
+          animeList={animeList}
+          allKnownIds={allKnownIds}
+          showMature={showMature}
+          onAdd={handleAdd}
+          onPlay={triggerPlay}
+          addingId={addingId}
+        />
+      </div>
 
       {/* ── Personalized Genre Row ── */}
       {(genreInfo || loadingGenre) && (
-        <section>
+        <section className="deco-card deco-corners p-4">
           <div className="flex items-center gap-2 mb-0.5">
             <span className="text-sm">{genreInfo?.emoji ?? "🎯"}</span>
             <span className="text-sm font-bold text-foreground">{userTopGenre ? `More ${userTopGenre} for You` : "Your Taste"}</span>
@@ -762,7 +764,7 @@ export function DiscoverSections({ animeList, onAddAnime, showMature = false, on
 
       {/* ── Handpicked Recommendations ── */}
       {(hasRatedAnime || loadingRecs) && (
-        <section>
+        <section className="deco-card deco-corners p-4">
           <div className="flex items-center gap-2 mb-0.5">
             <Brain className="w-4 h-4 text-primary" />
             <span className="text-sm font-bold text-foreground">Handpicked for You</span>
@@ -790,7 +792,7 @@ export function DiscoverSections({ animeList, onAddAnime, showMature = false, on
       )}
 
       {/* ── Trending Now ── */}
-      <section>
+        <section className="deco-card deco-corners p-4">
         <div className="flex items-center gap-2 mb-0.5">
           <Flame className="w-4 h-4 text-orange-400" />
           <span className="text-sm font-bold text-foreground">Trending Now</span>
@@ -808,7 +810,7 @@ export function DiscoverSections({ animeList, onAddAnime, showMature = false, on
       </section>
 
       {/* ── Season Picks ── */}
-      <section>
+      <section className="deco-card deco-corners p-4">
         <div className="flex items-center gap-2 mb-0.5">
           <CalendarDays className="w-4 h-4 text-sky-400" />
           <span className="text-sm font-bold text-foreground">{seasonLabel} Picks</span>

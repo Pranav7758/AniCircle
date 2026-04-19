@@ -644,7 +644,12 @@ const Index = () => {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="mb-6 space-y-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <TabsList className="h-10 bg-muted/40 border border-border/40 rounded-xl p-1 gap-0.5 overflow-x-auto flex-nowrap">
+              <TabsList className="h-12 deco-card deco-corners p-1 gap-0.5 overflow-x-auto flex-nowrap shadow-[0_0_14px_rgba(212,175,55,0.12)]">
+                <TabsTrigger value="watch" data-testid="tab-watch"
+                  className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium gap-1">
+                  <Play className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Watch</span>
+                </TabsTrigger>
                 <TabsTrigger value="list" data-testid="tab-list"
                   className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium">
                   My List
@@ -706,12 +711,27 @@ const Index = () => {
             </div>
           </div>
 
+          <TabsContent value="watch" className="pt-4 animate-tab-in">
+            <Watch
+              animeList={animeList}
+              onAutoProgress={handleWatchAutoProgress}
+            />
+          </TabsContent>
+
+          <TabsContent value="discover" className="pt-4 animate-tab-in">
+            <Discover
+              animeList={animeList}
+              onAddAnime={handleAddAnime}
+              showMature={hentaiFilter !== "hide"}
+            />
+          </TabsContent>
+
           <TabsContent value="list" className="space-y-4 animate-tab-in">
             {user && <NewEpisodesBanner userId={user.id} />}
 
             {animeList.length > 0 && <StatsBar animeList={animeList} />}
 
-            <div className="mb-4">
+            <div className="mb-4 deco-card deco-corners p-3 sm:p-4">
               <div className="flex flex-col md:flex-row gap-3">
                 <div className="flex-1 relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
@@ -765,7 +785,7 @@ const Index = () => {
             </div>
 
             {filteredAnimeList.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-24 gap-5 animate-fade-in">
+              <div className="deco-card deco-corners flex flex-col items-center justify-center py-24 gap-5 animate-fade-in">
                 <div className="relative">
                   <div className="w-24 h-24 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
                     <span className="text-4xl opacity-60">📺</span>
@@ -793,7 +813,7 @@ const Index = () => {
               </div>
             ) : (
               <>
-                <p className="text-xs text-muted-foreground mb-1">
+                <p className="text-xs text-muted-foreground mb-1 deco-divider w-fit">
                   {Object.keys(groupedAnime).length} title{Object.keys(groupedAnime).length !== 1 ? "s" : ""}
                   {filteredAnimeList.length !== animeList.length ? ` (filtered from ${new Set(animeList.map(a => a.title)).size})` : ""}
                 </p>
@@ -855,7 +875,6 @@ const Index = () => {
           <TabsContent value="analytics" className="space-y-4 pt-4 animate-tab-in">
             <AnalyticsDashboard />
           </TabsContent>
-
           <TabsContent value="watch" className="pt-4 animate-tab-in">
             <Discover
               animeList={animeList}

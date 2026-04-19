@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { createAnime, updateAnime, upsertWatchPresence, type AnimeData } from "@/services/supabaseData";
+import { fetchAniList, GET_TRENDING_QUERY } from "@/services/anilist";
 import {
     fetchAniwatchSearch,
     fetchAniwatchAnimeDetails,
@@ -47,6 +48,18 @@ interface AutoProgressEvent {
     anime: AnimeData;
 }
 
+interface TrendingItem {
+    id: number;
+    title: {
+        english?: string | null;
+        romaji?: string | null;
+    };
+    coverImage?: {
+        large?: string | null;
+        extraLarge?: string | null;
+    } | null;
+    averageScore?: number | null;
+}
 type UiSeason = AniwatchSeason & {
     uiSeasonNumber: number;
 };
@@ -396,6 +409,8 @@ export default function Watch({
     const [epLoading, setEpLoading] = useState(false);
     const [selectedEpId, setSelectedEpId] = useState<string | null>(null);
     const [lang, setLang] = useState<"sub" | "dub">("sub");
+    const [trending, setTrending] = useState<TrendingItem[]>([]);
+    const [loadingTrending, setLoadingTrending] = useState(true);
     const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const syncedSelectionsRef = useRef<Set<string>>(new Set());
 
@@ -427,6 +442,22 @@ export default function Watch({
         void doSearch(next);
     }, [externalQuery, externalQueryNonce, doSearch]);
 
+    useEffect(() => {
+        let cancelled = false;
+        const loadTrending = async () => {
+            try {
+                const data = await fetchAniList(GET_TRENDING_QUERY, {});
+                if (cancelled) return;
+                setTrending((data?.Page?.media || []).slice(0, 12));
+            } catch {
+                if (!cancelled) setTrending([]);
+            } finally {
+                if (!cancelled) setLoadingTrending(false);
+            }
+        };
+        loadTrending();
+        return () => { cancelled = true; };
+    }, []);
     // Always keep the selected anime/hero at the top when navigating
     useEffect(() => {
         if (flow === "browse") return;
@@ -618,18 +649,20 @@ export default function Watch({
         <div className="space-y-6 pb-6">
             {/* Header — browse only full title; series/watch slimmer */}
             {flow === "browse" && (
-                <div className="space-y-3">
+                <div className="space-y-3 deco-card deco-corners p-4 sm:p-5">
                     <div className="flex items-center gap-3">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600/30 to-fuchsia-600/20 ring-1 ring-primary/25 shadow-neon">
-                            <Film className="h-5 w-5 text-primary" />
+                        <div className="flex h-11 w-11 items-center justify-center rounded-none border border-[#D4AF37]/50 bg-black/70">
+                            <Film className="h-5 w-5 text-[#D4AF37]" />
                         </div>
-                        <div>
-                            <h2 className="text-2xl sm:text-3xl font-black tracking-tight bg-gradient-to-r from-foreground via-foreground to-primary bg-clip-text text-transparent">
-                                Watch
-                            </h2>
-                            <p className="text-muted-foreground text-sm flex items-center gap-1.5 mt-0.5">
-                                <Sparkles className="w-3.5 h-3.5 text-amber-400/90 shrink-0" />
-                                Search like HiAnime — pick a show, then a season, then an episode.
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2 deco-divider">
+                                <h2 className="text-2xl sm:text-3xl font-black tracking-[0.2em] uppercase text-[#F2F0E4]">
+                                    Watch
+                                </h2>
+                            </div>
+                            <p className="text-[#888888] text-sm flex items-center gap-1.5 mt-0.5">
+                                <Sparkles className="w-3.5 h-3.5 text-[#D4AF37] shrink-0" />
+                                Pick a title, then season, then episode.
                             </p>
                         </div>
                     </div>
@@ -638,7 +671,7 @@ export default function Watch({
 
             {flow === "browse" && (
                 <>
-                    <div className="flex flex-col sm:flex-row gap-3 max-w-2xl">
+                    <div className="flex flex-col sm:flex-row gap-3 max-w-2xl deco-card deco-corners p-2 sm:p-3">
                         <div className="relative flex-1">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                             <Input
@@ -646,14 +679,14 @@ export default function Watch({
                                 value={search}
                                 onChange={e => setSearch(e.target.value)}
                                 onKeyDown={e => e.key === "Enter" && doSearch(search)}
-                                className="pl-11 h-12 rounded-2xl border-border/50 bg-muted/25 text-base shadow-inner focus-visible:ring-primary/40"
+                                className="pl-11 h-12 rounded-none border-[#D4AF37]/55 bg-transparent text-base focus-visible:ring-0 focus-visible:border-[#F2E8C4]"
                                 data-testid="input-watch-search"
                             />
                         </div>
                         <Button
                             onClick={() => doSearch(search)}
                             disabled={searching || !search.trim()}
-                            className="h-12 px-6 rounded-2xl font-semibold bg-gradient-to-r from-primary to-violet-600 hover:opacity-95 shadow-lg shadow-primary/25 shrink-0"
+                            className="h-12 px-6 rounded-none border border-[#D4AF37] bg-[#D4AF37] text-black font-bold tracking-[0.18em] uppercase hover:bg-[#f0d98c] shadow-[0_0_18px_rgba(212,175,55,0.25)] shrink-0"
                             data-testid="button-watch-search"
                         >
                             {searching ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Search className="w-4 h-4 mr-2" /> Search</>}
@@ -690,7 +723,7 @@ export default function Watch({
                                         type="button"
                                         onClick={() => openShowFromSearch(r)}
                                         data-testid={`button-watch-result-${r.id}`}
-                                        className="group text-left rounded-2xl overflow-hidden border border-border/50 bg-card/80 backdrop-blur-sm hover:border-primary/45 hover:shadow-[0_0_32px_-8px_rgba(139,92,246,0.35)] transition-all duration-300 hover:-translate-y-0.5"
+                                        className="group text-left rounded-none overflow-hidden border border-primary/35 bg-card/90 hover:border-primary/80 hover:shadow-[0_0_28px_rgba(212,175,55,0.2)] transition-all duration-300 hover:-translate-y-0.5"
                                     >
                                         <div className="aspect-[3/4] overflow-hidden bg-muted/40 relative">
                                             {r.image ? (
@@ -705,7 +738,7 @@ export default function Watch({
                                                 </div>
                                             </div>
                                             {listEntry && (
-                                                <Badge className="absolute top-2 left-2 text-[10px] px-2 py-0.5 bg-primary/90 border-0 shadow-md">In your list</Badge>
+                                                <Badge className="absolute top-2 left-2 rounded-none text-[10px] px-2 py-0.5 bg-primary/90 border border-primary/70 text-black shadow-md">In your list</Badge>
                                             )}
                                         </div>
                                         <div className="p-3 pt-2.5">
@@ -718,6 +751,77 @@ export default function Watch({
                                 );
                             })}
                         </div>
+                    )}
+
+                    {!searching && flow === "browse" && (
+                        <section className="space-y-3">
+                            <div className="flex items-center gap-2">
+                                <Sparkles className="w-4 h-4 text-[#D4AF37]" />
+                                <h3 className="text-sm font-bold uppercase tracking-[0.18em] text-[#F2F0E4]">Trending Anime</h3>
+                            </div>
+
+                            {loadingTrending ? (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                                    {Array.from({ length: 6 }).map((_, i) => (
+                                        <div key={i} className="aspect-[3/4] rounded-2xl bg-muted/35 animate-pulse" />
+                                    ))}
+                                </div>
+                            ) : trending.length > 0 ? (
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                                    {trending.map((t) => {
+                                        const title = (t.title?.english || t.title?.romaji || "").trim();
+                                        if (!title) return null;
+                                        const image = t.coverImage?.extraLarge || t.coverImage?.large || "";
+                                        const score = t.averageScore ? (t.averageScore / 10).toFixed(1) : null;
+                                        return (
+                                            <button
+                                                key={t.id}
+                                                type="button"
+                                                onClick={async () => {
+                                                    setSearch(title);
+                                                    try {
+                                                        const aw = await fetchAniwatchSearch(title);
+                                                        const first = aw.results?.[0];
+                                                        if (first?.anime_id) {
+                                                            await openShowFromSearch({
+                                                                id: first.anime_id,
+                                                                title: first.title || title,
+                                                                url: "",
+                                                                image: first.image || "",
+                                                            });
+                                                            return;
+                                                        }
+                                                    } catch {
+                                                        // fallback to normal search results
+                                                    }
+                                                    void doSearch(title);
+                                                }}
+                                                className="group text-left deco-card deco-corners overflow-hidden transition-all hover:-translate-y-0.5"
+                                                data-testid={`button-watch-trending-${t.id}`}
+                                            >
+                                                <div className="aspect-[3/4] bg-muted/40 overflow-hidden relative">
+                                                    {image ? (
+                                                        <img src={image} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center"><Tv className="w-9 h-9 opacity-20" /></div>
+                                                    )}
+                                                    {score && (
+                                                        <span className="absolute top-2 right-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-black/70 text-amber-300">
+                                                            {score}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="p-2.5">
+                                                    <p className="text-[11px] font-semibold leading-snug line-clamp-2">{title}</p>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <p className="text-xs text-muted-foreground">Trending list unavailable right now.</p>
+                            )}
+                        </section>
                     )}
                 </>
             )}
@@ -742,7 +846,7 @@ export default function Watch({
                     </div>
 
                     {/* Hero — series hub (always show when not browse); watch keeps context */}
-                    <div className="relative overflow-hidden rounded-3xl border border-border/40 bg-card shadow-xl ring-1 ring-white/5">
+                    <div className="relative overflow-hidden deco-card deco-corners shadow-xl ring-1 ring-white/5">
                         <div className="absolute inset-0 pointer-events-none">
                             {poster ? (
                                 <img src={poster} alt="" className="h-full w-full object-cover blur-3xl scale-125 opacity-35" />
@@ -810,8 +914,8 @@ export default function Watch({
                                         onClick={() => pickSeason(s)}
                                         data-testid={`button-season-${s.anime_id}`}
                                         className={cn(
-                                            "rounded-2xl border p-4 text-left transition-all duration-200 min-h-[124px]",
-                                            "border-border/50 bg-gradient-to-br from-muted/40 to-muted/10 hover:border-primary/50 hover:from-primary/10 hover:to-violet-950/20 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-0.5",
+                                            "rounded-none border p-4 text-left transition-all duration-200 min-h-[124px]",
+                                            "border-primary/35 bg-card/90 hover:border-primary/80 hover:bg-black/60 hover:shadow-[0_0_20px_rgba(212,175,55,0.18)] hover:-translate-y-0.5",
                                             "disabled:opacity-50 disabled:pointer-events-none",
                                         )}
                                     >
