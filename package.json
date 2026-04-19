@@ -66,7 +66,6 @@
     "esbuild": "^0.27.1",
     "express": "^5.2.1",
     "express-session": "^1.18.2",
-    "hls.js": "^1.6.15",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.462.0",
     "memorystore": "^1.6.7",

@@ -35,6 +35,19 @@ export interface NotificationData {
   createdAt: string;
 }
 
+export interface WatchPresenceData {
+  userId: string;
+  animeTitle: string;
+  seasonNumber: number | null;
+  episodeNumber: number | null;
+  updatedAt: string;
+}
+
+export interface UserPresenceData {
+  userId: string;
+  updatedAt: string;
+}
+
 function snakeToCamel(obj: any): any {
   if (obj === null || obj === undefined) return obj;
   if (Array.isArray(obj)) return obj.map(snakeToCamel);
@@ -367,6 +380,60 @@ export async function getFriendsActivity(friendIds: string[]): Promise<any[]> {
   } catch {
     return [];
   }
+}
+
+export async function upsertWatchPresence(data: {
+  animeTitle: string;
+  seasonNumber?: number | null;
+  episodeNumber?: number | null;
+}): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
+  const payload = {
+    user_id: user.id,
+    anime_title: data.animeTitle,
+    season_number: data.seasonNumber ?? null,
+    episode_number: data.episodeNumber ?? null,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabase
+    .from("watch_presence")
+    .upsert(payload, { onConflict: "user_id" });
+  if (error) throw error;
+}
+
+export async function getFriendsWatchPresence(friendIds: string[]): Promise<WatchPresenceData[]> {
+  if (friendIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("watch_presence")
+    .select("*")
+    .in("user_id", friendIds);
+  if (error) throw error;
+  return snakeToCamel(data || []);
+}
+
+export async function upsertUserPresence(): Promise<void> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+  const { error } = await supabase
+    .from("user_presence")
+    .upsert(
+      { user_id: user.id, updated_at: new Date().toISOString() },
+      { onConflict: "user_id" },
+    );
+  if (error) throw error;
+}
+
+export async function getFriendsUserPresence(friendIds: string[]): Promise<UserPresenceData[]> {
+  if (friendIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("user_presence")
+    .select("*")
+    .in("user_id", friendIds);
+  if (error) throw error;
+  return snakeToCamel(data || []);
 }
 
 export async function getProfileByShortId(shortId: string): Promise<{ id: string; name: string } | null> {

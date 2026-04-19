@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { getAnimeList, createAnime, updateAnime, deleteAnime, logActivity } from "@/services/supabaseData";
+import { getAnimeList, createAnime, updateAnime, deleteAnime, logActivity, upsertUserPresence, getFriends, getFriendsUserPresence, type AnimeData } from "@/services/supabaseData";
 import { fetchAniList, GET_ANALYTICS_QUERY } from "@/services/anilist";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -103,6 +103,7 @@ const Index = () => {
   const [editingAnime, setEditingAnime] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("list");
+  const [onlineFriendsCount, setOnlineFriendsCount] = useState(0);
   const [gridSize, setGridSize] = useState<string>(() => {
     const saved = localStorage.getItem("animeGridSize");
     return saved || "medium";
@@ -121,6 +122,74 @@ const Index = () => {
       fetchAnimeList();
     }
   }, [user, activeTab]);
+
+  useEffect(() => {
+    if (!user) {
+      setOnlineFriendsCount(0);
+      return;
+    }
+
+    let cancelled = false;
+    const refreshOnlineCount = async () => {
+      try {
+        const friends = await getFriends();
+        const friendUserIds = friends.map((f) =>
+          f.userId === user.id ? f.friendId : f.userId
+        );
+        if (friendUserIds.length === 0) {
+          if (!cancelled) setOnlineFriendsCount(0);
+          return;
+        }
+        const onlineRows = await getFriendsUserPresence(friendUserIds);
+        const now = Date.now();
+        const count = onlineRows.filter((row) => {
+          const ts = new Date(row.updatedAt).getTime();
+          return now - ts < 2 * 60 * 1000;
+        }).length;
+        if (!cancelled) setOnlineFriendsCount(count);
+      } catch {
+        if (!cancelled) setOnlineFriendsCount(0);
+      }
+    };
+
+    refreshOnlineCount();
+    const iv = setInterval(refreshOnlineCount, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+    };
+  }, [user?.id]);
+
+  // Lightweight online heartbeat for friends list "online" indicator.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+
+    const pulse = async () => {
+      if (cancelled) return;
+      try {
+        await upsertUserPresence();
+      } catch {
+        // Ignore presence errors; core app should continue working.
+      }
+    };
+
+    pulse();
+    const iv = setInterval(pulse, 45000);
+    const onFocus = () => { pulse(); };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") pulse();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     filterAnimeList();
@@ -386,6 +455,33 @@ const Index = () => {
     }
   };
 
+  const handleWatchAutoProgress = ({ anime }: { action: "created" | "updated"; anime: AnimeData }) => {
+    setAnimeList((prev) => {
+      const existingIndex = prev.findIndex((a) => a.id === anime.id);
+      const mapped: Anime = {
+        id: anime.id,
+        title: anime.title,
+        episodesWatched: anime.episodesWatched,
+        totalEpisodes: anime.totalEpisodes,
+        status: anime.status,
+        rating: anime.rating,
+        notes: anime.notes,
+        coverImage: anime.coverImage,
+        seasonNumber: anime.seasonNumber,
+        anilistId: anime.anilistId,
+        malId: anime.malId,
+        ranking: anime.ranking,
+        isHentai: anime.isHentai,
+      };
+      if (existingIndex >= 0) {
+        const next = [...prev];
+        next[existingIndex] = mapped;
+        return next;
+      }
+      return [mapped, ...prev];
+    });
+  };
+
   const handleSignOut = async () => {
     await logout();
     setLocation("/auth");
@@ -497,6 +593,21 @@ const Index = () => {
                   <Share2 className="w-4 h-4" />
                 </Button>
               )}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setActiveTab("friends")}
+                title="Friends Activity"
+                className="relative h-8 w-8 hover:bg-muted/50 text-muted-foreground hover:text-foreground rounded-xl"
+                data-testid="button-friends-quick"
+              >
+                <Users className="w-4 h-4" />
+                {onlineFriendsCount > 0 && (
+                  <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-emerald-500 text-[10px] leading-4 text-white font-semibold text-center border border-background">
+                    {onlineFriendsCount > 9 ? "9+" : onlineFriendsCount}
+                  </span>
+                )}
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"
@@ -756,7 +867,7 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="watch" className="pt-4 animate-tab-in">
-            <Watch animeList={animeList} />
+            <Watch animeList={animeList} onAutoProgress={handleWatchAutoProgress} />
           </TabsContent>
         </Tabs>
       </main>

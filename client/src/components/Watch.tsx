@@ -1,14 +1,25 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from "react";
-import Hls from "hls.js";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import {
-    Search, Play, Pause, Loader2, Tv, ChevronLeft, ChevronRight,
-    Film, RefreshCw, Maximize2, Minimize2, Volume2, VolumeX, Volume1,
-    SkipForward, SkipBack, AlertTriangle, Wifi
+    Search, Play, Loader2, Tv, ChevronLeft, ChevronRight, Film,
+    RefreshCw, AlertTriangle, Wifi, Clapperboard, Library, Sparkles,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+import { createAnime, updateAnime, upsertWatchPresence, type AnimeData } from "@/services/supabaseData";
+import {
+    fetchAniwatchSearch,
+    fetchAniwatchAnimeDetails,
+    fetchAniwatchEpisodes,
+    fetchAniwatchMegaplay,
+    type AniwatchAnimeDetails,
+    type AniwatchEpisode,
+    type AniwatchSeason,
+    type AniwatchSearchItem,
+    type MegaplayResponse,
+} from "@/services/aniwatchApi";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -24,1095 +35,655 @@ interface Anime {
     malId: number | null;
 }
 
-interface GogoResult {
+interface SearchResult {
     id: string;
     title: string;
     url: string;
     image: string;
-    isAllAnime?: boolean;
-    subEps?: number;
-    dubEps?: number;
 }
 
-interface EpisodeInfo {
-    start: number;
-    end: number;
-    dubId: string | null;
-    dubEnd: number | null;
+interface AutoProgressEvent {
+    action: "created" | "updated";
+    anime: AnimeData;
 }
 
-interface StreamResult {
-    stream: string;
-    type: "hls" | "mp4";
-    source: string;
-    animeId?: string;
-    slug?: string;
-}
-
-interface SkipInterval {
-    start: number;
-    end: number;
-    type: "op" | "ed";
-}
-
-// ── AniSkip API ───────────────────────────────────────────────────────────────
-
-async function fetchSkipTimes(malId: number, episode: number): Promise<SkipInterval[]> {
-    try {
-        const res = await fetch(`/api/aniskip?malId=${malId}&episode=${episode}`, {
-            signal: AbortSignal.timeout(8000),
-        });
-        if (!res.ok) return [];
-        const json = await res.json();
-        if (!json.found || !Array.isArray(json.results)) return [];
-        return json.results.map((r: any) => ({
-            start: r.interval.startTime,
-            end: r.interval.endTime,
-            type: r.skipType as "op" | "ed",
-        }));
-    } catch {
-        return [];
+function metaChips(details: Record<string, string> | undefined): { label: string; value: string }[] {
+    if (!details) return [];
+    const order = ["status", "aired", "premiered", "duration", "genres", "studios", "mal score"];
+    const seen = new Set<string>();
+    const out: { label: string; value: string }[] = [];
+    for (const k of order) {
+        const v = details[k];
+        if (v && String(v).trim()) {
+            out.push({ label: k.replace(/\b\w/g, (c) => c.toUpperCase()), value: String(v).trim() });
+            seen.add(k);
+        }
     }
+    for (const [k, v] of Object.entries(details)) {
+        if (seen.has(k) || !v || !String(v).trim()) continue;
+        if (out.length >= 6) break;
+        out.push({ label: k.replace(/\b\w/g, (c) => c.toUpperCase()), value: String(v).trim() });
+    }
+    return out.slice(0, 6);
 }
 
-async function resolveMALId(anilistId: number): Promise<number | null> {
-    try {
-        const res = await fetch(`/api/anilist-mal?anilistId=${anilistId}`, { signal: AbortSignal.timeout(8000) });
-        if (!res.ok) return null;
-        const json = await res.json();
-        return json.idMal ?? null;
-    } catch { return null; }
+function normalizeTitle(value: string): string {
+    return value
+        .toLowerCase()
+        .replace(/season\s*\d+|part\s*\d+/gi, "")
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim();
 }
 
-function formatTime(s: number): string {
-    if (!isFinite(s)) return "0:00";
-    const m = Math.floor(s / 60);
-    const sec = Math.floor(s % 60);
-    return `${m}:${sec.toString().padStart(2, "0")}`;
+function parseSeasonNumber(label?: string | null): number {
+    if (!label) return 1;
+    const match = label.match(/season\s*(\d+)/i);
+    if (match) return parseInt(match[1], 10);
+    return 1;
 }
 
-// ── Custom HLS Video Player ───────────────────────────────────────────────────
+// ── Player ───────────────────────────────────────────────────────────────────
 
-function HlsPlayer({
-    streamResult,
-    malId,
-    anilistId,
-    episode,
-    onError,
+function WatchPlayer({
+    episodes,
+    selectedEpId,
+    onEpIdChange,
+    lang,
+    watched,
+    onBackToSeasons,
 }: {
-    streamResult: StreamResult;
-    malId?: number | null;
-    anilistId?: number | null;
-    episode: number;
-    onError: () => void;
+    episodes: AniwatchEpisode[];
+    selectedEpId: string | null;
+    onEpIdChange: (id: string) => void;
+    lang: "sub" | "dub";
+    watched: number;
+    onBackToSeasons: () => void;
 }) {
-    const videoRef = useRef<HTMLVideoElement>(null);
-    const containerRef = useRef<HTMLDivElement>(null);
-    const hlsRef = useRef<Hls | null>(null);
-    const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const seekbarRef = useRef<HTMLDivElement>(null);
+    const [megaplay, setMegaplay] = useState<MegaplayResponse | null>(null);
+    const [loading, setLoading] = useState(false);
+    const [err, setErr] = useState("");
+    const [retryTick, setRetryTick] = useState(0);
+    const [findEpisode, setFindEpisode] = useState("");
+    const [episodesOpenMobile, setEpisodesOpenMobile] = useState(false);
 
-    const [playing, setPlaying] = useState(false);
-    const [currentTime, setCurrentTime] = useState(0);
-    const [duration, setDuration] = useState(0);
-    const [volume, setVolume] = useState(1);
-    const [muted, setMuted] = useState(false);
-    const [fullscreen, setFullscreen] = useState(false);
-    const [showControls, setShowControls] = useState(true);
-    const [seeking, setSeeking] = useState(false);
-    const [hoverTime, setHoverTime] = useState<number | null>(null);
-    const [hoverX, setHoverX] = useState(0);
-    const [skipIntervals, setSkipIntervals] = useState<SkipInterval[]>([]);
-    const [buffered, setBuffered] = useState(0);
-    const [clickFlash, setClickFlash] = useState<"play" | "pause" | "rewind" | "forward" | null>(null);
-    const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-    // Fetch skip timestamps
     useEffect(() => {
+        if (!selectedEpId) return;
         let cancelled = false;
-        async function load() {
-            let mid = malId ?? null;
-            if (!mid && anilistId) mid = await resolveMALId(anilistId);
-            if (cancelled || !mid) { setSkipIntervals([]); return; }
-            const intervals = await fetchSkipTimes(mid, episode);
-            if (!cancelled) setSkipIntervals(intervals);
-        }
-        load();
+        setLoading(true);
+        setErr("");
+        setMegaplay(null);
+        fetchAniwatchMegaplay(selectedEpId)
+            .then((mp) => {
+                if (!cancelled) setMegaplay(mp);
+            })
+            .catch((e: Error) => {
+                if (!cancelled) setErr(e?.message || "Failed to load player");
+            })
+            .finally(() => {
+                if (!cancelled) setLoading(false);
+            });
         return () => { cancelled = true; };
-    }, [malId, anilistId, episode]);
+    }, [selectedEpId, retryTick]);
 
-    // Set up HLS source
-    useEffect(() => {
-        const video = videoRef.current;
-        if (!video) return;
-        if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
-        const proxied = `/api/proxy/stream?url=${encodeURIComponent(streamResult.stream)}`;
-        if (streamResult.type === "hls") {
-            if (Hls.isSupported()) {
-                const hls = new Hls({ enableWorker: true, backBufferLength: 90 });
-                hlsRef.current = hls;
-                hls.loadSource(proxied);
-                hls.attachMedia(video);
-                hls.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(() => {}));
-                hls.on(Hls.Events.ERROR, (_, data) => { if (data.fatal) onError(); });
-            } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-                video.src = proxied;
-                video.play().catch(() => {});
-            } else { onError(); }
-        } else {
-            video.src = proxied;
-            video.play().catch(() => {});
+    const idx = episodes.findIndex((e) => e.ep_id === selectedEpId);
+    const goPrev = () => { if (idx > 0) onEpIdChange(episodes[idx - 1].ep_id); };
+    const goNext = () => { if (idx >= 0 && idx < episodes.length - 1) onEpIdChange(episodes[idx + 1].ep_id); };
+
+    const iframeSrc = (() => {
+        if (!megaplay) return null;
+        if (lang === "dub") {
+            return megaplay.dub || megaplay.sub || megaplay.raw || null;
         }
-        return () => { if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; } };
-    }, [streamResult.stream]);
+        return megaplay.sub || megaplay.dub || megaplay.raw || null;
+    })();
 
-    // Video event listeners
-    useEffect(() => {
-        const v = videoRef.current;
-        if (!v) return;
-        const onPlay = () => setPlaying(true);
-        const onPause = () => setPlaying(false);
-        const onTimeUpdate = () => {
-            setCurrentTime(v.currentTime);
-            if (v.buffered.length > 0) setBuffered(v.buffered.end(v.buffered.length - 1));
-        };
-        const onDurationChange = () => setDuration(v.duration);
-        const onVolumeChange = () => { setVolume(v.volume); setMuted(v.muted); };
-        v.addEventListener("play", onPlay);
-        v.addEventListener("pause", onPause);
-        v.addEventListener("timeupdate", onTimeUpdate);
-        v.addEventListener("durationchange", onDurationChange);
-        v.addEventListener("volumechange", onVolumeChange);
-        return () => {
-            v.removeEventListener("play", onPlay);
-            v.removeEventListener("pause", onPause);
-            v.removeEventListener("timeupdate", onTimeUpdate);
-            v.removeEventListener("durationchange", onDurationChange);
-            v.removeEventListener("volumechange", onVolumeChange);
-        };
-    }, []);
+    const epLabel = idx >= 0 ? episodes[idx].number : "—";
+    const totalEps = episodes.length;
 
-    // Fullscreen change listener
-    useEffect(() => {
-        const onChange = () => setFullscreen(!!document.fullscreenElement);
-        document.addEventListener("fullscreenchange", onChange);
-        return () => document.removeEventListener("fullscreenchange", onChange);
-    }, []);
-
-    // Auto-hide controls
-    const showControlsTemp = useCallback(() => {
-        setShowControls(true);
-        if (hideTimer.current) clearTimeout(hideTimer.current);
-        hideTimer.current = setTimeout(() => setShowControls(false), 3000);
-    }, []);
-
-    const flash = (type: "play" | "pause" | "rewind" | "forward") => {
-        setClickFlash(type);
-        if (flashTimer.current) clearTimeout(flashTimer.current);
-        flashTimer.current = setTimeout(() => setClickFlash(null), 600);
-    };
-
-    const togglePlay = () => {
-        const v = videoRef.current;
-        if (!v) return;
-        if (v.paused) { v.play().catch(() => {}); flash("play"); }
-        else { v.pause(); flash("pause"); }
-    };
-
-    const rewind5 = (e?: React.MouseEvent) => {
-        e?.stopPropagation();
-        const v = videoRef.current;
-        if (!v) return;
-        v.currentTime = Math.max(0, v.currentTime - 5);
-        flash("rewind");
-        showControlsTemp();
-    };
-
-    const forward10 = (e?: React.MouseEvent) => {
-        e?.stopPropagation();
-        const v = videoRef.current;
-        if (!v) return;
-        v.currentTime = Math.min(duration, v.currentTime + 10);
-        flash("forward");
-        showControlsTemp();
-    };
-
-    const toggleMute = () => {
-        const v = videoRef.current;
-        if (!v) return;
-        v.muted = !v.muted;
-    };
-
-    const changeVolume = (val: number) => {
-        const v = videoRef.current;
-        if (!v) return;
-        v.volume = val;
-        v.muted = val === 0;
-    };
-
-    const toggleFullscreen = () => {
-        const el = containerRef.current;
-        if (!el) return;
-        document.fullscreenElement ? document.exitFullscreen() : el.requestFullscreen();
-    };
-
-    const seekTo = (time: number) => {
-        const v = videoRef.current;
-        if (v) v.currentTime = Math.max(0, Math.min(time, duration));
-    };
-
-    // Keyboard shortcuts
-    useEffect(() => {
-        const onKey = (e: KeyboardEvent) => {
-            // Don't fire when typing in an input
-            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-            if (e.code === "Space") { e.preventDefault(); togglePlay(); }
-            if (e.code === "ArrowLeft") { e.preventDefault(); rewind5(); }
-            if (e.code === "ArrowRight") { e.preventDefault(); forward10(); }
-        };
-        window.addEventListener("keydown", onKey);
-        return () => window.removeEventListener("keydown", onKey);
-    }, [duration]);
-
-    // Seekbar interaction
-    const getTimeFromEvent = (e: React.MouseEvent<HTMLDivElement>) => {
-        const rect = seekbarRef.current?.getBoundingClientRect();
-        if (!rect || !duration) return null;
-        const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-        return ratio * duration;
-    };
-
-    const onSeekbarMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-        const t = getTimeFromEvent(e);
-        if (t !== null) { setHoverTime(t); setHoverX(e.clientX - (seekbarRef.current?.getBoundingClientRect().left ?? 0)); }
-        if (seeking) seekTo(t ?? 0);
-    };
-
-    const onSeekbarMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-        setSeeking(true);
-        const t = getTimeFromEvent(e);
-        if (t !== null) seekTo(t);
-    };
-
-    const onSeekbarMouseUp = () => setSeeking(false);
-    const onSeekbarMouseLeave = () => { setHoverTime(null); if (seeking) setSeeking(false); };
-
-    const skipTo = (time: number) => seekTo(time);
-
-    const pct = duration > 0 ? (currentTime / duration) * 100 : 0;
-    const buffPct = duration > 0 ? (buffered / duration) * 100 : 0;
-
-    const intro = skipIntervals.find(s => s.type === "op");
-    const outro = skipIntervals.find(s => s.type === "ed");
-    const activeIntro = intro && currentTime >= intro.start && currentTime < intro.end;
-    const activeOutro = outro && currentTime >= outro.start && currentTime < outro.end;
-
-    const VolumeIcon = muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2;
-
-    return (
-        <div
-            ref={containerRef}
-            className="relative bg-black rounded-xl overflow-hidden aspect-video select-none group"
-            onMouseMove={showControlsTemp}
-            onMouseEnter={showControlsTemp}
-            onMouseLeave={() => {
-                if (hideTimer.current) clearTimeout(hideTimer.current);
-                hideTimer.current = setTimeout(() => setShowControls(false), 1000);
-            }}
-            onClick={togglePlay}
-            data-testid="player-container"
-        >
-            <video
-                ref={videoRef}
-                className="w-full h-full object-contain"
-                playsInline
-                data-testid="video-player"
-            />
-
-            {/* Centre click flash (play/pause/rewind/forward) */}
-            {clickFlash && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-                    <div className="flex items-center gap-6">
-                        {clickFlash === "rewind" && (
-                            <div className="flex flex-col items-center gap-1 animate-ping-once">
-                                <div className="w-14 h-14 rounded-full bg-black/60 flex items-center justify-center backdrop-blur-sm">
-                                    <SkipBack className="w-7 h-7 text-white fill-white" />
-                                </div>
-                                <span className="text-white text-xs font-bold drop-shadow">-5s</span>
-                            </div>
-                        )}
-                        {(clickFlash === "play" || clickFlash === "pause") && (
-                            <div className="animate-ping-once">
-                                <div className="w-16 h-16 rounded-full bg-black/60 flex items-center justify-center backdrop-blur-sm">
-                                    {clickFlash === "play"
-                                        ? <Play className="w-8 h-8 text-white fill-white ml-1" />
-                                        : <Pause className="w-8 h-8 text-white fill-white" />
-                                    }
-                                </div>
-                            </div>
-                        )}
-                        {clickFlash === "forward" && (
-                            <div className="flex flex-col items-center gap-1 animate-ping-once">
-                                <div className="w-14 h-14 rounded-full bg-black/60 flex items-center justify-center backdrop-blur-sm">
-                                    <SkipForward className="w-7 h-7 text-white fill-white" />
-                                </div>
-                                <span className="text-white text-xs font-bold drop-shadow">+10s</span>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* Paused state — static play icon (no flash) */}
-            {!playing && !clickFlash && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="w-16 h-16 rounded-full bg-black/50 flex items-center justify-center backdrop-blur-sm">
-                        <Play className="w-8 h-8 text-white fill-white ml-1" />
-                    </div>
-                </div>
-            )}
-
-            {/* Skip intro button */}
-            {activeIntro && (
-                <button
-                    onClick={e => { e.stopPropagation(); skipTo(intro!.end); }}
-                    data-testid="button-skip-intro"
-                    className="absolute bottom-20 right-4 flex items-center gap-2 px-4 py-2 rounded-lg bg-black/80 border border-white/30 text-white text-sm font-semibold hover:bg-white hover:text-black transition-all shadow-xl backdrop-blur-sm z-10"
-                >
-                    <SkipForward className="w-4 h-4" />
-                    Skip Intro
-                </button>
-            )}
-
-            {/* Skip outro button */}
-            {activeOutro && (
-                <button
-                    onClick={e => { e.stopPropagation(); skipTo(outro!.end); }}
-                    data-testid="button-skip-outro"
-                    className="absolute bottom-20 right-4 flex items-center gap-2 px-4 py-2 rounded-lg bg-black/80 border border-white/30 text-white text-sm font-semibold hover:bg-white hover:text-black transition-all shadow-xl backdrop-blur-sm z-10"
-                >
-                    <SkipForward className="w-4 h-4" />
-                    Skip Outro
-                </button>
-            )}
-
-            {/* Controls overlay — does NOT stopPropagation so clicking video area toggles play */}
-            <div
-                className={`absolute inset-0 flex flex-col justify-end transition-opacity duration-300 ${showControls ? "opacity-100" : "opacity-0"}`}
-                style={{ background: "linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.3) 40%, transparent 100%)" }}
-            >
-                {/* Seekbar — stopPropagation so scrubbing doesn't trigger play/pause */}
-                <div className="px-3 pb-1.5" onClick={e => e.stopPropagation()}>
-                    {/* Hover time tooltip */}
-                    {hoverTime !== null && (
-                        <div
-                            className="absolute bottom-14 text-[11px] font-mono text-white bg-black/80 px-1.5 py-0.5 rounded pointer-events-none z-20 -translate-x-1/2"
-                            style={{ left: hoverX + 12 }}
-                        >
-                            {formatTime(hoverTime)}
-                        </div>
-                    )}
-
-                    <div
-                        ref={seekbarRef}
-                        className="relative cursor-pointer group/seek py-2 -my-2"
-                        onMouseMove={onSeekbarMouseMove}
-                        onMouseDown={onSeekbarMouseDown}
-                        onMouseUp={onSeekbarMouseUp}
-                        onMouseLeave={onSeekbarMouseLeave}
-                        data-testid="seekbar"
-                    >
-                        {/* Track */}
-                        <div className="relative h-1 group-hover/seek:h-[5px] transition-all duration-100 rounded-full" style={{ background: "rgba(255,255,255,0.18)" }}>
-
-                            {/* Buffered */}
-                            <div
-                                className="absolute left-0 top-0 h-full rounded-full"
-                                style={{ width: `${buffPct}%`, background: "rgba(255,255,255,0.22)" }}
-                            />
-
-                            {/* Played */}
-                            <div
-                                className="absolute left-0 top-0 h-full rounded-full"
-                                style={{ width: `${pct}%`, background: "#a78bfa" }}
-                            />
-
-                            {/* Intro strip — rendered last to be on top, extends above track */}
-                            {intro && duration > 0 && (
-                                <div
-                                    className="absolute rounded-[2px] pointer-events-none"
-                                    style={{
-                                        left: `${(intro.start / duration) * 100}%`,
-                                        width: `${Math.max(((intro.end - intro.start) / duration) * 100, 0.5)}%`,
-                                        top: "-3px",
-                                        bottom: "-3px",
-                                        background: "#f59e0b",
-                                        zIndex: 10,
-                                    }}
-                                    title={`Intro: ${formatTime(intro.start)}–${formatTime(intro.end)}`}
-                                />
-                            )}
-
-                            {/* Outro strip — rendered last to be on top */}
-                            {outro && duration > 0 && (
-                                <div
-                                    className="absolute rounded-[2px] pointer-events-none"
-                                    style={{
-                                        left: `${(outro.start / duration) * 100}%`,
-                                        width: `${Math.max(((outro.end - outro.start) / duration) * 100, 0.5)}%`,
-                                        top: "-3px",
-                                        bottom: "-3px",
-                                        background: "#f59e0b",
-                                        zIndex: 10,
-                                    }}
-                                    title={`Outro: ${formatTime(outro.start)}–${formatTime(outro.end)}`}
-                                />
-                            )}
-
-                            {/* Thumb */}
-                            <div
-                                className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white shadow-md opacity-0 group-hover/seek:opacity-100 transition-opacity pointer-events-none"
-                                style={{ left: `calc(${pct}% - 6px)`, zIndex: 20 }}
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                {/* Bottom bar — stopPropagation here so clicks on controls don't toggle play */}
-                <div className="flex items-center gap-2 px-3 pb-3" onClick={e => e.stopPropagation()}>
-                    {/* Play/Pause */}
-                    <button
-                        onClick={togglePlay}
-                        className="text-white hover:text-white/80 transition-colors"
-                        data-testid="button-play-pause"
-                    >
-                        {playing
-                            ? <Pause className="w-5 h-5 fill-white" />
-                            : <Play className="w-5 h-5 fill-white ml-0.5" />
-                        }
-                    </button>
-
-                    {/* Rewind 5s */}
-                    <button
-                        onClick={rewind5}
-                        className="flex items-center gap-0.5 text-white hover:text-white/80 transition-colors"
-                        title="Rewind 5 seconds (←)"
-                        data-testid="button-rewind-5"
-                    >
-                        <SkipBack className="w-4 h-4 fill-white" />
-                        <span className="text-[10px] font-bold tabular-nums">5</span>
-                    </button>
-
-                    {/* Forward 10s */}
-                    <button
-                        onClick={forward10}
-                        className="flex items-center gap-0.5 text-white hover:text-white/80 transition-colors"
-                        title="Skip forward 10 seconds (→)"
-                        data-testid="button-forward-10"
-                    >
-                        <span className="text-[10px] font-bold tabular-nums">10</span>
-                        <SkipForward className="w-4 h-4 fill-white" />
-                    </button>
-
-                    {/* Time */}
-                    <span className="text-white text-xs font-mono shrink-0 tabular-nums">
-                        {formatTime(currentTime)} / {formatTime(duration)}
-                    </span>
-
-                    <div className="flex-1" />
-
-                    {/* Volume */}
-                    <div className="flex items-center gap-1.5 group/vol">
-                        <button onClick={e => { e.stopPropagation(); toggleMute(); }} className="text-white hover:text-white/80 transition-colors" data-testid="button-toggle-mute">
-                            <VolumeIcon className="w-4 h-4" />
-                        </button>
-                        <input
-                            type="range" min={0} max={1} step={0.05}
-                            value={muted ? 0 : volume}
-                            onChange={e => changeVolume(parseFloat(e.target.value))}
-                            onClick={e => e.stopPropagation()}
-                            className="w-0 group-hover/vol:w-16 transition-all duration-200 accent-violet-400 cursor-pointer"
-                            data-testid="input-volume"
-                        />
-                    </div>
-
-                    {/* Source badge */}
-                    <span className="hidden sm:inline px-1.5 py-0.5 rounded text-[9px] font-mono text-emerald-400 bg-black/40">
-                        {streamResult.type.toUpperCase()} · {streamResult.source}
-                    </span>
-
-                    {/* Fullscreen */}
-                    <button
-                        onClick={e => { e.stopPropagation(); toggleFullscreen(); }}
-                        className="text-white hover:text-white/80 transition-colors"
-                        data-testid="button-fullscreen"
-                    >
-                        {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// ── HiAnime-Style Episode List ────────────────────────────────────────────────
-
-function EpisodeList({ total, watched, selected, onSelect }: {
-    total: number; watched: number; selected: number; onSelect: (ep: number) => void;
-}) {
     const PER_RANGE = 100;
-    const ranges = Math.ceil(total / PER_RANGE);
-    const initRange = Math.ceil(selected / PER_RANGE) || 1;
-    const [range, setRange] = useState(initRange);
+    const selectedNumber = idx >= 0 ? parseInt(episodes[idx].number, 10) : NaN;
+    const rangeCount = Math.max(1, Math.ceil(totalEps / PER_RANGE));
+    const initialRange = Number.isFinite(selectedNumber) && selectedNumber > 0
+        ? Math.ceil(selectedNumber / PER_RANGE)
+        : 1;
+    const [range, setRange] = useState(initialRange);
 
-    const start = (range - 1) * PER_RANGE + 1;
-    const end = Math.min(range * PER_RANGE, total);
-
-    // Scroll selected episode into view
-    const selRef = useRef<HTMLButtonElement>(null);
+    // Keep range in sync when user changes episode via prev/next or programmatically
     useEffect(() => {
-        selRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    }, [selected]);
+        if (!Number.isFinite(selectedNumber) || selectedNumber <= 0) return;
+        const r = Math.ceil(selectedNumber / PER_RANGE);
+        if (r !== range) setRange(r);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedEpId]);
+
+    const rangeStart = (range - 1) * PER_RANGE + 1;
+    const rangeEnd = Math.min(range * PER_RANGE, totalEps);
+
+    const jumpToEpisodeNumber = (n: number) => {
+        if (!Number.isFinite(n) || n <= 0) return;
+        const target = episodes.find((e) => parseInt(e.number, 10) === n);
+        if (target) onEpIdChange(target.ep_id);
+    };
+
+    const onFindKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key !== "Enter") return;
+        const n = parseInt(findEpisode.trim(), 10);
+        jumpToEpisodeNumber(n);
+    };
 
     return (
-        <div className="space-y-2">
-            {/* Range selector */}
-            {ranges > 1 && (
-                <div className="flex flex-wrap gap-1.5">
-                    {Array.from({ length: ranges }, (_, i) => i + 1).map(r => (
-                        <button
-                            key={r}
-                            onClick={() => setRange(r)}
-                            className={`px-2.5 py-0.5 rounded text-xs font-medium transition-all ${r === range
-                                ? "bg-primary text-primary-foreground"
-                                : "bg-muted/50 text-muted-foreground hover:bg-muted/80 border border-border/30"
-                            }`}
-                        >
-                            {(r - 1) * PER_RANGE + 1}–{Math.min(r * PER_RANGE, total)}
-                        </button>
-                    ))}
-                </div>
-            )}
-
-            {/* Episode scroll list */}
-            <div className="max-h-52 overflow-y-auto rounded-xl border border-border/30 bg-muted/10 divide-y divide-border/20">
-                {Array.from({ length: end - start + 1 }, (_, i) => start + i).map(ep => {
-                    const isWatched = ep <= watched;
-                    const isSel = ep === selected;
-                    return (
-                        <button
-                            key={ep}
-                            ref={isSel ? selRef : undefined}
-                            onClick={() => onSelect(ep)}
-                            data-testid={`button-episode-${ep}`}
-                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-all hover:bg-muted/40 ${
-                                isSel
-                                    ? "bg-primary/15 border-l-2 border-primary text-primary font-semibold"
-                                    : isWatched
-                                        ? "text-muted-foreground/70"
-                                        : "text-foreground"
-                            }`}
-                        >
-                            <span className={`text-xs font-mono w-8 shrink-0 ${isSel ? "text-primary" : "text-muted-foreground/60"}`}>
-                                {ep}
-                            </span>
-                            <span className="flex-1 truncate">Episode {ep}</span>
-                            {isWatched && !isSel && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/60 shrink-0" />
-                            )}
-                            {isSel && (
-                                <span className="flex items-center gap-1 text-[10px] text-primary/80 shrink-0">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                                    Playing
-                                </span>
-                            )}
-                        </button>
-                    );
-                })}
-            </div>
-        </div>
-    );
-}
-
-// ── Stream Extraction Panel ───────────────────────────────────────────────────
-
-const EXTRACT_LOGS = [
-    "Fetching stream servers…",
-    "Connecting to video host…",
-    "Intercepting network requests…",
-    "Decoding video stream…",
-    "Almost there…",
-];
-
-type ExState = "idle" | "extracting" | "ready" | "error";
-
-interface AllAnimeSource { url: string; sourceName: string; priority: number; type: string; }
-
-function StreamPanel({
-    gogoId, animeTitle, episode, watched, totalEps,
-    malId, anilistId, isDub, aniwavesAnimeId, aniwavesSlug,
-    isAllAnime,
-    onEpisodeChange, onChangeSource, onAniwavesFound,
-}: {
-    gogoId: string; animeTitle: string; episode: number; watched: number; totalEps: number;
-    malId?: number | null; anilistId?: number | null; isDub?: boolean;
-    aniwavesAnimeId?: string; aniwavesSlug?: string;
-    isAllAnime?: boolean;
-    onEpisodeChange: (ep: number) => void; onChangeSource: () => void;
-    onAniwavesFound?: (animeId: string, slug: string) => void;
-}) {
-    const [state, setState] = useState<ExState>("idle");
-    const [streamResult, setStreamResult] = useState<StreamResult | null>(null);
-    const [error, setError] = useState("");
-    const [logIdx, setLogIdx] = useState(0);
-    const [allAnimeSources, setAllAnimeSources] = useState<AllAnimeSource[]>([]);
-    const [sourceIdx, setSourceIdx] = useState(0);
-
-    const extract = useCallback(async () => {
-        setState("extracting");
-        setStreamResult(null);
-        setAllAnimeSources([]);
-        setSourceIdx(0);
-        setError("");
-        setLogIdx(0);
-        const timer = setInterval(() => setLogIdx(i => (i + 1) % EXTRACT_LOGS.length), 2500);
-        try {
-            // ── AllAnime path (Vercel fallback) ──────────────────────────────
-            if (isAllAnime) {
-                const params = new URLSearchParams({
-                    showId: gogoId,
-                    episode: String(episode),
-                    type: isDub ? "dub" : "sub",
-                });
-                const res = await fetch(`/api/watch/sources?${params}`);
-                const json = await res.json();
-                clearInterval(timer);
-                if (!res.ok) throw new Error(json.error || "Failed to fetch sources");
-                const sources: AllAnimeSource[] = json.sources || [];
-                if (sources.length === 0) throw new Error("No sources available for this episode");
-                // Try to find a direct HLS/MP4 source first
-                const direct = sources.find(s => s.type === "hls" || s.type === "mp4");
-                if (direct) {
-                    setStreamResult({ stream: direct.url, type: direct.type as "hls" | "mp4", source: direct.sourceName });
-                    setState("ready");
-                } else {
-                    // Iframe sources
-                    setAllAnimeSources(sources);
-                    setState("ready");
-                }
-                return;
-            }
-
-            // ── Gogoanime / Puppeteer path (with AllAnime fallback) ──────────
-            let puppeteerOk = false;
-            try {
-                let url: string;
-                if (isDub) {
-                    const params = new URLSearchParams({ episode: String(episode) });
-                    if (aniwavesAnimeId && aniwavesSlug) {
-                        params.set("animeId", aniwavesAnimeId);
-                        params.set("slug", aniwavesSlug);
-                    } else {
-                        params.set("title", animeTitle);
-                    }
-                    url = `/api/extract/dub?${params}`;
-                } else {
-                    url = `/api/extract?id=${encodeURIComponent(gogoId)}&episode=${episode}`;
-                }
-                const res = await fetch(url);
-                const json = await res.json();
-                if (res.ok) {
-                    clearInterval(timer);
-                    setStreamResult(json);
-                    setState("ready");
-                    if (isDub && json.animeId && json.slug) {
-                        onAniwavesFound?.(json.animeId, json.slug);
-                    }
-                    puppeteerOk = true;
-                }
-            } catch {}
-
-            // If Puppeteer extraction failed (e.g. Chromium not available on server),
-            // fall back to AllAnime which uses a plain API — no Puppeteer needed.
-            if (!puppeteerOk) {
-                const params = new URLSearchParams({
-                    title: animeTitle,
-                    episode: String(episode),
-                    type: isDub ? "dub" : "sub",
-                });
-                const res = await fetch(`/api/watch/sources?${params}`);
-                const json = await res.json();
-                clearInterval(timer);
-                if (!res.ok) throw new Error(json.error || "Playback failed");
-                const sources: AllAnimeSource[] = json.sources || [];
-                if (sources.length === 0) throw new Error("No sources available for this episode");
-                const direct = sources.find(s => s.type === "hls" || s.type === "mp4");
-                if (direct) {
-                    setStreamResult({ stream: direct.url, type: direct.type as "hls" | "mp4", source: direct.sourceName });
-                    setState("ready");
-                } else {
-                    setAllAnimeSources(sources);
-                    setState("ready");
-                }
-            }
-        } catch (err: any) {
-            clearInterval(timer);
-            setError(err.message || "Unknown error");
-            setState("error");
-        }
-    }, [gogoId, animeTitle, episode, isDub, aniwavesAnimeId, aniwavesSlug, isAllAnime]);
-
-    useEffect(() => { extract(); }, [gogoId, episode, isDub, isAllAnime]);
-
-    return (
-        <div className="space-y-4">
-            {/* Prev / Next */}
-            <div className="flex items-center justify-between gap-2">
-                <Button variant="outline" size="sm" disabled={episode <= 1}
-                    onClick={() => onEpisodeChange(episode - 1)}
-                    className="gap-1.5 h-8" data-testid="button-prev-episode">
-                    <ChevronLeft className="w-3.5 h-3.5" /> Prev
-                </Button>
-                <span className="text-sm font-semibold">Episode {episode}</span>
-                <Button variant="outline" size="sm" disabled={episode >= totalEps}
-                    onClick={() => onEpisodeChange(episode + 1)}
-                    className="gap-1.5 h-8" data-testid="button-next-episode">
-                    Next <ChevronRight className="w-3.5 h-3.5" />
-                </Button>
-            </div>
-
-            {/* Extracting state */}
-            {state === "extracting" && (
-                <div className="aspect-video rounded-xl border border-border/40 bg-black flex flex-col items-center justify-center gap-5">
-                    <div className="relative">
-                        <div className="w-14 h-14 rounded-full border-2 border-primary/20 flex items-center justify-center">
-                            <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                        </div>
-                        <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-primary animate-pulse" />
+        <div className="space-y-5">
+            {/* HiAnime-style layout: episode sidebar + player */}
+            <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[320px_1fr] lg:gap-5 items-start">
+                {/* Player panel first on mobile */}
+                <section className="space-y-4 order-1 lg:order-2 w-full">
+                    <div className="flex items-center justify-between gap-2">
+                        <Button variant="outline" size="sm" disabled={idx <= 0}
+                            onClick={goPrev} className="gap-1.5 h-9 rounded-lg border-border/60" data-testid="button-aniw-prev-ep">
+                            <ChevronLeft className="w-4 h-4" /> Prev
+                        </Button>
+                        <span className="text-sm font-bold tabular-nums text-foreground/90">Episode {epLabel}</span>
+                        <Button variant="outline" size="sm" disabled={idx < 0 || idx >= totalEps - 1}
+                            onClick={goNext} className="gap-1.5 h-9 rounded-lg border-border/60" data-testid="button-aniw-next-ep">
+                            Next <ChevronRight className="w-4 h-4" />
+                        </Button>
                     </div>
-                    <div className="text-center space-y-1.5">
-                        <p className="text-sm font-semibold text-white">Loading stream</p>
-                        <p className="text-xs text-muted-foreground font-mono">{EXTRACT_LOGS[logIdx]}</p>
-                    </div>
-                    <div className="w-48 h-0.5 bg-muted/30 rounded-full overflow-hidden">
-                        <div className="h-full bg-primary/60 rounded-full animate-pulse w-2/3" />
-                    </div>
-                </div>
-            )}
 
-            {/* HLS/MP4 Player */}
-            {state === "ready" && streamResult && (
-                <HlsPlayer
-                    streamResult={streamResult}
-                    malId={malId}
-                    anilistId={anilistId}
-                    episode={episode}
-                    onError={() => { setError("Playback error. Try retrying."); setState("error"); }}
-                />
-            )}
-
-            {/* AllAnime iframe player (when no direct stream is available) */}
-            {state === "ready" && !streamResult && allAnimeSources.length > 0 && (
-                <div className="space-y-2">
-                    <div className="aspect-video rounded-xl overflow-hidden border border-border/40 bg-black">
-                        <iframe
-                            src={allAnimeSources[sourceIdx]?.url}
-                            className="w-full h-full"
-                            allowFullScreen
-                            allow="autoplay; fullscreen"
-                            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                            title={`Episode ${episode} — ${allAnimeSources[sourceIdx]?.sourceName}`}
-                        />
-                    </div>
-                    {allAnimeSources.length > 1 && (
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs text-muted-foreground">Server:</span>
-                            {allAnimeSources.map((s, i) => (
-                                <Button
-                                    key={i}
-                                    size="sm"
-                                    variant={i === sourceIdx ? "default" : "outline"}
-                                    className="h-7 text-xs px-2"
-                                    onClick={() => setSourceIdx(i)}
-                                    data-testid={`button-allanime-source-${i}`}
-                                >
-                                    {s.sourceName}
-                                </Button>
-                            ))}
+                    {loading && (
+                        <div className="aspect-video rounded-2xl border border-primary/20 bg-gradient-to-br from-black via-zinc-950 to-violet-950/40 flex flex-col items-center justify-center gap-4 shadow-[0_0_40px_-10px_rgba(139,92,246,0.5)]">
+                            <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                            <p className="text-xs text-muted-foreground">Loading player…</p>
                         </div>
                     )}
-                </div>
-            )}
 
-            {/* Error state */}
-            {state === "error" && (
-                <div className="aspect-video rounded-xl border border-orange-500/20 bg-black flex flex-col items-center justify-center gap-4 p-6 text-center">
-                    <AlertTriangle className="h-10 w-10 text-orange-400 opacity-60" />
-                    <div>
-                        <p className="font-semibold text-white">Stream failed</p>
-                        <p className="text-xs text-muted-foreground mt-1 max-w-xs line-clamp-3">{error}</p>
-                    </div>
-                    <div className="flex gap-2 flex-wrap justify-center">
-                        <Button size="sm" variant="outline" onClick={extract} className="gap-1.5" data-testid="button-retry-extract">
-                            <RefreshCw className="w-3.5 h-3.5" /> Retry
-                        </Button>
-                        <Button size="sm" variant="outline" onClick={onChangeSource} className="gap-1.5">
-                            <Search className="w-3.5 h-3.5" /> Change source
-                        </Button>
-                    </div>
-                </div>
-            )}
+                    {!loading && err && (
+                        <div className="aspect-video rounded-2xl border border-orange-500/25 bg-black/80 flex flex-col items-center justify-center gap-4 p-6 text-center">
+                            <AlertTriangle className="h-10 w-10 text-orange-400/80" />
+                            <p className="text-sm text-muted-foreground">{err}</p>
+                            <Button size="sm" variant="outline" className="rounded-lg" onClick={() => setRetryTick((t) => t + 1)} disabled={!selectedEpId}>
+                                <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Retry
+                            </Button>
+                        </div>
+                    )}
 
-            {/* Episode list */}
-            <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Episodes</p>
-                    <button
-                        onClick={onChangeSource}
-                        className="text-[11px] text-muted-foreground/60 hover:text-primary transition-colors"
-                        data-testid="button-change-gogo-source"
-                    >
-                        Change source
-                    </button>
-                </div>
-                <EpisodeList total={totalEps} watched={watched} selected={episode} onSelect={onEpisodeChange} />
+                    {!loading && !err && iframeSrc && (
+                        <div className="relative aspect-video rounded-2xl overflow-hidden border border-primary/25 shadow-[0_0_50px_-12px_rgba(139,92,246,0.45)] ring-1 ring-white/5">
+                            <iframe
+                                key={`${selectedEpId}-${lang}`}
+                                src={iframeSrc}
+                                className="w-full h-full"
+                                allowFullScreen
+                                allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+                                sandbox="allow-scripts allow-same-origin allow-presentation allow-fullscreen"
+                                title={`Episode ${epLabel}`}
+                                referrerPolicy="strict-origin-when-cross-origin"
+                            />
+                        </div>
+                    )}
+
+                    {!loading && !err && megaplay && !iframeSrc && (
+                        <div className="aspect-video rounded-2xl border border-border/50 bg-muted/20 flex items-center justify-center p-6 text-center text-sm text-muted-foreground">
+                            No embed for this language — try SUB / DUB or another episode.
+                        </div>
+                    )}
+                </section>
+
+                {/* Episodes sidebar (collapsible on mobile) */}
+                <aside className="order-2 lg:order-1 w-full rounded-2xl border border-border/45 bg-card/70 backdrop-blur-sm overflow-hidden lg:sticky lg:top-3">
+                    <div className="p-4 border-b border-border/35">
+                        <div className="flex items-center justify-between gap-3">
+                            <p className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
+                                <Clapperboard className="w-4 h-4 text-primary/80" />
+                                Episodes
+                            </p>
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-8 rounded-lg lg:hidden"
+                                    onClick={() => setEpisodesOpenMobile((v) => !v)}
+                                    data-testid="button-toggle-episodes"
+                                >
+                                    {episodesOpenMobile ? "Hide" : "Show"}
+                                </Button>
+                                <button
+                                    type="button"
+                                    onClick={onBackToSeasons}
+                                    className="text-[11px] font-semibold text-muted-foreground hover:text-primary transition-colors"
+                                    data-testid="button-back-seasons"
+                                >
+                                    ← Seasons
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="mt-3 flex items-center gap-2">
+                            <div className="flex items-center gap-2 rounded-xl border border-border/45 bg-muted/20 px-3 py-2">
+                                <span className="text-[11px] font-mono text-muted-foreground/80">
+                                    {String(rangeStart).padStart(3, "0")}–{String(rangeEnd).padStart(3, "0")}
+                                </span>
+                                <select
+                                    value={range}
+                                    onChange={(e) => setRange(parseInt(e.target.value, 10))}
+                                    className="bg-transparent text-[11px] font-semibold text-foreground outline-none"
+                                    aria-label="Episode range"
+                                    data-testid="select-episode-range"
+                                >
+                                    {Array.from({ length: rangeCount }, (_, i) => i + 1).map((r) => {
+                                        const s = (r - 1) * PER_RANGE + 1;
+                                        const en = Math.min(r * PER_RANGE, totalEps);
+                                        return (
+                                            <option key={r} value={r}>
+                                                {String(s).padStart(3, "0")}–{String(en).padStart(3, "0")}
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                            </div>
+
+                            <div className="relative flex-1">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/70" />
+                                <Input
+                                    value={findEpisode}
+                                    onChange={(e) => setFindEpisode(e.target.value)}
+                                    onKeyDown={onFindKeyDown}
+                                    placeholder="Find #"
+                                    inputMode="numeric"
+                                    className="pl-9 h-10 rounded-xl border-border/50 bg-muted/25 text-sm"
+                                    data-testid="input-find-episode"
+                                />
+                            </div>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-10 rounded-xl"
+                                onClick={() => jumpToEpisodeNumber(parseInt(findEpisode.trim(), 10))}
+                                disabled={!findEpisode.trim()}
+                                data-testid="button-find-episode"
+                            >
+                                Go
+                            </Button>
+                        </div>
+                    </div>
+
+                    <div className={cn("p-3", "lg:block", !episodesOpenMobile && "hidden")}>
+                        <div className="grid grid-cols-5 sm:grid-cols-8 lg:grid-cols-5 gap-2 max-h-[520px] lg:max-h-[520px] overflow-y-auto pr-1">
+                            {episodes
+                                .filter((ep) => {
+                                    const n = parseInt(ep.number, 10);
+                                    return Number.isFinite(n) && n >= rangeStart && n <= rangeEnd;
+                                })
+                                .map((ep) => {
+                                    const n = parseInt(ep.number, 10);
+                                    const isWatched = Number.isFinite(n) && n > 0 && watched > 0 && n <= watched;
+                                    const isSel = ep.ep_id === selectedEpId;
+                                    return (
+                                        <button
+                                            key={ep.ep_id}
+                                            type="button"
+                                            onClick={() => onEpIdChange(ep.ep_id)}
+                                            data-testid={`button-aniw-ep-${ep.ep_id}`}
+                                            className={cn(
+                                                "h-10 rounded-xl border text-xs font-bold tabular-nums transition-all",
+                                                isSel
+                                                    ? "bg-primary text-primary-foreground border-primary/60 shadow-[0_0_0_3px_rgba(139,92,246,0.25)]"
+                                                    : "bg-muted/20 border-border/45 hover:bg-muted/40 hover:border-primary/45",
+                                                isWatched && !isSel && "text-muted-foreground",
+                                            )}
+                                            title={ep.title || `Episode ${ep.number}`}
+                                        >
+                                            {n}
+                                        </button>
+                                    );
+                                })}
+                        </div>
+                    </div>
+                </aside>
             </div>
 
-            <p className="text-[11px] text-muted-foreground/40 flex items-center gap-1">
-                <Wifi className="w-3 h-3" />
-                Sub via Gogoanime · Dub via Aniwaves · Content belongs to respective rights holders.
+            <p className="text-[10px] text-muted-foreground/50 flex items-center gap-1.5">
+                <Wifi className="w-3 h-3 shrink-0" />
+                Third-party embed · rights belong to respective holders.
             </p>
         </div>
     );
 }
 
-// ── Main Watch Component ──────────────────────────────────────────────────────
+// ── Main ─────────────────────────────────────────────────────────────────────
 
-export default function Watch({ animeList }: { animeList: Anime[] }) {
+type Flow = "browse" | "series" | "watch";
+
+export default function Watch({
+    animeList,
+    onAutoProgress,
+}: {
+    animeList: Anime[];
+    onAutoProgress?: (event: AutoProgressEvent) => void;
+}) {
     const [search, setSearch] = useState("");
-    const [results, setResults] = useState<GogoResult[]>([]);
+    const [results, setResults] = useState<SearchResult[]>([]);
     const [searching, setSearching] = useState(false);
     const [searched, setSearched] = useState(false);
-    const [gogoMatch, setGogoMatch] = useState<GogoResult | null>(null);
-    const [epInfo, setEpInfo] = useState<EpisodeInfo | null>(null);
-    const [epInfoLoading, setEpInfoLoading] = useState(false);
-    const [selectedEp, setSelectedEp] = useState(1);
+
+    const [flow, setFlow] = useState<Flow>("browse");
+    const [hubShow, setHubShow] = useState<SearchResult | null>(null);
+    const [details, setDetails] = useState<AniwatchAnimeDetails | null>(null);
+    const [detailLoading, setDetailLoading] = useState(false);
+
+    const [seasonPick, setSeasonPick] = useState<AniwatchSeason | null>(null);
+    const [episodes, setEpisodes] = useState<AniwatchEpisode[]>([]);
+    const [epLoading, setEpLoading] = useState(false);
+    const [selectedEpId, setSelectedEpId] = useState<string | null>(null);
     const [lang, setLang] = useState<"sub" | "dub">("sub");
-    const [aniwavesInfo, setAniwavesInfo] = useState<{ animeId: string; slug: string } | null>(null);
+    const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const syncedSelectionsRef = useRef<Set<string>>(new Set());
 
     const doSearch = useCallback(async (q: string) => {
         if (!q.trim()) return;
         setSearching(true);
         setSearched(false);
-        let found: GogoResult[] = [];
         try {
-            // Try gogoanime first
-            const res = await fetch(`/api/gogoanime/search?q=${encodeURIComponent(q)}`);
-            if (res.ok) {
-                const json = await res.json();
-                found = json.results || [];
-            }
-        } catch {}
-
-        // If gogoanime failed or returned nothing (e.g. blocked on Vercel), fall back to AllAnime
-        if (found.length === 0) {
-            try {
-                const aaRes = await fetch(`/api/allanime/search?q=${encodeURIComponent(q)}`);
-                if (aaRes.ok) {
-                    const aaJson = await aaRes.json();
-                    found = (aaJson.results || []).map((r: any) => ({
-                        id: r.id,
-                        title: r.name,
-                        url: "",
-                        image: r.thumbnail || "",
-                        isAllAnime: true,
-                        subEps: r.subEpisodes || 0,
-                        dubEps: r.dubEpisodes || 0,
-                    }));
-                }
-            } catch {}
+            const aw = await fetchAniwatchSearch(q.trim());
+            const found = (aw.results || []).map((r: AniwatchSearchItem) => ({
+                id: r.anime_id,
+                title: r.title,
+                url: "",
+                image: r.image || "",
+            }));
+            setResults(found);
+        } catch {
+            setResults([]);
         }
-
-        setResults(found);
         setSearching(false);
         setSearched(true);
     }, []);
 
-    const selectMatch = async (result: GogoResult) => {
-        setGogoMatch(result);
+    // Always keep the selected anime/hero at the top when navigating
+    useEffect(() => {
+        if (flow === "browse") return;
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    }, [flow, hubShow?.id, seasonPick?.anime_id]);
+
+    const resetToBrowse = () => {
+        setFlow("browse");
+        setHubShow(null);
+        setDetails(null);
+        setSeasonPick(null);
+        setEpisodes([]);
+        setSelectedEpId(null);
         setLang("sub");
-        setSelectedEp(1);
-        setEpInfo(null);
-        setAniwavesInfo(null);
-
-        // AllAnime results already carry episode counts — no extra fetch needed
-        if (result.isAllAnime) {
-            setEpInfo({
-                start: 1,
-                end: result.subEps || 12,
-                dubId: (result.dubEps && result.dubEps > 0) ? "dub" : null,
-                dubEnd: result.dubEps || null,
-            });
-            return;
-        }
-
-        setEpInfoLoading(true);
-        try {
-            const res = await fetch(`/api/gogoanime/episodes?id=${encodeURIComponent(result.id)}`);
-            if (res.ok) setEpInfo(await res.json());
-        } catch {}
-        setEpInfoLoading(false);
     };
 
-    const goBack = () => { setGogoMatch(null); setEpInfo(null); setLang("sub"); setAniwavesInfo(null); };
+    const openShowFromSearch = async (result: SearchResult) => {
+        setHubShow(result);
+        setDetails(null);
+        setSeasonPick(null);
+        setEpisodes([]);
+        setSelectedEpId(null);
+        setLang("sub");
+        setFlow("series");
+        setDetailLoading(true);
+        try {
+            const d = await fetchAniwatchAnimeDetails(result.id);
+            setDetails(d);
+        } catch {
+            setDetails(null);
+        }
+        setDetailLoading(false);
+    };
+
+    const seasonsForUi: AniwatchSeason[] = useMemo(() => {
+        if (!hubShow) return [];
+        const raw = details?.seasons;
+        if (raw && raw.length > 0) return raw;
+        return [{ title: "All episodes", anime_id: hubShow.id }];
+    }, [details, hubShow]);
+
+    const pickSeason = async (season: AniwatchSeason) => {
+        setSeasonPick(season);
+        setEpisodes([]);
+        setSelectedEpId(null);
+        setFlow("watch");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        setEpLoading(true);
+        try {
+            const data = await fetchAniwatchEpisodes(season.anime_id);
+            const eps = data.episodes || [];
+            setEpisodes(eps);
+            if (eps.length > 0) setSelectedEpId(eps[0].ep_id);
+        } catch { /* empty */ }
+        setEpLoading(false);
+    };
+
+    const backFromWatchToSeries = () => {
+        setSeasonPick(null);
+        setEpisodes([]);
+        setSelectedEpId(null);
+        setFlow("series");
+    };
 
     const listAnime = useMemo(() => {
-        if (!gogoMatch) return null;
-        const t = gogoMatch.title.toLowerCase();
+        const ref = hubShow;
+        if (!ref) return null;
+        const t = ref.title.toLowerCase();
         return animeList.find(a =>
             a.title.toLowerCase() === t ||
             t.includes(a.title.toLowerCase()) ||
             a.title.toLowerCase().includes(t)
         ) || null;
-    }, [gogoMatch, animeList]);
+    }, [hubShow, animeList]);
 
-    const activeGogoId = gogoMatch?.id || "";
-    const totalEps = epInfo?.end || listAnime?.totalEpisodes || 24;
+    const poster = details?.image || hubShow?.image || "";
+    const displayTitle = details?.title || hubShow?.title || "";
+    const description = (details?.description || "").trim();
+    const chips = metaChips(details?.details);
+
+    const epCount = episodes.length;
+    const selectedEpisodeNumber = useMemo(() => {
+        const ep = episodes.find((e) => e.ep_id === selectedEpId);
+        if (!ep) return null;
+        const n = parseInt(ep.number, 10);
+        return Number.isFinite(n) && n > 0 ? n : null;
+    }, [episodes, selectedEpId]);
+    const resolvedSeasonNumber = useMemo(
+        () => parseSeasonNumber(seasonPick?.title),
+        [seasonPick?.title],
+    );
+    const canonicalTitle = useMemo(
+        () => (details?.title || hubShow?.title || "").trim(),
+        [details?.title, hubShow?.title],
+    );
+
+    useEffect(() => {
+        if (syncTimerRef.current) {
+            clearTimeout(syncTimerRef.current);
+            syncTimerRef.current = null;
+        }
+        if (flow !== "watch" || !hubShow || !seasonPick || !selectedEpId || !selectedEpisodeNumber || !canonicalTitle) {
+            return;
+        }
+
+        const selectionKey = `${hubShow.id}:${seasonPick.anime_id}:${selectedEpId}:${selectedEpisodeNumber}`;
+        if (syncedSelectionsRef.current.has(selectionKey)) return;
+
+        syncTimerRef.current = setTimeout(async () => {
+            try {
+                const normalizedTarget = normalizeTitle(canonicalTitle);
+                const candidates = animeList.filter((a) => {
+                    const left = normalizeTitle(a.title);
+                    return left === normalizedTarget || left.includes(normalizedTarget) || normalizedTarget.includes(left);
+                });
+
+                const matched = candidates.find((a) => (a.seasonNumber || 1) === resolvedSeasonNumber) || null;
+
+                if (matched) {
+                    const nextEpisodes = Math.max(matched.episodesWatched || 0, selectedEpisodeNumber);
+                    const reachedEnd = matched.totalEpisodes !== null && nextEpisodes >= matched.totalEpisodes;
+                    const nextStatus = reachedEnd ? "completed" : "watching";
+                    if (nextEpisodes !== matched.episodesWatched || nextStatus !== matched.status) {
+                        const updated = await updateAnime(matched.id, {
+                            episodesWatched: nextEpisodes,
+                            status: nextStatus,
+                        });
+                        onAutoProgress?.({ action: "updated", anime: updated });
+                    }
+                } else {
+                    const [created] = await createAnime([{
+                        title: canonicalTitle,
+                        episodesWatched: selectedEpisodeNumber,
+                        totalEpisodes: epCount || null,
+                        status: "watching",
+                        rating: null,
+                        notes: null,
+                        coverImage: poster || null,
+                        seasonNumber: resolvedSeasonNumber,
+                        anilistId: null,
+                        malId: null,
+                        ranking: null,
+                        isHentai: false,
+                    }]);
+                    if (created) onAutoProgress?.({ action: "created", anime: created });
+                }
+                syncedSelectionsRef.current.add(selectionKey);
+            } catch {
+                // Fail silently; manual controls remain available.
+            }
+        }, 90000);
+
+        return () => {
+            if (syncTimerRef.current) {
+                clearTimeout(syncTimerRef.current);
+                syncTimerRef.current = null;
+            }
+        };
+    }, [
+        flow,
+        hubShow,
+        seasonPick,
+        selectedEpId,
+        selectedEpisodeNumber,
+        canonicalTitle,
+        animeList,
+        resolvedSeasonNumber,
+        epCount,
+        poster,
+        onAutoProgress,
+    ]);
+
+    // Presence: "currently watching <title> Sx Ep y" for friends UI.
+    useEffect(() => {
+        if (flow !== "watch" || !selectedEpId || !selectedEpisodeNumber || !canonicalTitle) return;
+        const timer = setTimeout(() => {
+            upsertWatchPresence({
+                animeTitle: canonicalTitle,
+                seasonNumber: resolvedSeasonNumber,
+                episodeNumber: selectedEpisodeNumber,
+            }).catch(() => {});
+        }, 15000);
+        return () => clearTimeout(timer);
+    }, [flow, selectedEpId, selectedEpisodeNumber, canonicalTitle, resolvedSeasonNumber]);
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-center gap-2.5">
-                <Film className="h-5 w-5 text-primary drop-shadow-[0_0_8px_rgba(139,92,246,0.7)]" />
-                <h2 className="text-2xl font-bold">Watch</h2>
-            </div>
-            <p className="text-muted-foreground text-sm -mt-4">
-                Search any anime, pick an episode, and stream directly — sub &amp; dub.
-            </p>
-
-            {gogoMatch ? (
-                <div className="space-y-4">
-                    {/* Header */}
-                    <div className="flex items-center gap-3 flex-wrap">
-                        <Button variant="ghost" size="sm" onClick={goBack}
-                            className="gap-1.5 -ml-2 h-8 text-muted-foreground hover:text-foreground shrink-0"
-                            data-testid="button-back-to-list">
-                            <ChevronLeft className="w-4 h-4" /> Back
-                        </Button>
-                        <div className="flex-1 min-w-0">
-                            <h3 className="font-bold text-base truncate">{gogoMatch.title}</h3>
-                            {epInfoLoading && (
-                                <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                                    <Loader2 className="w-3 h-3 animate-spin" /> Loading info…
-                                </p>
-                            )}
-                            {epInfo && !epInfoLoading && (
-                                <p className="text-[11px] text-muted-foreground">
-                                    {epInfo.end} episodes · Sub &amp; Dub available
-                                </p>
-                            )}
+        <div className="space-y-6 pb-6">
+            {/* Header — browse only full title; series/watch slimmer */}
+            {flow === "browse" && (
+                <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600/30 to-fuchsia-600/20 ring-1 ring-primary/25 shadow-neon">
+                            <Film className="h-5 w-5 text-primary" />
                         </div>
-
-                        {/* Sub / Dub toggle */}
-                        <div className="flex items-center shrink-0 rounded-lg border border-border/50 overflow-hidden">
-                            <button
-                                onClick={() => { if (lang !== "sub") { setLang("sub"); setSelectedEp(1); } }}
-                                data-testid="button-type-sub"
-                                className={`px-3 py-1.5 text-xs font-semibold transition-all ${lang === "sub" ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground hover:bg-muted/40"}`}>
-                                SUB
-                            </button>
-                            <div className="w-px h-4 bg-border/50" />
-                            <button
-                                onClick={() => { if (lang !== "dub") { setLang("dub"); setSelectedEp(1); } }}
-                                data-testid="button-type-dub"
-                                className={`px-3 py-1.5 text-xs font-semibold transition-all ${lang === "dub" ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground hover:bg-muted/40"}`}>
-                                DUB
-                            </button>
+                        <div>
+                            <h2 className="text-2xl sm:text-3xl font-black tracking-tight bg-gradient-to-r from-foreground via-foreground to-primary bg-clip-text text-transparent">
+                                Watch
+                            </h2>
+                            <p className="text-muted-foreground text-sm flex items-center gap-1.5 mt-0.5">
+                                <Sparkles className="w-3.5 h-3.5 text-amber-400/90 shrink-0" />
+                                Search like HiAnime — pick a show, then a season, then an episode.
+                            </p>
                         </div>
                     </div>
-
-                    <StreamPanel
-                        key={`${activeGogoId}-${lang}-${selectedEp}`}
-                        gogoId={activeGogoId}
-                        animeTitle={gogoMatch.title}
-                        episode={selectedEp}
-                        watched={listAnime?.episodesWatched || 0}
-                        totalEps={totalEps}
-                        malId={listAnime?.malId}
-                        anilistId={listAnime?.anilistId}
-                        isDub={lang === "dub"}
-                        aniwavesAnimeId={aniwavesInfo?.animeId}
-                        aniwavesSlug={aniwavesInfo?.slug}
-                        isAllAnime={gogoMatch.isAllAnime}
-                        onEpisodeChange={setSelectedEp}
-                        onChangeSource={goBack}
-                        onAniwavesFound={(animeId, slug) => setAniwavesInfo({ animeId, slug })}
-                    />
                 </div>
-            ) : (
+            )}
+
+            {flow === "browse" && (
                 <>
-                    {/* Search */}
-                    <div className="flex gap-2 max-w-sm">
+                    <div className="flex flex-col sm:flex-row gap-3 max-w-2xl">
                         <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                             <Input
-                                placeholder="Search anime to watch…"
+                                placeholder="Search anime (e.g. Re:Zero)…"
                                 value={search}
                                 onChange={e => setSearch(e.target.value)}
                                 onKeyDown={e => e.key === "Enter" && doSearch(search)}
-                                className="pl-9 h-10 rounded-xl border-border/50 bg-muted/30"
+                                className="pl-11 h-12 rounded-2xl border-border/50 bg-muted/25 text-base shadow-inner focus-visible:ring-primary/40"
                                 data-testid="input-watch-search"
                             />
                         </div>
-                        <Button variant="outline" onClick={() => doSearch(search)}
+                        <Button
+                            onClick={() => doSearch(search)}
                             disabled={searching || !search.trim()}
-                            className="h-10 px-3 shrink-0" data-testid="button-watch-search">
-                            {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                            className="h-12 px-6 rounded-2xl font-semibold bg-gradient-to-r from-primary to-violet-600 hover:opacity-95 shadow-lg shadow-primary/25 shrink-0"
+                            data-testid="button-watch-search"
+                        >
+                            {searching ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Search className="w-4 h-4 mr-2" /> Search</>}
                         </Button>
                     </div>
 
                     {!searched && !searching && (
-                        <p className="text-xs text-muted-foreground/50 text-center pt-2">
-                            Search any anime title to start watching.
+                        <p className="text-xs text-muted-foreground/60 text-center sm:text-left max-w-xl leading-relaxed">
+                            Results come from your scraper (<code className="text-[10px] rounded bg-muted/50 px-1 py-0.5">ANIWATCH_SCRAPER_URL</code>).
                         </p>
                     )}
-                    {searching && <p className="text-xs text-muted-foreground py-1">Searching…</p>}
+                    {searching && (
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Loader2 className="w-4 h-4 animate-spin text-primary" /> Searching catalog…
+                        </div>
+                    )}
                     {searched && !searching && results.length === 0 && (
-                        <Card className="bg-muted/30 border-dashed">
-                            <CardContent className="flex flex-col items-center justify-center p-10 text-center text-muted-foreground gap-2">
-                                <Search className="h-8 w-8 mb-1 opacity-20" />
-                                <p className="font-medium">No results for "{search}"</p>
-                                <p className="text-xs">Try a shorter or different title.</p>
+                        <Card className="border-dashed border-border/60 bg-muted/15 overflow-hidden">
+                            <CardContent className="flex flex-col items-center justify-center p-12 text-center text-muted-foreground gap-3">
+                                <Search className="h-10 w-10 opacity-25" />
+                                <p className="font-semibold text-foreground/80">No results for &ldquo;{search}&rdquo;</p>
+                                <p className="text-xs max-w-sm">Try another spelling or shorter query.</p>
                             </CardContent>
                         </Card>
                     )}
                     {results.length > 0 && (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                             {results.map(r => {
                                 const listEntry = animeList.find(a => a.title.toLowerCase() === r.title.toLowerCase());
                                 const watchedEps = listEntry?.episodesWatched || 0;
                                 return (
-                                    <button key={r.id} onClick={() => selectMatch(r)}
+                                    <button
+                                        key={r.id}
+                                        type="button"
+                                        onClick={() => openShowFromSearch(r)}
                                         data-testid={`button-watch-result-${r.id}`}
-                                        className="group relative rounded-xl overflow-hidden border border-border/40 bg-card hover:border-primary/50 transition-all hover:shadow-neon text-left">
-                                        <div className="aspect-[3/4] overflow-hidden bg-muted/30 relative">
-                                            {r.image
-                                                ? <img src={r.image} alt={r.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                                                : <div className="w-full h-full flex items-center justify-center"><Tv className="w-8 h-8 opacity-20" /></div>
-                                            }
-                                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                <div className="w-12 h-12 rounded-full bg-primary/90 flex items-center justify-center shadow-neon">
-                                                    <Play className="w-5 h-5 text-white fill-white ml-0.5" />
+                                        className="group text-left rounded-2xl overflow-hidden border border-border/50 bg-card/80 backdrop-blur-sm hover:border-primary/45 hover:shadow-[0_0_32px_-8px_rgba(139,92,246,0.35)] transition-all duration-300 hover:-translate-y-0.5"
+                                    >
+                                        <div className="aspect-[3/4] overflow-hidden bg-muted/40 relative">
+                                            {r.image ? (
+                                                <img src={r.image} alt="" className="w-full h-full object-cover transition duration-500 group-hover:scale-105" />
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center"><Tv className="w-10 h-10 opacity-20" /></div>
+                                            )}
+                                            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity" />
+                                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <div className="h-14 w-14 rounded-full bg-primary flex items-center justify-center shadow-xl ring-4 ring-black/30">
+                                                    <Play className="h-6 w-6 text-primary-foreground fill-primary-foreground ml-1" />
                                                 </div>
                                             </div>
                                             {listEntry && (
-                                                <div className="absolute top-1.5 left-1.5">
-                                                    <Badge className="text-[9px] px-1.5 py-0 h-4 bg-primary/80 text-white">In List</Badge>
-                                                </div>
+                                                <Badge className="absolute top-2 left-2 text-[10px] px-2 py-0.5 bg-primary/90 border-0 shadow-md">In your list</Badge>
                                             )}
                                         </div>
-                                        <div className="p-2">
-                                            <p className="text-xs font-semibold line-clamp-2 leading-tight">{r.title}</p>
-                                            {watchedEps > 0 && <p className="text-[10px] text-muted-foreground mt-0.5">{watchedEps} ep watched</p>}
+                                        <div className="p-3 pt-2.5">
+                                            <p className="text-xs font-bold leading-snug line-clamp-2 group-hover:text-primary transition-colors">{r.title}</p>
+                                            {watchedEps > 0 && (
+                                                <p className="text-[10px] text-muted-foreground mt-1">{watchedEps} ep in list</p>
+                                            )}
                                         </div>
                                     </button>
                                 );
@@ -1120,6 +691,176 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                         </div>
                     )}
                 </>
+            )}
+
+            {(flow === "series" || flow === "watch") && hubShow && (
+                <div className="space-y-5 animate-in fade-in duration-300">
+                    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/40 bg-muted/20 px-2.5 py-1.5 w-fit">
+                        <Button variant="ghost" size="sm" onClick={resetToBrowse}
+                            className="gap-1.5 h-8 text-muted-foreground hover:text-foreground rounded-lg"
+                            data-testid="button-back-to-list">
+                            <ChevronLeft className="w-4 h-4" /> Browse
+                        </Button>
+                        {flow === "watch" && (
+                            <>
+                                <span className="text-muted-foreground/40 text-sm">/</span>
+                                <Button variant="ghost" size="sm" onClick={backFromWatchToSeries}
+                                    className="h-8 text-muted-foreground hover:text-foreground rounded-lg">
+                                    Seasons
+                                </Button>
+                            </>
+                        )}
+                    </div>
+
+                    {/* Hero — series hub (always show when not browse); watch keeps context */}
+                    <div className="relative overflow-hidden rounded-3xl border border-border/40 bg-card shadow-xl ring-1 ring-white/5">
+                        <div className="absolute inset-0 pointer-events-none">
+                            {poster ? (
+                                <img src={poster} alt="" className="h-full w-full object-cover blur-3xl scale-125 opacity-35" />
+                            ) : null}
+                            <div className="absolute inset-0 bg-gradient-to-br from-background via-background/95 to-violet-950/20" />
+                        </div>
+                        <div className="relative flex flex-col md:flex-row gap-6 md:gap-8 p-5 sm:p-6 md:p-8">
+                            <div className="shrink-0 mx-auto md:mx-0 w-36 sm:w-44 md:w-52 aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl ring-2 ring-white/10 bg-muted/30">
+                                {poster ? (
+                                    <img src={poster} alt="" className="h-full w-full object-cover" />
+                                ) : (
+                                    <div className="h-full flex items-center justify-center"><Tv className="w-12 h-12 opacity-25" /></div>
+                                )}
+                            </div>
+                            <div className="min-w-0 flex-1 text-center md:text-left space-y-3">
+                                <h2 className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight leading-tight text-balance">
+                                    {displayTitle}
+                                </h2>
+                                {flow === "watch" && seasonPick && (
+                                    <Badge variant="secondary" className="rounded-lg px-3 py-1 text-xs font-semibold bg-primary/15 text-primary border-primary/20">
+                                        {seasonPick.title}
+                                    </Badge>
+                                )}
+                                {chips.length > 0 && (
+                                    <div className="flex flex-wrap justify-center md:justify-start gap-2">
+                                        {chips.map((c) => (
+                                            <span
+                                                key={c.label}
+                                                className="inline-flex items-center rounded-full border border-border/50 bg-background/60 px-3 py-1 text-[11px] text-muted-foreground backdrop-blur-sm"
+                                            >
+                                                <span className="font-semibold text-foreground/70 mr-1.5">{c.label}:</span>
+                                                <span className="line-clamp-1 max-w-[180px]">{c.value}</span>
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                                {description && flow === "series" && (
+                                    <p className="text-sm text-muted-foreground leading-relaxed line-clamp-4 md:line-clamp-5 text-pretty max-w-2xl mx-auto md:mx-0">
+                                        {description}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {flow === "series" && (
+                        <section className="space-y-4">
+                            <div className="flex items-center justify-between gap-3">
+                                <h3 className="text-sm font-black uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
+                                    <Library className="w-4 h-4 text-primary shrink-0" />
+                                    Seasons
+                                </h3>
+                                {detailLoading && (
+                                    <span className="text-xs text-muted-foreground flex items-center gap-2">
+                                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…
+                                    </span>
+                                )}
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                                {seasonsForUi.map((s) => (
+                                    <button
+                                        key={`${s.anime_id}-${s.title}`}
+                                        type="button"
+                                        disabled={detailLoading}
+                                        onClick={() => pickSeason(s)}
+                                        data-testid={`button-season-${s.anime_id}`}
+                                        className={cn(
+                                            "rounded-2xl border p-4 text-left transition-all duration-200 min-h-[124px]",
+                                            "border-border/50 bg-gradient-to-br from-muted/40 to-muted/10 hover:border-primary/50 hover:from-primary/10 hover:to-violet-950/20 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-0.5",
+                                            "disabled:opacity-50 disabled:pointer-events-none",
+                                        )}
+                                    >
+                                        <Clapperboard className="w-5 h-5 text-primary/80 mb-2" />
+                                        <p className="font-bold text-sm leading-snug line-clamp-3 text-foreground group-hover:text-primary">
+                                            {s.title}
+                                        </p>
+                                        <p className="text-[10px] text-muted-foreground mt-2 font-medium uppercase tracking-wider">Play</p>
+                                    </button>
+                                ))}
+                            </div>
+                            {!detailLoading && !details && seasonsForUi.length <= 1 && (
+                                <p className="text-xs text-muted-foreground text-center md:text-left">
+                                    Season list unavailable — you can still open episodes from the card above.
+                                </p>
+                            )}
+                        </section>
+                    )}
+
+                    {flow === "watch" && (
+                        <div className="space-y-5 max-w-6xl mx-auto">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                <div className="min-w-0">
+                                    {epLoading && (
+                                        <p className="text-sm text-muted-foreground flex items-center gap-2">
+                                            <Loader2 className="w-4 h-4 animate-spin text-primary" /> Loading episodes…
+                                        </p>
+                                    )}
+                                    {!epLoading && epCount > 0 && (
+                                        <p className="text-sm text-muted-foreground">
+                                            <span className="font-semibold text-foreground">{epCount}</span> episodes in this season
+                                        </p>
+                                    )}
+                                    {!epLoading && epCount === 0 && (
+                                        <p className="text-sm text-amber-600/90">No episodes for this season.</p>
+                                    )}
+                                </div>
+                                <div className="flex items-center shrink-0 rounded-xl border border-border/50 overflow-hidden shadow-sm">
+                                    <button
+                                        type="button"
+                                        onClick={() => { if (lang !== "sub") setLang("sub"); }}
+                                        data-testid="button-type-sub"
+                                        className={cn(
+                                            "px-4 py-2 text-xs font-bold transition-all",
+                                            lang === "sub" ? "bg-primary text-primary-foreground" : "bg-muted/30 text-muted-foreground hover:bg-muted/50",
+                                        )}
+                                    >
+                                        SUB
+                                    </button>
+                                    <div className="w-px h-6 bg-border/60" />
+                                    <button
+                                        type="button"
+                                        onClick={() => { if (lang !== "dub") setLang("dub"); }}
+                                        data-testid="button-type-dub"
+                                        className={cn(
+                                            "px-4 py-2 text-xs font-bold transition-all",
+                                            lang === "dub" ? "bg-primary text-primary-foreground" : "bg-muted/30 text-muted-foreground hover:bg-muted/50",
+                                        )}
+                                    >
+                                        DUB
+                                    </button>
+                                </div>
+                            </div>
+
+                            {epCount > 0 && seasonPick && (
+                                <WatchPlayer
+                                    key={`${seasonPick.anime_id}-${lang}-${selectedEpId ?? ""}`}
+                                    episodes={episodes}
+                                    selectedEpId={selectedEpId}
+                                    onEpIdChange={setSelectedEpId}
+                                    lang={lang}
+                                    watched={listAnime?.episodesWatched || 0}
+                                    onBackToSeasons={backFromWatchToSeries}
+                                />
+                            )}
+                        </div>
+                    )}
+                </div>
             )}
         </div>
     );

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { getFriends, getFriendRequests, getFriendAnimeList, sendFriendRequest, updateFriendStatus, getProfileByShortId, getFriendsActivity } from "@/services/supabaseData";
+import { getFriends, getFriendRequests, getFriendAnimeList, sendFriendRequest, updateFriendStatus, getProfileByShortId, getFriendsActivity, getFriendsWatchPresence, getFriendsUserPresence, type WatchPresenceData, type UserPresenceData } from "@/services/supabaseData";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -56,6 +56,8 @@ const Friends = ({ currentUserId }: FriendsProps) => {
   const [friendRankingFilter, setFriendRankingFilter] = useState<string>("all");
   const [activityFeed, setActivityFeed] = useState<any[]>([]);
   const [loadingActivity, setLoadingActivity] = useState(false);
+  const [watchPresenceByUserId, setWatchPresenceByUserId] = useState<Record<string, WatchPresenceData>>({});
+  const [onlineByUserId, setOnlineByUserId] = useState<Record<string, UserPresenceData>>({});
 
   const fetchFriendsData = async () => {
     try {
@@ -102,6 +104,65 @@ const Friends = ({ currentUserId }: FriendsProps) => {
       .then(data => setActivityFeed(data))
       .catch(() => {})
       .finally(() => setLoadingActivity(false));
+  }, [friends, currentUserId]);
+
+  useEffect(() => {
+    if (friends.length === 0) {
+      setOnlineByUserId({});
+      return;
+    }
+    const friendUserIds = friends.map(f =>
+      f.userId === currentUserId ? f.friendId : f.userId
+    );
+
+    let cancelled = false;
+    const loadOnline = async () => {
+      try {
+        const rows = await getFriendsUserPresence(friendUserIds);
+        if (cancelled) return;
+        const map: Record<string, UserPresenceData> = {};
+        for (const row of rows) map[row.userId] = row;
+        setOnlineByUserId(map);
+      } catch {
+        if (!cancelled) setOnlineByUserId({});
+      }
+    };
+    loadOnline();
+    const iv = setInterval(loadOnline, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+    };
+  }, [friends, currentUserId]);
+
+  useEffect(() => {
+    if (friends.length === 0) {
+      setWatchPresenceByUserId({});
+      return;
+    }
+    const friendUserIds = friends.map(f =>
+      f.userId === currentUserId ? f.friendId : f.userId
+    );
+
+    let cancelled = false;
+    const loadPresence = async () => {
+      try {
+        const rows = await getFriendsWatchPresence(friendUserIds);
+        if (cancelled) return;
+        const map: Record<string, WatchPresenceData> = {};
+        for (const row of rows) map[row.userId] = row;
+        setWatchPresenceByUserId(map);
+      } catch {
+        if (!cancelled) setWatchPresenceByUserId({});
+      }
+    };
+
+    loadPresence();
+    const iv = setInterval(loadPresence, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+    };
   }, [friends, currentUserId]);
 
   useEffect(() => {
@@ -361,16 +422,49 @@ const Friends = ({ currentUserId }: FriendsProps) => {
                   <div className="grid gap-4">
                     {friends.map((friend, fi) => {
                       const friendId = friend.userId === currentUserId ? friend.friendId : friend.userId;
+                      const presence = watchPresenceByUserId[friendId];
+                      const isFresh = presence?.updatedAt
+                        ? (Date.now() - new Date(presence.updatedAt).getTime()) < 10 * 60 * 1000
+                        : false;
+                      const onlinePresence = onlineByUserId[friendId];
+                      const isOnline = onlinePresence?.updatedAt
+                        ? (Date.now() - new Date(onlinePresence.updatedAt).getTime()) < 2 * 60 * 1000
+                        : false;
                       return (
                         <Card key={friend.id} className="cursor-pointer hover:bg-accent/50 animate-stagger-in" style={{ animationDelay: `${fi * 70}ms` }} data-testid={`friend-card-${friend.id}`}>
                           <CardContent className="p-4">
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 rounded-full bg-gradient-primary flex items-center justify-center text-primary-foreground font-bold">
+                                <div className="relative w-12 h-12">
+                                  <div className="w-12 h-12 rounded-full bg-gradient-primary flex items-center justify-center text-primary-foreground font-bold">
                                   {friend.friendName?.charAt(0).toUpperCase() || "?"}
+                                  </div>
+                                  <span
+                                    className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-background ${
+                                      isOnline ? "bg-emerald-500" : "bg-zinc-500/60"
+                                    }`}
+                                    title={isOnline ? "Online" : "Offline"}
+                                  />
                                 </div>
                                 <div>
-                                  <p className="font-semibold">{friend.friendName || "Friend"}</p>
+                                  <p className="font-semibold flex items-center gap-2">
+                                    {friend.friendName || "Friend"}
+                                    <span className={`text-[10px] font-medium ${isOnline ? "text-emerald-500" : "text-muted-foreground"}`}>
+                                      {isOnline ? "Online" : "Offline"}
+                                    </span>
+                                  </p>
+                                  {!isOnline && onlinePresence?.updatedAt && (
+                                    <p className="text-[11px] text-muted-foreground/90 mt-0.5">
+                                      Last seen {formatDistanceToNow(new Date(onlinePresence.updatedAt), { addSuffix: true })}
+                                    </p>
+                                  )}
+                                  {presence && isFresh && (
+                                    <p className="text-xs text-primary/90 mt-0.5">
+                                      Watching {presence.animeTitle}
+                                      {presence.seasonNumber ? ` · S${presence.seasonNumber}` : ""}
+                                      {presence.episodeNumber ? ` · Ep ${presence.episodeNumber}` : ""}
+                                    </p>
+                                  )}
                                 </div>
                               </div>
                               <Button variant="outline" onClick={() => setSelectedFriendForList(friendId)} data-testid={`button-view-friend-${friend.id}`}>
