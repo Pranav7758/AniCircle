@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, startTransition } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { getAnimeList, createAnime, updateAnime, deleteAnime, logActivity, upsertUserPresence, getFriends, getFriendsUserPresence, type AnimeData } from "@/services/supabaseData";
@@ -38,6 +38,8 @@ interface Anime {
   malId: number | null;
   ranking: number | null;
   isHentai: boolean | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
 
 const SkeletonCard = () => (
@@ -192,8 +194,9 @@ const Index = () => {
   }, [user?.id]);
 
   useEffect(() => {
+    if (activeTab !== "list") return;
     filterAnimeList();
-  }, [searchQuery, statusFilter, hentaiFilter, rankingFilter, genreFilter, animeList, genreMap]);
+  }, [activeTab, searchQuery, statusFilter, hentaiFilter, rankingFilter, genreFilter, animeList, genreMap]);
 
   // Fetch genres from AniList for all anime that have anilistIds
   useEffect(() => {
@@ -300,6 +303,7 @@ const Index = () => {
   }, [animeList]);
 
   const groupedAnime = useMemo(() => {
+    if (activeTab !== "list") return {};
     const groups = (filteredAnimeList || []).reduce((acc, anime) => {
       const title = anime.title;
       if (!acc[title]) acc[title] = [];
@@ -308,6 +312,13 @@ const Index = () => {
     }, {} as Record<string, Anime[]>);
 
     const entries = Object.entries(groups);
+    const getRecentTs = (seasons: Anime[]) =>
+      Math.max(
+        ...seasons.map((s) => {
+          const t = Date.parse(s.createdAt || s.updatedAt || "");
+          return Number.isFinite(t) ? t : 0;
+        }),
+      );
 
     switch (sortBy) {
       case "title-asc":
@@ -337,11 +348,12 @@ const Index = () => {
         break;
       }
       default:
+        entries.sort(([, seasonsA], [, seasonsB]) => getRecentTs(seasonsB) - getRecentTs(seasonsA));
         break;
     }
 
     return Object.fromEntries(entries);
-  }, [filteredAnimeList, sortBy]);
+  }, [activeTab, filteredAnimeList, sortBy]);
 
   const handleAddAnime = async (data: AnimeFormData) => {
     if (data.seasons && data.seasons.length > 0) {
@@ -642,7 +654,7 @@ const Index = () => {
       </header>
 
       <main className="container mx-auto px-4 pt-8 pb-8 flex-1">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs value={activeTab} onValueChange={(next) => startTransition(() => setActiveTab(next))} className="w-full">
           <div className="mb-6 space-y-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <TabsList className="h-12 deco-card deco-corners p-1 gap-0.5 overflow-x-auto flex-nowrap shadow-[0_0_14px_rgba(212,175,55,0.12)]">

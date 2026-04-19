@@ -38,6 +38,8 @@ interface Anime {
   malId: number | null;
   ranking: number | null;
   isHentai: boolean | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
 
 const Friends = ({ currentUserId }: FriendsProps) => {
@@ -54,6 +56,7 @@ const Friends = ({ currentUserId }: FriendsProps) => {
   const [friendStatusFilter, setFriendStatusFilter] = useState<string>("all");
   const [friendHentaiFilter, setFriendHentaiFilter] = useState<string>("hide");
   const [friendRankingFilter, setFriendRankingFilter] = useState<string>("all");
+  const [friendSortBy, setFriendSortBy] = useState<string>(() => localStorage.getItem("friendAnimeSortBy") || "default");
   const [activityFeed, setActivityFeed] = useState<any[]>([]);
   const [loadingActivity, setLoadingActivity] = useState(false);
   const [watchPresenceByUserId, setWatchPresenceByUserId] = useState<Record<string, WatchPresenceData>>({});
@@ -203,15 +206,56 @@ const Friends = ({ currentUserId }: FriendsProps) => {
   }, [friendAnimeList, friendSearchQuery, friendStatusFilter, friendHentaiFilter, friendRankingFilter]);
 
   const groupedFriendAnime = useMemo(() => (
-    filteredFriendAnimeList.reduce((groups, anime) => {
-      const title = anime.title;
-      if (!groups[title]) {
-        groups[title] = [];
+    {
+      const groups = filteredFriendAnimeList.reduce((acc, anime) => {
+        const title = anime.title;
+        if (!acc[title]) acc[title] = [];
+        acc[title].push(anime);
+        return acc;
+      }, {} as Record<string, Anime[]>);
+
+      const entries = Object.entries(groups);
+      const getRecentTs = (seasons: Anime[]) =>
+        Math.max(
+          ...seasons.map((s) => {
+            const t = Date.parse(s.createdAt || s.updatedAt || "");
+            return Number.isFinite(t) ? t : 0;
+          }),
+        );
+
+      switch (friendSortBy) {
+        case "title-asc":
+          entries.sort(([a], [b]) => a.localeCompare(b));
+          break;
+        case "title-desc":
+          entries.sort(([a], [b]) => b.localeCompare(a));
+          break;
+        case "rating-desc":
+          entries.sort(([, seasonsA], [, seasonsB]) => {
+            const avgA = seasonsA.filter(s => s.rating).length
+              ? seasonsA.reduce((sum, s) => sum + (s.rating || 0), 0) / seasonsA.filter(s => s.rating).length
+              : 0;
+            const avgB = seasonsB.filter(s => s.rating).length
+              ? seasonsB.reduce((sum, s) => sum + (s.rating || 0), 0) / seasonsB.filter(s => s.rating).length
+              : 0;
+            return avgB - avgA;
+          });
+          break;
+        case "progress-desc":
+          entries.sort(([, seasonsA], [, seasonsB]) => {
+            const progressA = seasonsA.reduce((sum, s) => sum + s.episodesWatched, 0);
+            const progressB = seasonsB.reduce((sum, s) => sum + s.episodesWatched, 0);
+            return progressB - progressA;
+          });
+          break;
+        default:
+          entries.sort(([, seasonsA], [, seasonsB]) => getRecentTs(seasonsB) - getRecentTs(seasonsA));
+          break;
       }
-      groups[title].push(anime);
-      return groups;
-    }, {} as Record<string, Anime[]>)
-  ), [filteredFriendAnimeList]);
+
+      return Object.fromEntries(entries);
+    }
+  ), [filteredFriendAnimeList, friendSortBy]);
 
   const handleSendFriendRequest = async () => {
     if (!searchShortId || searchShortId.trim().length !== 5) {
@@ -373,6 +417,18 @@ const Friends = ({ currentUserId }: FriendsProps) => {
                         <SelectItem value="all">All Anime</SelectItem>
                         <SelectItem value="ranked">Ranked Only</SelectItem>
                         <SelectItem value="unranked">Unranked Only</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={friendSortBy} onValueChange={(v) => { setFriendSortBy(v); localStorage.setItem("friendAnimeSortBy", v); }}>
+                      <SelectTrigger className="w-full md:w-48" data-testid="select-friend-sort">
+                        <SelectValue placeholder="Sort by" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="default">Recently Added</SelectItem>
+                        <SelectItem value="title-asc">Title A → Z</SelectItem>
+                        <SelectItem value="title-desc">Title Z → A</SelectItem>
+                        <SelectItem value="rating-desc">Highest Rated</SelectItem>
+                        <SelectItem value="progress-desc">Most Watched</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
