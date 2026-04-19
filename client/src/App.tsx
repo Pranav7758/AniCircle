@@ -17,10 +17,10 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center space-y-4">
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center space-y-4 deco-card deco-corners px-8 py-7">
           <Loader2 className="h-8 w-8 animate-spin mx-auto" />
-          <p className="text-muted-foreground">Loading...</p>
+          <p className="text-muted-foreground text-sm uppercase tracking-[0.14em]">Loading AniCircle</p>
         </div>
       </div>
     );
@@ -38,10 +38,10 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center space-y-4">
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center space-y-4 deco-card deco-corners px-8 py-7">
           <Loader2 className="h-8 w-8 animate-spin mx-auto" />
-          <p className="text-muted-foreground">Loading...</p>
+          <p className="text-muted-foreground text-sm uppercase tracking-[0.14em]">Loading AniCircle</p>
         </div>
       </div>
     );

@@ -28,12 +28,12 @@ const FeedbackAdmin = () => {
   if (!user || user.email !== OWNER_EMAIL) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 text-center px-4">
-        <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center">
+        <div className="w-16 h-16 rounded-none border border-destructive/50 bg-red-500/10 flex items-center justify-center">
           <span className="text-2xl">🚫</span>
         </div>
         <h2 className="text-xl font-semibold">Access Denied</h2>
         <p className="text-muted-foreground text-sm">This page is only accessible to the site owner.</p>
-        <Button variant="ghost" onClick={() => navigate("/")} className="gap-2">
+        <Button variant="ghost" onClick={() => navigate("/")} className="gap-2 rounded-none">
           <ArrowLeft className="w-4 h-4" /> Go Home
         </Button>
       </div>
@@ -46,8 +46,9 @@ const FeedbackAdmin = () => {
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-lg">
+        <div className="header-accent-strip" />
         <div className="container mx-auto px-4 py-3 flex items-center gap-3">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/")} className="h-8 w-8" data-testid="button-back-home">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/")} className="h-8 w-8 rounded-none" data-testid="button-back-home">
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div className="flex items-center gap-2">
@@ -56,7 +57,7 @@ const FeedbackAdmin = () => {
           </div>
           <div className="ml-auto flex items-center gap-2">
             {feedbackList && (
-              <Badge variant="secondary" className="text-xs">
+              <Badge variant="secondary" className="text-xs rounded-none border border-primary/40">
                 {feedbackList.length} total
               </Badge>
             )}
@@ -79,7 +80,7 @@ const FeedbackAdmin = () => {
         ) : (
           <>
             {suggestions.length > 0 && (
-              <section className="space-y-4">
+              <section className="space-y-4 deco-card deco-corners p-4">
                 <div className="flex items-center gap-2">
                   <Lightbulb className="w-4 h-4 text-amber-400" />
                   <h2 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">
@@ -95,7 +96,7 @@ const FeedbackAdmin = () => {
             )}
 
             {feedbacks.length > 0 && (
-              <section className="space-y-4">
+              <section className="space-y-4 deco-card deco-corners p-4">
                 <div className="flex items-center gap-2">
                   <MessageSquare className="w-4 h-4 text-violet-400" />
                   <h2 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">
@@ -124,7 +125,7 @@ const FeedbackCard = ({ item }: { item: Feedback }) => {
 
   return (
     <div
-      className="rounded-xl border border-border/50 bg-card p-4 space-y-3"
+      className="rounded-none border border-primary/35 bg-card p-4 space-y-3"
       data-testid={`feedback-card-${item.id}`}
     >
       <div className="flex items-start justify-between gap-3">

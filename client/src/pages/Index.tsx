@@ -19,6 +19,7 @@ import NewEpisodesBanner from "@/components/NewEpisodesBanner";
 import Radar from "@/components/Radar";
 import AnalyticsDashboard from "@/components/AnalyticsDashboard";
 import Discover from "@/components/Discover";
+import Watch from "@/components/Watch";
 import Footer from "@/components/Footer";
 import SuggestionPopup from "@/components/SuggestionPopup";
 import FloatingSocialBar from "@/components/FloatingSocialBar";
@@ -874,14 +875,6 @@ const Index = () => {
 
           <TabsContent value="analytics" className="space-y-4 pt-4 animate-tab-in">
             <AnalyticsDashboard />
-          </TabsContent>
-          <TabsContent value="watch" className="pt-4 animate-tab-in">
-            <Discover
-              animeList={animeList}
-              onAddAnime={handleAddAnime}
-              showMature={hentaiFilter !== "hide"}
-              onAutoProgress={handleWatchAutoProgress}
-            />
           </TabsContent>
         </Tabs>
       </main>

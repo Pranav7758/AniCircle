@@ -114,20 +114,14 @@ const Auth = () => {
   }
 
   return (
-    <div className="min-h-screen flex overflow-hidden bg-background aurora-bg">
+    <div className="min-h-screen flex overflow-hidden bg-background">
 
       {/* ── Floating orbs ── */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="orb orb-purple absolute w-96 h-96 -top-20 -left-20 animate-float" />
-        <div className="orb orb-blue absolute w-80 h-80 bottom-0 right-0 animate-float-delayed" />
-        <div className="orb orb-pink absolute w-64 h-64 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-float-slow" />
-
-        {/* Grid pattern overlay */}
-        <div className="absolute inset-0 opacity-[0.03]"
+        <div className="absolute inset-0 opacity-[0.04]"
           style={{
-            backgroundImage: `linear-gradient(hsl(268 88% 62% / 0.5) 1px, transparent 1px),
-                              linear-gradient(90deg, hsl(268 88% 62% / 0.5) 1px, transparent 1px)`,
-            backgroundSize: '60px 60px',
+            backgroundImage: `repeating-linear-gradient(45deg, hsl(45 64% 52% / 0.35) 0 1px, transparent 1px 14px),
+                              repeating-linear-gradient(-45deg, hsl(45 64% 52% / 0.22) 0 1px, transparent 1px 14px)`,
           }}
         />
       </div>
@@ -147,7 +141,7 @@ const Auth = () => {
         </div>
 
         {/* Content */}
-        <div className="relative z-10 text-center space-y-8 max-w-md">
+          <div className="relative z-10 text-center space-y-8 max-w-md deco-card deco-corners p-8">
           <div className="flex flex-col items-center gap-4">
             <div className="relative">
               <div className="absolute inset-0 rounded-full bg-primary/20 blur-xl animate-glow-pulse" />
@@ -168,8 +162,8 @@ const Auth = () => {
               { icon: Zap, label: "Radar — never miss a sequel or new season" },
               { icon: Star, label: "Rate and rank your all-time favourites" },
             ].map(({ icon: Icon, label }, i) => (
-              <div key={label} className="flex items-center gap-3 glass-light rounded-xl px-4 py-3 border border-border/30 animate-stagger-in" style={{ animationDelay: `${i * 120 + 200}ms` }}>
-                <div className="shrink-0 w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center">
+              <div key={label} className="flex items-center gap-3 rounded-none px-4 py-3 border border-primary/35 bg-card/65 animate-stagger-in" style={{ animationDelay: `${i * 120 + 200}ms` }}>
+                <div className="shrink-0 w-7 h-7 rounded-none bg-primary/20 flex items-center justify-center border border-primary/45">
                   <Icon className="w-4 h-4 text-primary" />
                 </div>
                 <span className="text-sm text-muted-foreground text-left">{label}</span>
@@ -197,12 +191,12 @@ const Auth = () => {
           </div>
 
           {/* Card */}
-          <div className="holo-glass rounded-2xl p-6 shadow-[0_24px_80px_-12px_hsl(268_88%_62%/0.25)] border-white/5 animate-scale-in">
+          <div className="deco-card deco-corners p-6 shadow-[0_24px_80px_-12px_hsl(45_64%_52%/0.2)] animate-scale-in">
 
             {isRecoveryMode ? (
               <div className="space-y-5">
                 <div className="text-center">
-                  <div className="w-14 h-14 bg-primary/15 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-primary/20">
+                  <div className="w-14 h-14 bg-primary/15 rounded-none flex items-center justify-center mx-auto mb-4 border border-primary/45">
                     <KeyRound className="h-7 w-7 text-primary" />
                   </div>
                   <h3 className="text-xl font-bold">Set New Password</h3>
@@ -224,14 +218,14 @@ const Auth = () => {
 
                 {resetSent ? (
                   <div className="text-center space-y-4 py-4">
-                    <div className="w-14 h-14 bg-primary/15 rounded-2xl flex items-center justify-center mx-auto border border-primary/20">
+                  <div className="w-14 h-14 bg-primary/15 rounded-none flex items-center justify-center mx-auto border border-primary/45">
                       <Mail className="h-7 w-7 text-primary" />
                     </div>
                     <h3 className="text-xl font-bold">Check Your Email</h3>
                     <p className="text-sm text-muted-foreground">
                       Reset link sent to <span className="text-foreground font-medium">{forgotEmail}</span>
                     </p>
-                    <Button variant="outline" onClick={() => { setShowForgotPassword(false); setResetSent(false); setForgotEmail(""); }} className="w-full">
+                    <Button variant="outline" onClick={() => { setShowForgotPassword(false); setResetSent(false); setForgotEmail(""); }} className="w-full rounded-none">
                       Back to Sign In
                     </Button>
                   </div>
@@ -257,7 +251,7 @@ const Auth = () => {
                 {/* Google */}
                 <Button
                   variant="outline"
-                  className="w-full mb-5 h-11 flex items-center justify-center gap-2.5 border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all"
+                  className="w-full mb-5 h-11 rounded-none flex items-center justify-center gap-2.5 border-primary/45 bg-card/40 hover:border-primary/70 hover:bg-primary/10 transition-all"
                   onClick={handleGoogleSignIn}
                   disabled={isGoogleLoading || isLoading}
                 >
@@ -282,13 +276,13 @@ const Auth = () => {
                 </div>
 
                 <Tabs defaultValue="signin" className="w-full">
-                  <TabsList className="w-full grid grid-cols-2 h-10 mb-5 bg-muted/50 border border-border/30 rounded-xl p-0.5">
+                  <TabsList className="w-full grid grid-cols-2 h-10 mb-5 bg-muted/50 border border-primary/35 rounded-none p-0.5">
                     <TabsTrigger value="signin" data-testid="tab-signin"
-                      className="rounded-[10px] text-sm font-medium data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon transition-all">
+                      className="rounded-none text-sm font-medium data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon transition-all">
                       Sign In
                     </TabsTrigger>
                     <TabsTrigger value="signup" data-testid="tab-signup"
-                      className="rounded-[10px] text-sm font-medium data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon transition-all">
+                      className="rounded-none text-sm font-medium data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon transition-all">
                       Sign Up
                     </TabsTrigger>
                   </TabsList>
