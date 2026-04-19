@@ -140,8 +140,8 @@ const AnimeGroupCard = ({
                   className="h-full rounded-full transition-all"
                   style={{
                     width: `${overallProgress}%`,
-                    background: 'linear-gradient(90deg, hsl(45 64% 52%), hsl(45 64% 36%))',
-                    boxShadow: '0 0 6px hsl(45 64% 52% / 0.55)',
+                    background: 'var(--gradient-primary)',
+                    boxShadow: '0 0 6px hsl(var(--primary) / 0.55)',
                   }}
                 />
               </div>
@@ -240,7 +240,7 @@ const AnimeGroupCard = ({
                         <div className="w-full h-0.5 rounded-full bg-muted/50 overflow-hidden">
                           <div className="h-full rounded-full transition-all duration-300" style={{
                             width: `${prog}%`,
-                            background: 'linear-gradient(90deg, hsl(45 64% 52%), hsl(45 64% 36%))',
+                            background: 'var(--gradient-primary)',
                           }} />
                         </div>
                       )}

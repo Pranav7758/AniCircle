@@ -150,8 +150,8 @@ const Auth = () => {
         {/* Subtle grid */}
         <div className="absolute inset-0 opacity-[0.035]"
           style={{
-            backgroundImage: `repeating-linear-gradient(45deg, hsl(45 64% 52% / 0.4) 0 1px, transparent 1px 14px),
-                              repeating-linear-gradient(-45deg, hsl(45 64% 52% / 0.25) 0 1px, transparent 1px 14px)`,
+            backgroundImage: `repeating-linear-gradient(45deg, hsl(var(--primary) / 0.4) 0 1px, transparent 1px 14px),
+                              repeating-linear-gradient(-45deg, hsl(var(--primary) / 0.25) 0 1px, transparent 1px 14px)`,
           }}
         />
         {/* Ambient glow blobs */}
@@ -181,7 +181,7 @@ const Auth = () => {
               left: (s as any).left,
               right: (s as any).right,
               animation: `glow-pulse ${s.dur} ease-in-out ${s.delay} infinite, float ${parseFloat(s.dur) + 2}s ease-in-out ${s.delay} infinite`,
-              boxShadow: `0 0 ${s.size * 3}px hsl(45 64% 52% / 0.8)`,
+              boxShadow: `0 0 ${s.size * 3}px hsl(var(--primary) / 0.8)`,
             }}
           />
         ))}
@@ -264,7 +264,7 @@ const Auth = () => {
           </div>
 
           {/* Card */}
-          <div className="deco-card deco-corners p-7 shadow-[0_24px_80px_-12px_hsl(45_64%_52%/0.25),0_0_0_1px_hsl(45_64%_52%/0.08)] animate-scale-in" style={{ background: "hsl(0 0% 6% / 0.95)", backdropFilter: "blur(24px)" }}>
+          <div className="deco-card deco-corners p-7 animate-scale-in" style={{ background: "hsl(0 0% 6% / 0.95)", backdropFilter: "blur(24px)", boxShadow: "0 24px 80px -12px hsl(var(--primary) / 0.25), 0 0 0 1px hsl(var(--primary) / 0.08)" }}>
 
             {isRecoveryMode ? (
               <div className="space-y-5">

@@ -165,7 +165,7 @@ const AnimeCard = ({
                       ? "hsl(142 70% 50%)"
                       : status === "watching"
                       ? "hsl(268 88% 62%)"
-                      : "hsl(45 64% 52%)",
+                      : "hsl(var(--primary))",
                   }}
                 />
               </div>
