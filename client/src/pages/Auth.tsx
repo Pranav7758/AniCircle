@@ -6,11 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Mail, ArrowLeft, KeyRound, Star, Zap, Eye } from "lucide-react";
+import { Loader2, Mail, ArrowLeft, KeyRound, Star, Zap, Eye, EyeOff } from "lucide-react";
 
 const Auth = () => {
   const [, setLocation] = useLocation();
-  const { user, isLoading: authLoading, isRecoveryMode, login, register, resetPassword, updatePassword, clearRecoveryMode, loginWithGoogle } = useAuth();
+  const { user, isLoading: authLoading, isRecoveryMode, login, register, resetPassword, verifyRecoveryCode, updatePassword, clearRecoveryMode, loginWithGoogle } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [email, setEmail] = useState("");
@@ -18,9 +18,13 @@ const Auth = () => {
   const [username, setUsername] = useState("");
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
-  const [resetSent, setResetSent] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState("");
+  const [forgotStep, setForgotStep] = useState<"request" | "verify" | "update" | "success">("request");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showSignInPassword, setShowSignInPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
     if (user && !isRecoveryMode) setLocation("/");
@@ -70,10 +74,34 @@ const Auth = () => {
     try {
       if (!forgotEmail.trim()) { toast.error("Please enter your email"); setIsLoading(false); return; }
       await resetPassword(forgotEmail.trim());
-      setResetSent(true);
-      toast.success("Reset email sent!");
+      setForgotStep("verify");
+      toast.success("Recovery code sent to your email!");
     } catch (error: any) {
       toast.error(error.message || "Failed to send reset email");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerifyRecoveryCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      if (!forgotEmail.trim()) {
+        toast.error("Please enter your email");
+        setIsLoading(false);
+        return;
+      }
+      if (!recoveryCode.trim()) {
+        toast.error("Please enter the recovery code");
+        setIsLoading(false);
+        return;
+      }
+      await verifyRecoveryCode(forgotEmail.trim(), recoveryCode.trim());
+      setForgotStep("update");
+      toast.success("Code verified. Set your new password.");
+    } catch (error: any) {
+      toast.error(error.message || "Invalid or expired code");
     } finally {
       setIsLoading(false);
     }
@@ -86,10 +114,10 @@ const Auth = () => {
       if (newPassword.length < 6) { toast.error("Password must be at least 6 characters"); setIsLoading(false); return; }
       if (newPassword !== confirmPassword) { toast.error("Passwords do not match"); setIsLoading(false); return; }
       await updatePassword(newPassword);
-      toast.success("Password updated!");
+      toast.success("Password reset successful!");
       clearRecoveryMode();
+      setForgotStep("success");
       setNewPassword(""); setConfirmPassword("");
-      setLocation("/");
     } catch (error: any) {
       toast.error(error.message || "Failed to update password");
     } finally {
@@ -203,40 +231,116 @@ const Auth = () => {
                   <p className="text-sm text-muted-foreground mt-1">Enter your new password below</p>
                 </div>
                 <form onSubmit={handleUpdatePassword} className="space-y-4">
-                  <FormField label="New Password" id="new-password" type="password" value={newPassword} onChange={setNewPassword} disabled={isLoading} />
-                  <FormField label="Confirm Password" id="confirm-password" type="password" value={confirmPassword} onChange={setConfirmPassword} disabled={isLoading} />
+                  <PasswordField
+                    label="New Password"
+                    id="new-password"
+                    value={newPassword}
+                    onChange={setNewPassword}
+                    disabled={isLoading}
+                    showPassword={showNewPassword}
+                    onToggleShow={() => setShowNewPassword((v) => !v)}
+                  />
+                  <PasswordField
+                    label="Confirm Password"
+                    id="confirm-password"
+                    value={confirmPassword}
+                    onChange={setConfirmPassword}
+                    disabled={isLoading}
+                    showPassword={showConfirmPassword}
+                    onToggleShow={() => setShowConfirmPassword((v) => !v)}
+                  />
                   <SubmitButton isLoading={isLoading} loadingText="Updating..." text="Update Password" />
                 </form>
               </div>
 
             ) : showForgotPassword ? (
               <div className="space-y-4">
-                <button onClick={() => { setShowForgotPassword(false); setResetSent(false); setForgotEmail(""); }}
+                <button onClick={() => {
+                  setShowForgotPassword(false);
+                  setForgotStep("request");
+                  setForgotEmail("");
+                  setRecoveryCode("");
+                  setNewPassword("");
+                  setConfirmPassword("");
+                }}
                   className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-2">
                   <ArrowLeft className="h-4 w-4" /> Back to Sign In
                 </button>
 
-                {resetSent ? (
+                {forgotStep === "success" ? (
                   <div className="text-center space-y-4 py-4">
-                  <div className="w-14 h-14 bg-primary/15 rounded-none flex items-center justify-center mx-auto border border-primary/45">
+                    <div className="w-14 h-14 bg-primary/15 rounded-none flex items-center justify-center mx-auto border border-primary/45">
                       <Mail className="h-7 w-7 text-primary" />
                     </div>
-                    <h3 className="text-xl font-bold">Check Your Email</h3>
+                    <h3 className="text-xl font-bold">Password Reset Successful</h3>
                     <p className="text-sm text-muted-foreground">
-                      Reset link sent to <span className="text-foreground font-medium">{forgotEmail}</span>
+                      Your password has been updated. You can sign in now.
                     </p>
-                    <Button variant="outline" onClick={() => { setShowForgotPassword(false); setResetSent(false); setForgotEmail(""); }} className="w-full rounded-none">
+                    <Button variant="outline" onClick={() => {
+                      setShowForgotPassword(false);
+                      setForgotStep("request");
+                      setForgotEmail("");
+                      setRecoveryCode("");
+                    }} className="w-full rounded-none">
                       Back to Sign In
                     </Button>
                   </div>
-                ) : (
+                ) : forgotStep === "request" ? (
                   <form onSubmit={handleForgotPassword} className="space-y-4">
                     <div>
                       <h3 className="text-xl font-bold">Forgot Password?</h3>
-                      <p className="text-sm text-muted-foreground mt-1">We'll send you a reset link</p>
+                      <p className="text-sm text-muted-foreground mt-1">Enter your email to receive a recovery code</p>
                     </div>
                     <FormField label="Email" id="forgot-email" type="email" value={forgotEmail} onChange={setForgotEmail} disabled={isLoading} placeholder="your@email.com" />
-                    <SubmitButton isLoading={isLoading} loadingText="Sending..." text="Send Reset Link" />
+                    <SubmitButton isLoading={isLoading} loadingText="Sending..." text="Send Recovery Code" />
+                  </form>
+                ) : forgotStep === "verify" ? (
+                  <form onSubmit={handleVerifyRecoveryCode} className="space-y-4">
+                    <div>
+                      <h3 className="text-xl font-bold">Verify Recovery Code</h3>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Enter the code sent to <span className="text-foreground font-medium">{forgotEmail}</span>
+                      </p>
+                    </div>
+                    <FormField label="Recovery Code" id="recovery-code" type="text" value={recoveryCode} onChange={setRecoveryCode} disabled={isLoading} placeholder="Enter code from Gmail" />
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full rounded-none"
+                        onClick={() => setForgotStep("request")}
+                        disabled={isLoading}
+                      >
+                        Change Email
+                      </Button>
+                      <SubmitButton isLoading={isLoading} loadingText="Verifying..." text="Verify Code" />
+                    </div>
+                  </form>
+                ) : (
+                  <form onSubmit={handleUpdatePassword} className="space-y-4">
+                    <div>
+                      <h3 className="text-xl font-bold">Set New Password</h3>
+                      <p className="text-sm text-muted-foreground mt-1">Create your new password</p>
+                    </div>
+                    <PasswordField
+                      label="New Password"
+                      id="forgot-new-password"
+                      value={newPassword}
+                      onChange={setNewPassword}
+                      disabled={isLoading}
+                      showPassword={showNewPassword}
+                      onToggleShow={() => setShowNewPassword((v) => !v)}
+                    />
+                    <PasswordField
+                      label="Confirm Password"
+                      id="forgot-confirm-password"
+                      value={confirmPassword}
+                      onChange={setConfirmPassword}
+                      disabled={isLoading}
+                      showPassword={showConfirmPassword}
+                      onToggleShow={() => setShowConfirmPassword((v) => !v)}
+                    />
+                    <SubmitButton isLoading={isLoading} loadingText="Updating..." text="Reset Password" />
                   </form>
                 )}
               </div>
@@ -298,9 +402,19 @@ const Auth = () => {
                             Forgot?
                           </button>
                         </div>
-                        <Input id="signin-password" data-testid="input-signin-password" type="password" placeholder="••••••••"
-                          value={password} onChange={(e) => setPassword(e.target.value)} required disabled={isLoading}
-                          className="h-11 bg-muted/40 border-border/50 focus:border-primary/50 rounded-xl" />
+                        <div className="relative">
+                          <Input id="signin-password" data-testid="input-signin-password" type={showSignInPassword ? "text" : "password"} placeholder="••••••••"
+                            value={password} onChange={(e) => setPassword(e.target.value)} required disabled={isLoading}
+                            className="h-11 bg-muted/40 border-border/50 focus:border-primary/50 rounded-xl pr-10" />
+                          <button
+                            type="button"
+                            onClick={() => setShowSignInPassword((v) => !v)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-foreground transition-colors"
+                            aria-label={showSignInPassword ? "Hide password" : "Show password"}
+                          >
+                            {showSignInPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
                       </div>
                       <SubmitButton isLoading={isLoading} loadingText="Signing in..." text="Sign In" testId="button-signin" />
                     </form>
@@ -340,6 +454,43 @@ const FormField = ({
     <Input id={id} data-testid={testId} type={type} placeholder={placeholder} value={value}
       onChange={(e) => onChange(e.target.value)} required disabled={disabled} minLength={minLength}
       className="h-11 bg-muted/40 border-border/50 focus:border-primary/50 rounded-xl" />
+  </div>
+);
+
+const PasswordField = ({
+  label, id, value, onChange, disabled, showPassword, onToggleShow,
+}: {
+  label: string;
+  id: string;
+  value: string;
+  onChange: (v: string) => void;
+  disabled: boolean;
+  showPassword: boolean;
+  onToggleShow: () => void;
+}) => (
+  <div className="space-y-1.5">
+    <Label htmlFor={id} className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</Label>
+    <div className="relative">
+      <Input
+        id={id}
+        type={showPassword ? "text" : "password"}
+        placeholder="••••••••"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        required
+        disabled={disabled}
+        minLength={6}
+        className="h-11 bg-muted/40 border-border/50 focus:border-primary/50 rounded-xl pr-10"
+      />
+      <button
+        type="button"
+        onClick={onToggleShow}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-foreground transition-colors"
+        aria-label={showPassword ? "Hide password" : "Show password"}
+      >
+        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
+    </div>
   </div>
 );
 
