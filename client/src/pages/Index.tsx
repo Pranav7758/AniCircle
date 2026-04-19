@@ -6,7 +6,7 @@ import { fetchAniList, GET_ANALYTICS_QUERY } from "@/services/anilist";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LogOut, Plus, Search, Sparkles, Trophy, Users, Settings, PieChart, Play, CheckCircle2, Clock, ArrowUpDown, Tag, Compass, Share2, Loader2, Inbox } from "lucide-react";
+import { LogOut, Plus, Search, Sparkles, Trophy, Users, Settings, PieChart, Play, CheckCircle2, Clock, ArrowUpDown, Tag, Share2, Loader2, Inbox } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import AnimeRanking from "@/components/AnimeRanking";
@@ -19,7 +19,6 @@ import NewEpisodesBanner from "@/components/NewEpisodesBanner";
 import Radar from "@/components/Radar";
 import AnalyticsDashboard from "@/components/AnalyticsDashboard";
 import Discover from "@/components/Discover";
-import Watch from "@/components/Watch";
 import Footer from "@/components/Footer";
 import SuggestionPopup from "@/components/SuggestionPopup";
 import FloatingSocialBar from "@/components/FloatingSocialBar";
@@ -102,9 +101,8 @@ const Index = () => {
   const [prefilledSearchQuery, setPrefilledSearchQuery] = useState("");
   const [editingAnime, setEditingAnime] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("discover");
+  const [activeTab, setActiveTab] = useState("watch");
   const [onlineFriendsCount, setOnlineFriendsCount] = useState(0);
-  const [watchLaunch, setWatchLaunch] = useState<{ query: string; nonce: number } | null>(null);
   const [gridSize, setGridSize] = useState<string>(() => {
     const saved = localStorage.getItem("animeGridSize");
     return saved || "medium";
@@ -483,13 +481,6 @@ const Index = () => {
     });
   };
 
-  const handleDiscoverPlayAnime = (query: string) => {
-    const clean = query.trim();
-    if (!clean) return;
-    setWatchLaunch({ query: clean, nonce: Date.now() });
-    setActiveTab("watch");
-  };
-
   const handleSignOut = async () => {
     await logout();
     setLocation("/auth");
@@ -678,11 +669,6 @@ const Index = () => {
                   <Users className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Friends</span>
                 </TabsTrigger>
-                <TabsTrigger value="discover" data-testid="tab-discover"
-                  className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium gap-1">
-                  <Compass className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Discover</span>
-                </TabsTrigger>
                 <TabsTrigger value="watch" data-testid="tab-watch"
                   className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium gap-1">
                   <Play className="w-3.5 h-3.5" />
@@ -870,21 +856,12 @@ const Index = () => {
             <AnalyticsDashboard />
           </TabsContent>
 
-          <TabsContent value="discover" className="pt-4 animate-tab-in">
+          <TabsContent value="watch" className="pt-4 animate-tab-in">
             <Discover
               animeList={animeList}
               onAddAnime={handleAddAnime}
               showMature={hentaiFilter !== "hide"}
-              onPlayAnime={handleDiscoverPlayAnime}
-            />
-          </TabsContent>
-
-          <TabsContent value="watch" className="pt-4 animate-tab-in">
-            <Watch
-              animeList={animeList}
               onAutoProgress={handleWatchAutoProgress}
-              externalQuery={watchLaunch?.query}
-              externalQueryNonce={watchLaunch?.nonce}
             />
           </TabsContent>
         </Tabs>

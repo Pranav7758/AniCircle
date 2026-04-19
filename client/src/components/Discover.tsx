@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
+import Watch from "@/components/Watch";
+import type { AnimeData } from "@/services/supabaseData";
 
 interface AnimeItem {
   id: string;
@@ -35,7 +37,7 @@ interface Props {
   animeList: AnimeItem[];
   onAddAnime: (data: any) => Promise<void>;
   showMature?: boolean;
-  onPlayAnime?: (query: string) => void;
+  onAutoProgress?: (event: { action: "created" | "updated"; anime: AnimeData }) => void;
 }
 
 const GENRES = [
@@ -458,7 +460,7 @@ function FindSimilar({ animeList, allKnownIds, showMature, onAdd, onPlay, adding
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export function DiscoverSections({ animeList, onAddAnime, showMature = false, onPlayAnime }: Props) {
+export function DiscoverSections({ animeList, onAddAnime, showMature = false, onAutoProgress }: Props) {
   const [trending, setTrending] = useState<any[]>([]);
   const [loadingTrending, setLoadingTrending] = useState(true);
   const [seasonPicks, setSeasonPicks] = useState<any[]>([]);
@@ -612,18 +614,24 @@ export function DiscoverSections({ animeList, onAddAnime, showMature = false, on
   const genreInfo = userTopGenre ? (GENRE_META[userTopGenre] || { emoji: "🎯" }) : null;
   const hasRatedAnime = animeList.some(a => a.status === "completed" && a.rating);
   const [watchSearch, setWatchSearch] = useState("");
+  const [watchQuery, setWatchQuery] = useState("");
+  const [watchNonce, setWatchNonce] = useState(0);
 
   const triggerPlay = (anime: any) => {
     const title = anime?.title?.english || anime?.title?.romaji || anime?.title || "";
     const clean = String(title).trim();
     if (!clean) return;
-    onPlayAnime?.(clean);
+    setWatchQuery(clean);
+    setWatchNonce(Date.now());
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const submitWatchSearch = () => {
     const q = watchSearch.trim();
     if (!q) return;
-    onPlayAnime?.(q);
+    setWatchQuery(q);
+    setWatchNonce(Date.now());
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   return (
@@ -657,6 +665,17 @@ export function DiscoverSections({ animeList, onAddAnime, showMature = false, on
           </Button>
         </div>
       </section>
+
+      {watchQuery && (
+        <section className="rounded-2xl border border-border/45 bg-card/70 backdrop-blur-sm p-3 sm:p-4">
+          <Watch
+            animeList={animeList}
+            onAutoProgress={onAutoProgress}
+            externalQuery={watchQuery}
+            externalQueryNonce={watchNonce}
+          />
+        </section>
+      )}
 
       {/* ── Hero ── */}
       {loadingTrending ? (

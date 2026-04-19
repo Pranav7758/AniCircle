@@ -704,6 +704,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ── AniList GraphQL Proxy ─────────────────────────────────────────────────
+  // Browser -> /api/anilist/graphql -> AniList (server-side) to avoid CORS issues.
+  app.post("/api/anilist/graphql", async (req: any, res) => {
+    try {
+      const { query, variables } = req.body || {};
+      if (!query || typeof query !== "string") {
+        return res.status(400).json({ error: "query is required" });
+      }
+
+      const upstream = await fetch("https://graphql.anilist.co", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "User-Agent": "AniCircle/1.0",
+        },
+        body: JSON.stringify({ query, variables: variables || {} }),
+        signal: AbortSignal.timeout(12000),
+      });
+
+      const text = await upstream.text();
+      res.status(upstream.status);
+      res.setHeader("Content-Type", upstream.headers.get("content-type") || "application/json");
+      res.setHeader("Cache-Control", "public, max-age=60");
+      return res.send(text);
+    } catch (err: any) {
+      console.error("AniList proxy error:", err?.message);
+      return res.status(500).json({ error: "AniList proxy failed" });
+    }
+  });
+
   app.get("/api/admin/feedback", requireAuth, async (req: any, res) => {
     if (req.userEmail !== "borsepranav700@gmail.com") {
       return res.status(403).json({ error: "Forbidden" });

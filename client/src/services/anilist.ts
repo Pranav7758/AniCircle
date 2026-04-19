@@ -1,6 +1,6 @@
 // client/src/services/anilist.ts
 
-const ANILIST_API_URL = "https://graphql.anilist.co";
+const ANILIST_API_URL = "/api/anilist/graphql";
 
 // Simple in-memory cache configuration
 interface CacheEntry<T> {
