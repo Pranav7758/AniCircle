@@ -323,23 +323,23 @@ const Friends = ({ currentUserId }: FriendsProps) => {
     <div className="space-y-6">
       <Tabs defaultValue="friends" className="w-full">
         <TabsList className="grid w-full h-auto grid-cols-3 gap-1 p-1 md:grid-cols-5 deco-card deco-corners">
-          <TabsTrigger value="friends" data-testid="tab-my-friends" className="gap-1 text-xs py-2">
+          <TabsTrigger value="friends" data-testid="tab-my-friends" className="gap-1 text-xs py-2 rounded-none border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black">
             <Users className="w-3.5 h-3.5 shrink-0" />
             Friends
           </TabsTrigger>
-          <TabsTrigger value="feed" data-testid="tab-feed" className="gap-1 text-xs py-2">
+          <TabsTrigger value="feed" data-testid="tab-feed" className="gap-1 text-xs py-2 rounded-none border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black">
             <Activity className="w-3.5 h-3.5 shrink-0" />
             Feed
           </TabsTrigger>
-          <TabsTrigger value="compare" data-testid="tab-compare" className="gap-1 text-xs py-2">
+          <TabsTrigger value="compare" data-testid="tab-compare" className="gap-1 text-xs py-2 rounded-none border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black">
             <Swords className="w-3.5 h-3.5 shrink-0" />
             Compare
           </TabsTrigger>
-          <TabsTrigger value="requests" data-testid="tab-requests" className="gap-1 text-xs py-2 col-span-1">
+          <TabsTrigger value="requests" data-testid="tab-requests" className="gap-1 text-xs py-2 col-span-1 rounded-none border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black">
             <UserPlus className="w-3.5 h-3.5 shrink-0" />
             Requests
           </TabsTrigger>
-          <TabsTrigger value="find" data-testid="tab-find-friends" className="gap-1 text-xs py-2 col-span-2 md:col-span-1">
+          <TabsTrigger value="find" data-testid="tab-find-friends" className="gap-1 text-xs py-2 col-span-2 md:col-span-1 rounded-none border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black">
             <Search className="w-3.5 h-3.5 shrink-0" />
             Find Friends
           </TabsTrigger>

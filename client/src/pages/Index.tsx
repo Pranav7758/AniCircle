@@ -105,6 +105,7 @@ const Index = () => {
   const [editingAnime, setEditingAnime] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("watch");
+  const [mountedTab, setMountedTab] = useState("watch");
   const [onlineFriendsCount, setOnlineFriendsCount] = useState(0);
   const [gridSize, setGridSize] = useState<string>(() => {
     const saved = localStorage.getItem("animeGridSize");
@@ -124,6 +125,15 @@ const Index = () => {
       fetchAnimeList();
     }
   }, [user, activeTab]);
+
+  useEffect(() => {
+    if (mountedTab === activeTab) return;
+    const raf = requestAnimationFrame(() => {
+      // Defer heavy panel mount to keep tab click INP low.
+      setMountedTab(activeTab);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [activeTab, mountedTab]);
 
   useEffect(() => {
     if (!user) {
@@ -659,36 +669,36 @@ const Index = () => {
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <TabsList className="h-12 deco-card deco-corners p-1 gap-0.5 overflow-x-auto flex-nowrap shadow-[0_0_14px_rgba(212,175,55,0.12)]">
                 <TabsTrigger value="watch" data-testid="tab-watch"
-                  className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium gap-1">
+                  className="rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1">
                   <Play className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Watch</span>
                 </TabsTrigger>
                 <TabsTrigger value="list" data-testid="tab-list"
-                  className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium">
+                  className="rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium">
                   My List
                 </TabsTrigger>
                 <TabsTrigger value="radar" data-testid="tab-radar"
-                  className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium gap-1">
+                  className="rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1">
                   <Sparkles className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Radar</span>
                 </TabsTrigger>
                 <TabsTrigger value="ranking" data-testid="tab-ranking"
-                  className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium gap-1">
+                  className="rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1">
                   <Trophy className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Rankings</span>
                 </TabsTrigger>
                 <TabsTrigger value="analytics" data-testid="tab-analytics"
-                  className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium gap-1">
+                  className="rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1">
                   <PieChart className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Analytics</span>
                 </TabsTrigger>
                 <TabsTrigger value="friends" data-testid="tab-friends"
-                  className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium gap-1">
+                  className="rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1">
                   <Users className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Friends</span>
                 </TabsTrigger>
                 <TabsTrigger value="discover" data-testid="tab-discover"
-                  className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium gap-1">
+                  className="rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1">
                   <Compass className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Discover</span>
                 </TabsTrigger>
@@ -725,7 +735,7 @@ const Index = () => {
           </div>
 
           <TabsContent value="watch" className="pt-4 animate-tab-in">
-            {activeTab === "watch" && (
+            {activeTab === "watch" && mountedTab === "watch" && (
               <Watch
                 animeList={animeList}
                 onAutoProgress={handleWatchAutoProgress}
@@ -734,7 +744,7 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="discover" className="pt-4 animate-tab-in">
-            {activeTab === "discover" && (
+            {activeTab === "discover" && mountedTab === "discover" && (
               <Discover
                 animeList={animeList}
                 onAddAnime={handleAddAnime}
@@ -744,7 +754,7 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="list" className="space-y-4 animate-tab-in">
-            {activeTab === "list" && (
+            {activeTab === "list" && mountedTab === "list" && (
               <>
             {user && <NewEpisodesBanner userId={user.id} />}
 
@@ -869,7 +879,7 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="radar" className="pt-2 animate-tab-in">
-            {activeTab === "radar" && user && (
+            {activeTab === "radar" && mountedTab === "radar" && user && (
               <Radar
                 userId={user.id}
                 animeList={animeList}
@@ -879,7 +889,7 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="ranking" className="space-y-4 animate-tab-in">
-            {activeTab === "ranking" && (
+            {activeTab === "ranking" && mountedTab === "ranking" && (
               <>
             <div className="mb-6">
               <div className="flex items-center gap-2 mb-1">
@@ -894,11 +904,11 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="friends" className="space-y-4 animate-tab-in">
-            {activeTab === "friends" && user && <Friends currentUserId={user.id} />}
+            {activeTab === "friends" && mountedTab === "friends" && user && <Friends currentUserId={user.id} />}
           </TabsContent>
 
           <TabsContent value="analytics" className="space-y-4 pt-4 animate-tab-in">
-            {activeTab === "analytics" && <AnalyticsDashboard />}
+            {activeTab === "analytics" && mountedTab === "analytics" && <AnalyticsDashboard />}
           </TabsContent>
         </Tabs>
       </main>
