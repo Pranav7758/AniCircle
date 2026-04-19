@@ -38,6 +38,21 @@ export interface AniwatchSearchItem {
   description?: string;
 }
 
+export interface AniwatchSeason {
+  title: string;
+  anime_id: string;
+}
+
+/** GET /anime/{id} — title, poster, synopsis, season switcher list */
+export interface AniwatchAnimeDetails {
+  anime_id: string;
+  title: string;
+  description: string;
+  image: string;
+  details: Record<string, string>;
+  seasons: AniwatchSeason[];
+}
+
 export interface AniwatchEpisode {
   ep_id: string;
   number: string;
@@ -57,6 +72,16 @@ export async function fetchAniwatchSearch(query: string): Promise<{ results: Ani
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Aniwatch search failed: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function fetchAniwatchAnimeDetails(animeId: string): Promise<AniwatchAnimeDetails> {
+  const base = getAniwatchApiBase();
+  const url = `${base}/anime/${encodeURIComponent(animeId)}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Anime details failed: ${response.status}`);
   }
   return response.json();
 }
