@@ -208,7 +208,7 @@ function WatchPlayer({
                 </section>
 
                 {/* Episodes sidebar (collapsible on mobile) */}
-                <aside className="order-2 lg:order-1 w-full rounded-2xl border border-border/45 bg-card/70 backdrop-blur-sm overflow-hidden">
+                <aside className="order-2 lg:order-1 w-full rounded-2xl border border-border/45 bg-card/70 backdrop-blur-sm overflow-hidden lg:sticky lg:top-3">
                     <div className="p-4 border-b border-border/35">
                         <div className="flex items-center justify-between gap-3">
                             <p className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
@@ -454,10 +454,10 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
     const epCount = episodes.length;
 
     return (
-        <div className="space-y-8 pb-4">
+        <div className="space-y-6 pb-6">
             {/* Header — browse only full title; series/watch slimmer */}
             {flow === "browse" && (
-                <div className="space-y-2">
+                <div className="space-y-3">
                     <div className="flex items-center gap-3">
                         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600/30 to-fuchsia-600/20 ring-1 ring-primary/25 shadow-neon">
                             <Film className="h-5 w-5 text-primary" />
@@ -562,10 +562,10 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
             )}
 
             {(flow === "series" || flow === "watch") && hubShow && (
-                <div className="space-y-6 animate-in fade-in duration-300">
-                    <div className="flex flex-wrap items-center gap-2">
+                <div className="space-y-5 animate-in fade-in duration-300">
+                    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/40 bg-muted/20 px-2.5 py-1.5 w-fit">
                         <Button variant="ghost" size="sm" onClick={resetToBrowse}
-                            className="gap-1.5 -ml-2 h-9 text-muted-foreground hover:text-foreground rounded-xl"
+                            className="gap-1.5 h-8 text-muted-foreground hover:text-foreground rounded-lg"
                             data-testid="button-back-to-list">
                             <ChevronLeft className="w-4 h-4" /> Browse
                         </Button>
@@ -573,7 +573,7 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                             <>
                                 <span className="text-muted-foreground/40 text-sm">/</span>
                                 <Button variant="ghost" size="sm" onClick={backFromWatchToSeries}
-                                    className="h-9 text-muted-foreground hover:text-foreground rounded-xl -ml-1">
+                                    className="h-8 text-muted-foreground hover:text-foreground rounded-lg">
                                     Seasons
                                 </Button>
                             </>
@@ -581,14 +581,14 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                     </div>
 
                     {/* Hero — series hub (always show when not browse); watch keeps context */}
-                    <div className="relative overflow-hidden rounded-3xl border border-border/40 bg-card shadow-xl">
+                    <div className="relative overflow-hidden rounded-3xl border border-border/40 bg-card shadow-xl ring-1 ring-white/5">
                         <div className="absolute inset-0 pointer-events-none">
                             {poster ? (
                                 <img src={poster} alt="" className="h-full w-full object-cover blur-3xl scale-125 opacity-35" />
                             ) : null}
                             <div className="absolute inset-0 bg-gradient-to-br from-background via-background/95 to-violet-950/20" />
                         </div>
-                        <div className="relative flex flex-col md:flex-row gap-6 md:gap-8 p-6 md:p-10">
+                        <div className="relative flex flex-col md:flex-row gap-6 md:gap-8 p-5 sm:p-6 md:p-8">
                             <div className="shrink-0 mx-auto md:mx-0 w-36 sm:w-44 md:w-52 aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl ring-2 ring-white/10 bg-muted/30">
                                 {poster ? (
                                     <img src={poster} alt="" className="h-full w-full object-cover" />
@@ -640,7 +640,7 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                                     </span>
                                 )}
                             </div>
-                            <div className="flex gap-3 overflow-x-auto pb-3 -mx-1 px-1 snap-x snap-mandatory scrollbar-thin [scrollbar-color:hsl(var(--primary)/0.4)_transparent]">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                                 {seasonsForUi.map((s) => (
                                     <button
                                         key={`${s.anime_id}-${s.title}`}
@@ -649,8 +649,8 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                                         onClick={() => pickSeason(s)}
                                         data-testid={`button-season-${s.anime_id}`}
                                         className={cn(
-                                            "snap-start shrink-0 min-w-[168px] max-w-[240px] rounded-2xl border p-4 text-left transition-all duration-200",
-                                            "border-border/50 bg-gradient-to-br from-muted/40 to-muted/10 hover:border-primary/50 hover:from-primary/10 hover:to-violet-950/20 hover:shadow-lg hover:shadow-primary/10",
+                                            "rounded-2xl border p-4 text-left transition-all duration-200 min-h-[124px]",
+                                            "border-border/50 bg-gradient-to-br from-muted/40 to-muted/10 hover:border-primary/50 hover:from-primary/10 hover:to-violet-950/20 hover:shadow-lg hover:shadow-primary/10 hover:-translate-y-0.5",
                                             "disabled:opacity-50 disabled:pointer-events-none",
                                         )}
                                     >
@@ -658,7 +658,7 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                                         <p className="font-bold text-sm leading-snug line-clamp-3 text-foreground group-hover:text-primary">
                                             {s.title}
                                         </p>
-                                        <p className="text-[10px] text-muted-foreground mt-2 font-medium uppercase tracking-wider">Open →</p>
+                                        <p className="text-[10px] text-muted-foreground mt-2 font-medium uppercase tracking-wider">Play</p>
                                     </button>
                                 ))}
                             </div>
@@ -671,7 +671,7 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                     )}
 
                     {flow === "watch" && (
-                        <div className="space-y-5 max-w-5xl mx-auto">
+                        <div className="space-y-5 max-w-6xl mx-auto">
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                                 <div className="min-w-0">
                                     {epLoading && (
