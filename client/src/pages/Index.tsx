@@ -6,7 +6,7 @@ import { fetchAniList, GET_ANALYTICS_QUERY } from "@/services/anilist";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LogOut, Plus, Search, Sparkles, Trophy, Users, Settings, PieChart, Play, CheckCircle2, Clock, ArrowUpDown, Tag, Share2, Loader2, Inbox } from "lucide-react";
+import { LogOut, Plus, Search, Sparkles, Trophy, Users, Settings, PieChart, Play, CheckCircle2, Clock, ArrowUpDown, Tag, Share2, Loader2, Inbox, Compass } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import AnimeRanking from "@/components/AnimeRanking";
@@ -60,7 +60,7 @@ const StatsBar = ({ animeList }: { animeList: Anime[] }) => {
     { icon: Play, label: "Watching", value: watching, color: "text-primary" },
     { icon: CheckCircle2, label: "Completed", value: completed, color: "text-emerald-400" },
     { icon: Trophy, label: "Total Shows", value: uniqueTitles, color: "text-amber-400" },
-    { icon: Clock, label: "Episodes", value: totalEps.toLocaleString(), color: "text-blue-400" },
+    { icon: Clock, label: "Episodes", value: totalEps.toLocaleString(), color: "text-yellow-300" },
   ];
 
   return (
@@ -675,10 +675,10 @@ const Index = () => {
                   <Users className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Friends</span>
                 </TabsTrigger>
-                <TabsTrigger value="watch" data-testid="tab-watch"
+                <TabsTrigger value="discover" data-testid="tab-discover"
                   className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium gap-1">
-                  <Play className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Watch</span>
+                  <Compass className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Discover</span>
                 </TabsTrigger>
               </TabsList>
 

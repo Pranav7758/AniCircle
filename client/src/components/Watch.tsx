@@ -693,11 +693,6 @@ export default function Watch({
                         </Button>
                     </div>
 
-                    {!searched && !searching && (
-                        <p className="text-xs text-muted-foreground/60 text-center sm:text-left max-w-xl leading-relaxed">
-                            Results come from your scraper (<code className="text-[10px] rounded bg-muted/50 px-1 py-0.5">ANIWATCH_SCRAPER_URL</code>).
-                        </p>
-                    )}
                     {searching && (
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <Loader2 className="w-4 h-4 animate-spin text-primary" /> Searching catalog…
@@ -818,9 +813,7 @@ export default function Watch({
                                         );
                                     })}
                                 </div>
-                            ) : (
-                                <p className="text-xs text-muted-foreground">Trending list unavailable right now.</p>
-                            )}
+                            ) : null}
                         </section>
                     )}
                 </>

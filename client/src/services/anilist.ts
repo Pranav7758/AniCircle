@@ -1,6 +1,7 @@
 // client/src/services/anilist.ts
 
 const ANILIST_API_URL = "/api/anilist/graphql";
+const ANILIST_DIRECT_URL = "https://graphql.anilist.co";
 
 // Simple in-memory cache configuration
 interface CacheEntry<T> {
@@ -11,14 +12,21 @@ const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const queryCache = new Map<string, CacheEntry<any>>();
 
 async function doFetch<T>(query: string, variables: Record<string, any>): Promise<T> {
-  const response = await fetch(ANILIST_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Accept": "application/json",
-    },
-    body: JSON.stringify({ query, variables }),
-  });
+  const makeRequest = async (url: string) =>
+    fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify({ query, variables }),
+    });
+
+  let response = await makeRequest(ANILIST_API_URL);
+  // Vercel/static deployments may not expose the proxy route.
+  if (response.status === 404 || response.status === 405) {
+    response = await makeRequest(ANILIST_DIRECT_URL);
+  }
 
   // Rate-limited — read Retry-After header and surface it
   if (response.status === 429) {

@@ -15,21 +15,21 @@ import {
     AreaChart, Area
 } from "recharts";
 
-const COLORS = ['#8b5cf6', '#d946ef', '#f43f5e', '#3b82f6', '#10b981', '#f59e0b', '#06b6d4', '#ec4899', '#a3e635', '#fb923c'];
+const COLORS = ['#d4af37', '#b78e2e', '#8b5e1a', '#f59e0b', '#eab308', '#c0841d', '#7c5a11', '#ec4899', '#a3e635', '#fb923c'];
 const STATUS_COLORS: Record<string, string> = {
-    completed: '#10b981', watching: '#3b82f6',
-    plan_to_watch: '#8b5cf6', on_hold: '#f59e0b', dropped: '#f43f5e'
+    completed: '#10b981', watching: '#d4af37',
+    plan_to_watch: '#b78e2e', on_hold: '#f59e0b', dropped: '#f43f5e'
 };
 const STATUS_LABELS: Record<string, string> = {
     completed: 'Completed', watching: 'Watching',
     plan_to_watch: 'Plan to Watch', on_hold: 'On Hold', dropped: 'Dropped'
 };
 const FORMAT_COLORS: Record<string, string> = {
-    TV: '#8b5cf6', MOVIE: '#3b82f6', OVA: '#10b981',
-    ONA: '#f59e0b', SPECIAL: '#ec4899', TV_SHORT: '#06b6d4', MUSIC: '#f43f5e'
+    TV: '#d4af37', MOVIE: '#b78e2e', OVA: '#10b981',
+    ONA: '#f59e0b', SPECIAL: '#ec4899', TV_SHORT: '#7c5a11', MUSIC: '#f43f5e'
 };
 const SEASON_COLORS: Record<string, string> = {
-    WINTER: '#93c5fd', SPRING: '#86efac', SUMMER: '#fde047', FALL: '#fb923c'
+    WINTER: '#cbb26d', SPRING: '#86efac', SUMMER: '#fde047', FALL: '#fb923c'
 };
 const SEASON_ICONS: Record<string, string> = {
     WINTER: '❄️', SPRING: '🌸', SUMMER: '☀️', FALL: '🍂'
