@@ -82,6 +82,7 @@ function WatchPlayer({
     const [loading, setLoading] = useState(false);
     const [err, setErr] = useState("");
     const [retryTick, setRetryTick] = useState(0);
+    const [findEpisode, setFindEpisode] = useState("");
 
     useEffect(() => {
         if (!selectedEpId) return;
@@ -117,106 +118,195 @@ function WatchPlayer({
     const epLabel = idx >= 0 ? episodes[idx].number : "—";
     const totalEps = episodes.length;
 
+    const PER_RANGE = 100;
+    const selectedNumber = idx >= 0 ? parseInt(episodes[idx].number, 10) : NaN;
+    const rangeCount = Math.max(1, Math.ceil(totalEps / PER_RANGE));
+    const initialRange = Number.isFinite(selectedNumber) && selectedNumber > 0
+        ? Math.ceil(selectedNumber / PER_RANGE)
+        : 1;
+    const [range, setRange] = useState(initialRange);
+
+    // Keep range in sync when user changes episode via prev/next or programmatically
+    useEffect(() => {
+        if (!Number.isFinite(selectedNumber) || selectedNumber <= 0) return;
+        const r = Math.ceil(selectedNumber / PER_RANGE);
+        if (r !== range) setRange(r);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedEpId]);
+
+    const rangeStart = (range - 1) * PER_RANGE + 1;
+    const rangeEnd = Math.min(range * PER_RANGE, totalEps);
+
+    const jumpToEpisodeNumber = (n: number) => {
+        if (!Number.isFinite(n) || n <= 0) return;
+        const target = episodes.find((e) => parseInt(e.number, 10) === n);
+        if (target) onEpIdChange(target.ep_id);
+    };
+
+    const onFindKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key !== "Enter") return;
+        const n = parseInt(findEpisode.trim(), 10);
+        jumpToEpisodeNumber(n);
+    };
+
     return (
         <div className="space-y-5">
-            <div className="flex items-center justify-between gap-2">
-                <Button variant="outline" size="sm" disabled={idx <= 0}
-                    onClick={goPrev} className="gap-1.5 h-9 rounded-lg border-border/60" data-testid="button-aniw-prev-ep">
-                    <ChevronLeft className="w-4 h-4" /> Prev
-                </Button>
-                <span className="text-sm font-bold tabular-nums text-foreground/90">Episode {epLabel}</span>
-                <Button variant="outline" size="sm" disabled={idx < 0 || idx >= totalEps - 1}
-                    onClick={goNext} className="gap-1.5 h-9 rounded-lg border-border/60" data-testid="button-aniw-next-ep">
-                    Next <ChevronRight className="w-4 h-4" />
-                </Button>
-            </div>
-
-            {loading && (
-                <div className="aspect-video rounded-2xl border border-primary/20 bg-gradient-to-br from-black via-zinc-950 to-violet-950/40 flex flex-col items-center justify-center gap-4 shadow-[0_0_40px_-10px_rgba(139,92,246,0.5)]">
-                    <Loader2 className="w-10 h-10 animate-spin text-primary" />
-                    <p className="text-xs text-muted-foreground">Loading player…</p>
-                </div>
-            )}
-
-            {!loading && err && (
-                <div className="aspect-video rounded-2xl border border-orange-500/25 bg-black/80 flex flex-col items-center justify-center gap-4 p-6 text-center">
-                    <AlertTriangle className="h-10 w-10 text-orange-400/80" />
-                    <p className="text-sm text-muted-foreground">{err}</p>
-                    <Button size="sm" variant="outline" className="rounded-lg" onClick={() => setRetryTick((t) => t + 1)} disabled={!selectedEpId}>
-                        <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Retry
-                    </Button>
-                </div>
-            )}
-
-            {!loading && !err && iframeSrc && (
-                <div className="relative aspect-video rounded-2xl overflow-hidden border border-primary/25 shadow-[0_0_50px_-12px_rgba(139,92,246,0.45)] ring-1 ring-white/5">
-                    <iframe
-                        key={`${selectedEpId}-${lang}`}
-                        src={iframeSrc}
-                        className="w-full h-full"
-                        allowFullScreen
-                        allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-                        sandbox="allow-scripts allow-same-origin allow-presentation allow-fullscreen"
-                        title={`Episode ${epLabel}`}
-                        referrerPolicy="strict-origin-when-cross-origin"
-                    />
-                </div>
-            )}
-
-            {!loading && !err && megaplay && !iframeSrc && (
-                <div className="aspect-video rounded-2xl border border-border/50 bg-muted/20 flex items-center justify-center p-6 text-center text-sm text-muted-foreground">
-                    No embed for this language — try SUB / DUB or another episode.
-                </div>
-            )}
-
-            <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground/80 flex items-center gap-2">
-                        <Clapperboard className="w-3.5 h-3.5 text-primary/70" />
-                        Episodes
-                    </p>
-                    <button
-                        type="button"
-                        onClick={onBackToSeasons}
-                        className="text-[11px] font-medium text-muted-foreground hover:text-primary transition-colors"
-                        data-testid="button-back-seasons"
-                    >
-                        ← Change season
-                    </button>
-                </div>
-                <div className="max-h-56 overflow-y-auto rounded-2xl border border-border/40 bg-gradient-to-b from-muted/20 to-muted/5 p-1.5 space-y-0.5">
-                    {episodes.map((ep) => {
-                        const num = parseInt(ep.number, 10);
-                        const isWatched = Number.isFinite(num) && num > 0 && watched > 0 && num <= watched;
-                        const isSel = ep.ep_id === selectedEpId;
-                        return (
+            {/* HiAnime-style layout: episode sidebar + player */}
+            <div className="grid lg:grid-cols-[320px_1fr] gap-5 items-start">
+                {/* Episodes sidebar */}
+                <aside className="rounded-2xl border border-border/45 bg-card/70 backdrop-blur-sm overflow-hidden">
+                    <div className="p-4 border-b border-border/35">
+                        <div className="flex items-center justify-between gap-3">
+                            <p className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground flex items-center gap-2">
+                                <Clapperboard className="w-4 h-4 text-primary/80" />
+                                List of episodes
+                            </p>
                             <button
-                                key={ep.ep_id}
                                 type="button"
-                                onClick={() => onEpIdChange(ep.ep_id)}
-                                data-testid={`button-aniw-ep-${ep.ep_id}`}
-                                className={cn(
-                                    "w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-all",
-                                    isSel
-                                        ? "bg-primary/20 text-primary font-semibold shadow-sm ring-1 ring-primary/30"
-                                        : "hover:bg-muted/50 text-foreground/90",
-                                    isWatched && !isSel && "text-muted-foreground",
-                                )}
+                                onClick={onBackToSeasons}
+                                className="text-[11px] font-semibold text-muted-foreground hover:text-primary transition-colors"
+                                data-testid="button-back-seasons"
                             >
-                                <span className={cn(
-                                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-mono font-bold",
-                                    isSel ? "bg-primary text-primary-foreground" : "bg-muted/60 text-muted-foreground",
-                                )}>
-                                    {ep.number}
-                                </span>
-                                <span className="flex-1 truncate">{ep.title || `Episode ${ep.number}`}</span>
-                                {isWatched && !isSel && (
-                                    <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500/70" />
-                                )}
+                                ← Seasons
                             </button>
-                        );
-                    })}
-                </div>
+                        </div>
+
+                        <div className="mt-3 flex items-center gap-2">
+                            <div className="flex items-center gap-2 rounded-xl border border-border/45 bg-muted/20 px-3 py-2">
+                                <span className="text-[11px] font-mono text-muted-foreground/80">
+                                    {String(rangeStart).padStart(3, "0")}–{String(rangeEnd).padStart(3, "0")}
+                                </span>
+                                <select
+                                    value={range}
+                                    onChange={(e) => setRange(parseInt(e.target.value, 10))}
+                                    className="bg-transparent text-[11px] font-semibold text-foreground outline-none"
+                                    aria-label="Episode range"
+                                    data-testid="select-episode-range"
+                                >
+                                    {Array.from({ length: rangeCount }, (_, i) => i + 1).map((r) => {
+                                        const s = (r - 1) * PER_RANGE + 1;
+                                        const en = Math.min(r * PER_RANGE, totalEps);
+                                        return (
+                                            <option key={r} value={r}>
+                                                {String(s).padStart(3, "0")}–{String(en).padStart(3, "0")}
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                            </div>
+
+                            <div className="relative flex-1">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/70" />
+                                <Input
+                                    value={findEpisode}
+                                    onChange={(e) => setFindEpisode(e.target.value)}
+                                    onKeyDown={onFindKeyDown}
+                                    placeholder="Find number"
+                                    inputMode="numeric"
+                                    className="pl-9 h-10 rounded-xl border-border/50 bg-muted/25 text-sm"
+                                    data-testid="input-find-episode"
+                                />
+                            </div>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-10 rounded-xl"
+                                onClick={() => jumpToEpisodeNumber(parseInt(findEpisode.trim(), 10))}
+                                disabled={!findEpisode.trim()}
+                                data-testid="button-find-episode"
+                            >
+                                Go
+                            </Button>
+                        </div>
+                    </div>
+
+                    <div className="p-3">
+                        <div className="grid grid-cols-5 sm:grid-cols-6 lg:grid-cols-5 gap-2 max-h-[520px] overflow-y-auto pr-1">
+                            {episodes
+                                .filter((ep) => {
+                                    const n = parseInt(ep.number, 10);
+                                    return Number.isFinite(n) && n >= rangeStart && n <= rangeEnd;
+                                })
+                                .map((ep) => {
+                                    const n = parseInt(ep.number, 10);
+                                    const isWatched = Number.isFinite(n) && n > 0 && watched > 0 && n <= watched;
+                                    const isSel = ep.ep_id === selectedEpId;
+                                    return (
+                                        <button
+                                            key={ep.ep_id}
+                                            type="button"
+                                            onClick={() => onEpIdChange(ep.ep_id)}
+                                            data-testid={`button-aniw-ep-${ep.ep_id}`}
+                                            className={cn(
+                                                "h-10 rounded-xl border text-xs font-bold tabular-nums transition-all",
+                                                isSel
+                                                    ? "bg-primary text-primary-foreground border-primary/60 shadow-[0_0_0_3px_rgba(139,92,246,0.25)]"
+                                                    : "bg-muted/20 border-border/45 hover:bg-muted/40 hover:border-primary/45",
+                                                isWatched && !isSel && "text-muted-foreground",
+                                            )}
+                                            title={ep.title || `Episode ${ep.number}`}
+                                        >
+                                            {n}
+                                        </button>
+                                    );
+                                })}
+                        </div>
+                    </div>
+                </aside>
+
+                {/* Player panel */}
+                <section className="space-y-4">
+                    <div className="flex items-center justify-between gap-2">
+                        <Button variant="outline" size="sm" disabled={idx <= 0}
+                            onClick={goPrev} className="gap-1.5 h-9 rounded-lg border-border/60" data-testid="button-aniw-prev-ep">
+                            <ChevronLeft className="w-4 h-4" /> Prev
+                        </Button>
+                        <span className="text-sm font-bold tabular-nums text-foreground/90">Episode {epLabel}</span>
+                        <Button variant="outline" size="sm" disabled={idx < 0 || idx >= totalEps - 1}
+                            onClick={goNext} className="gap-1.5 h-9 rounded-lg border-border/60" data-testid="button-aniw-next-ep">
+                            Next <ChevronRight className="w-4 h-4" />
+                        </Button>
+                    </div>
+
+                    {loading && (
+                        <div className="aspect-video rounded-2xl border border-primary/20 bg-gradient-to-br from-black via-zinc-950 to-violet-950/40 flex flex-col items-center justify-center gap-4 shadow-[0_0_40px_-10px_rgba(139,92,246,0.5)]">
+                            <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                            <p className="text-xs text-muted-foreground">Loading player…</p>
+                        </div>
+                    )}
+
+                    {!loading && err && (
+                        <div className="aspect-video rounded-2xl border border-orange-500/25 bg-black/80 flex flex-col items-center justify-center gap-4 p-6 text-center">
+                            <AlertTriangle className="h-10 w-10 text-orange-400/80" />
+                            <p className="text-sm text-muted-foreground">{err}</p>
+                            <Button size="sm" variant="outline" className="rounded-lg" onClick={() => setRetryTick((t) => t + 1)} disabled={!selectedEpId}>
+                                <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Retry
+                            </Button>
+                        </div>
+                    )}
+
+                    {!loading && !err && iframeSrc && (
+                        <div className="relative aspect-video rounded-2xl overflow-hidden border border-primary/25 shadow-[0_0_50px_-12px_rgba(139,92,246,0.45)] ring-1 ring-white/5">
+                            <iframe
+                                key={`${selectedEpId}-${lang}`}
+                                src={iframeSrc}
+                                className="w-full h-full"
+                                allowFullScreen
+                                allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+                                sandbox="allow-scripts allow-same-origin allow-presentation allow-fullscreen"
+                                title={`Episode ${epLabel}`}
+                                referrerPolicy="strict-origin-when-cross-origin"
+                            />
+                        </div>
+                    )}
+
+                    {!loading && !err && megaplay && !iframeSrc && (
+                        <div className="aspect-video rounded-2xl border border-border/50 bg-muted/20 flex items-center justify-center p-6 text-center text-sm text-muted-foreground">
+                            No embed for this language — try SUB / DUB or another episode.
+                        </div>
+                    )}
+                </section>
             </div>
 
             <p className="text-[10px] text-muted-foreground/50 flex items-center gap-1.5">
