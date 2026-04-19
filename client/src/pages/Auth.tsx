@@ -251,6 +251,9 @@ const Auth = () => {
                   />
                   <SubmitButton isLoading={isLoading} loadingText="Updating..." text="Update Password" />
                 </form>
+                <p className="text-[11px] text-center text-muted-foreground/60">
+                  Opened from recovery link. For OTP flow, go back and use "Forgot?" then "I already have a code".
+                </p>
               </div>
 
             ) : showForgotPassword ? (
@@ -292,6 +295,15 @@ const Auth = () => {
                       <p className="text-sm text-muted-foreground mt-1">Enter your email to receive a recovery code</p>
                     </div>
                     <FormField label="Email" id="forgot-email" type="email" value={forgotEmail} onChange={setForgotEmail} disabled={isLoading} placeholder="your@email.com" />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full rounded-none"
+                      onClick={() => setForgotStep("verify")}
+                      disabled={isLoading || !forgotEmail.trim()}
+                    >
+                      I already have a code
+                    </Button>
                     <SubmitButton isLoading={isLoading} loadingText="Sending..." text="Send Recovery Code" />
                   </form>
                 ) : forgotStep === "verify" ? (
