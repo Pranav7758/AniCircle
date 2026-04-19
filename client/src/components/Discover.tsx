@@ -17,6 +17,7 @@ import {
   Clock, Brain, CalendarDays, Search, X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
 
 interface AnimeItem {
   id: string;
@@ -34,6 +35,7 @@ interface Props {
   animeList: AnimeItem[];
   onAddAnime: (data: any) => Promise<void>;
   showMature?: boolean;
+  onPlayAnime?: (query: string) => void;
 }
 
 const GENRES = [
@@ -83,15 +85,20 @@ function getCurrentSeason(): { season: string; seasonYear: number } {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function AnimeCard({ anime, isInList, onAdd, adding, rank }: {
-  anime: any; isInList: boolean; onAdd: () => void; adding: boolean; rank?: number;
+function AnimeCard({ anime, isInList, onAdd, onPlay, adding, rank }: {
+  anime: any; isInList: boolean; onAdd: () => void; onPlay?: (anime: any) => void; adding: boolean; rank?: number;
 }) {
   const title = anime.title?.english || anime.title?.romaji;
   const score = anime.averageScore ? (anime.averageScore / 10).toFixed(1) : null;
   const st = STATUS_MAP[anime.status] || null;
 
   return (
-    <div className="group relative flex-shrink-0 w-[130px] sm:w-[144px] md:w-full" data-testid={`card-anime-${anime.id}`}>
+    <button
+      type="button"
+      className="group relative flex-shrink-0 w-[130px] sm:w-[144px] md:w-full text-left"
+      data-testid={`card-anime-${anime.id}`}
+      onClick={() => onPlay?.(anime)}
+    >
       <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-muted/30">
         {anime.coverImage?.large || anime.coverImage?.extraLarge ? (
           <img
@@ -137,7 +144,7 @@ function AnimeCard({ anime, isInList, onAdd, adding, rank }: {
           )}
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -183,8 +190,8 @@ function SkeletonRow() {
   );
 }
 
-function Hero({ animes, allKnownIds, onAdd, addingId }: {
-  animes: any[]; allKnownIds: Set<number>; onAdd: (a: any) => void; addingId: number | null;
+function Hero({ animes, allKnownIds, onAdd, onPlay, addingId }: {
+  animes: any[]; allKnownIds: Set<number>; onAdd: (a: any) => void; onPlay?: (a: any) => void; addingId: number | null;
 }) {
   const [idx, setIdx] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -211,7 +218,14 @@ function Hero({ animes, allKnownIds, onAdd, addingId }: {
   const go = (i: number) => { setIdx(i); reset(); };
 
   return (
-    <div className="relative rounded-xl overflow-hidden border border-border/30" style={{ height: 260 }}>
+    <div
+      className="relative rounded-xl overflow-hidden border border-border/30 cursor-pointer"
+      style={{ height: 260 }}
+      onClick={() => onPlay?.(a)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onPlay?.(a); }}
+    >
       {bg && <img key={a.id} src={bg} alt="" className="absolute inset-0 w-full h-full object-cover" />}
       <div className="absolute inset-0 bg-gradient-to-r from-black/95 via-black/80 to-black/20" />
       <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
@@ -247,7 +261,7 @@ function Hero({ animes, allKnownIds, onAdd, addingId }: {
                 <Check className="w-3 h-3" /> In Your List
               </Button>
             ) : (
-              <Button size="sm" onClick={() => onAdd(a)} disabled={adding} data-testid={`button-hero-add-${a.id}`}
+              <Button size="sm" onClick={(e) => { e.stopPropagation(); onAdd(a); }} disabled={adding} data-testid={`button-hero-add-${a.id}`}
                 className="text-xs gap-1.5 h-7 px-3 rounded-full gradient-primary shadow-neon font-semibold">
                 {adding ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
                 Add to List
@@ -274,11 +288,12 @@ function Hero({ animes, allKnownIds, onAdd, addingId }: {
 
 // ── Find Similar Picker ───────────────────────────────────────────────────────
 
-function FindSimilar({ animeList, allKnownIds, showMature, onAdd, addingId }: {
+function FindSimilar({ animeList, allKnownIds, showMature, onAdd, onPlay, addingId }: {
   animeList: AnimeItem[];
   allKnownIds: Set<number>;
   showMature: boolean;
   onAdd: (a: any) => void;
+  onPlay?: (a: any) => void;
   addingId: number | null;
 }) {
   const [query, setQuery] = useState("");
@@ -429,6 +444,7 @@ function FindSimilar({ animeList, allKnownIds, showMature, onAdd, addingId }: {
                 anime={anime}
                 isInList={allKnownIds.has(anime.id)}
                 onAdd={() => onAdd(anime)}
+                onPlay={onPlay}
                 adding={addingId === anime.id}
                 rank={i + 1}
               />
@@ -442,7 +458,7 @@ function FindSimilar({ animeList, allKnownIds, showMature, onAdd, addingId }: {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export function DiscoverSections({ animeList, onAddAnime, showMature = false }: Props) {
+export function DiscoverSections({ animeList, onAddAnime, showMature = false, onPlayAnime }: Props) {
   const [trending, setTrending] = useState<any[]>([]);
   const [loadingTrending, setLoadingTrending] = useState(true);
   const [seasonPicks, setSeasonPicks] = useState<any[]>([]);
@@ -595,15 +611,58 @@ export function DiscoverSections({ animeList, onAddAnime, showMature = false }: 
   const seasonLabel = season.charAt(0) + season.slice(1).toLowerCase() + " " + seasonYear;
   const genreInfo = userTopGenre ? (GENRE_META[userTopGenre] || { emoji: "🎯" }) : null;
   const hasRatedAnime = animeList.some(a => a.status === "completed" && a.rating);
+  const [watchSearch, setWatchSearch] = useState("");
+
+  const triggerPlay = (anime: any) => {
+    const title = anime?.title?.english || anime?.title?.romaji || anime?.title || "";
+    const clean = String(title).trim();
+    if (!clean) return;
+    onPlayAnime?.(clean);
+  };
+
+  const submitWatchSearch = () => {
+    const q = watchSearch.trim();
+    if (!q) return;
+    onPlayAnime?.(q);
+  };
 
   return (
     <div className="space-y-8 pb-8">
+      <section>
+        <div className="flex items-center gap-2 mb-2">
+          <Play className="w-4 h-4 text-primary" />
+          <span className="text-sm font-bold text-foreground">Watch Search</span>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2 max-w-xl">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/70" />
+            <Input
+              value={watchSearch}
+              onChange={(e) => setWatchSearch(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") submitWatchSearch(); }}
+              placeholder="Search anime to watch now..."
+              className="pl-9 h-9 rounded-xl border-border/50 bg-muted/30 text-sm"
+              data-testid="input-discover-watch-search"
+            />
+          </div>
+          <Button
+            type="button"
+            onClick={submitWatchSearch}
+            disabled={!watchSearch.trim()}
+            className="h-9 px-4 rounded-xl"
+            data-testid="button-discover-watch-search"
+          >
+            <Search className="w-3.5 h-3.5 mr-1.5" />
+            Watch
+          </Button>
+        </div>
+      </section>
 
       {/* ── Hero ── */}
       {loadingTrending ? (
         <div className="rounded-xl bg-muted/30 animate-pulse" style={{ height: 260 }} />
       ) : (
-        <Hero animes={trending.slice(0, 5)} allKnownIds={allKnownIds} onAdd={handleAdd} addingId={addingId} />
+        <Hero animes={trending.slice(0, 5)} allKnownIds={allKnownIds} onAdd={handleAdd} onPlay={triggerPlay} addingId={addingId} />
       )}
 
       {/* ── Genre Browser ── */}
@@ -643,6 +702,7 @@ export function DiscoverSections({ animeList, onAddAnime, showMature = false }: 
                 anime={anime}
                 isInList={allKnownIds.has(anime.id)}
                 onAdd={() => handleAdd(anime)}
+                onPlay={triggerPlay}
                 adding={addingId === anime.id}
                 rank={i + 1}
               />
@@ -657,6 +717,7 @@ export function DiscoverSections({ animeList, onAddAnime, showMature = false }: 
         allKnownIds={allKnownIds}
         showMature={showMature}
         onAdd={handleAdd}
+        onPlay={triggerPlay}
         addingId={addingId}
       />
 
@@ -673,7 +734,7 @@ export function DiscoverSections({ animeList, onAddAnime, showMature = false }: 
             <Row>
               {genreAnime.map((anime, i) => (
                 <AnimeCard key={anime.id} anime={anime} isInList={allKnownIds.has(anime.id)}
-                  onAdd={() => handleAdd(anime)} adding={addingId === anime.id} rank={i + 1} />
+                  onAdd={() => handleAdd(anime)} onPlay={triggerPlay} adding={addingId === anime.id} rank={i + 1} />
               ))}
             </Row>
           )}
@@ -699,7 +760,7 @@ export function DiscoverSections({ animeList, onAddAnime, showMature = false }: 
                   <Row>
                     {items.map(anime => (
                       <AnimeCard key={anime.id} anime={anime} isInList={allKnownIds.has(anime.id)}
-                        onAdd={() => handleAdd(anime)} adding={addingId === anime.id} />
+                        onAdd={() => handleAdd(anime)} onPlay={triggerPlay} adding={addingId === anime.id} />
                     ))}
                   </Row>
                 </div>
@@ -721,7 +782,7 @@ export function DiscoverSections({ animeList, onAddAnime, showMature = false }: 
           <Row>
             {trending.map((anime, i) => (
               <AnimeCard key={anime.id} anime={anime} isInList={allKnownIds.has(anime.id)}
-                onAdd={() => handleAdd(anime)} adding={addingId === anime.id} rank={i + 1} />
+                onAdd={() => handleAdd(anime)} onPlay={triggerPlay} adding={addingId === anime.id} rank={i + 1} />
             ))}
           </Row>
         )}
@@ -738,7 +799,7 @@ export function DiscoverSections({ animeList, onAddAnime, showMature = false }: 
           <Row>
             {seasonPicks.map(anime => (
               <AnimeCard key={anime.id} anime={anime} isInList={allKnownIds.has(anime.id)}
-                onAdd={() => handleAdd(anime)} adding={addingId === anime.id} />
+                onAdd={() => handleAdd(anime)} onPlay={triggerPlay} adding={addingId === anime.id} />
             ))}
           </Row>
         )}
