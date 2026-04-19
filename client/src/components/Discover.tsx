@@ -442,7 +442,7 @@ function FindSimilar({ animeList, allKnownIds, showMature, onAdd, addingId }: {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export default function Discover({ animeList, onAddAnime, showMature = false }: Props) {
+export function DiscoverSections({ animeList, onAddAnime, showMature = false }: Props) {
   const [trending, setTrending] = useState<any[]>([]);
   const [loadingTrending, setLoadingTrending] = useState(true);
   const [seasonPicks, setSeasonPicks] = useState<any[]>([]);
@@ -746,4 +746,8 @@ export default function Discover({ animeList, onAddAnime, showMature = false }: 
 
     </div>
   );
+}
+
+export default function Discover(props: Props) {
+  return <DiscoverSections {...props} />;
 }

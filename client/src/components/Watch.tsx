@@ -373,9 +373,11 @@ type Flow = "browse" | "series" | "watch";
 export default function Watch({
     animeList,
     onAutoProgress,
+    externalQuery,
 }: {
     animeList: Anime[];
     onAutoProgress?: (event: AutoProgressEvent) => void;
+    externalQuery?: string;
 }) {
     const [search, setSearch] = useState("");
     const [results, setResults] = useState<SearchResult[]>([]);
@@ -414,6 +416,14 @@ export default function Watch({
         setSearching(false);
         setSearched(true);
     }, []);
+
+    useEffect(() => {
+        const next = (externalQuery || "").trim();
+        if (!next) return;
+        setFlow("browse");
+        setSearch(next);
+        void doSearch(next);
+    }, [externalQuery, doSearch]);
 
     // Always keep the selected anime/hero at the top when navigating
     useEffect(() => {
