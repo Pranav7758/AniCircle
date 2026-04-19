@@ -43,13 +43,13 @@ const Footer = () => {
   };
 
   return (
-    <footer className="border-t border-border/50 bg-background/80 backdrop-blur-lg mt-auto">
+    <footer className="border-t border-primary/30 bg-background/80 backdrop-blur-lg mt-auto">
       <div className="container mx-auto px-4 py-10">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 lg:gap-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 lg:gap-10 deco-card deco-corners p-6 sm:p-7">
 
           {/* About + Social */}
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">
+            <h3 className="text-lg font-semibold text-gradient">
               AniCircle
             </h3>
             <p className="text-sm text-muted-foreground leading-relaxed">
@@ -62,7 +62,7 @@ const Footer = () => {
                 rel="noopener noreferrer"
                 aria-label="Instagram"
                 data-testid="link-instagram"
-                className="w-9 h-9 flex items-center justify-center rounded-full border border-border/60 bg-background/60 text-muted-foreground hover:text-pink-400 hover:border-pink-400/50 transition-all duration-200"
+                className="w-9 h-9 flex items-center justify-center rounded-none border border-primary/40 bg-background/60 text-muted-foreground hover:text-primary hover:border-primary/70 transition-all duration-200"
               >
                 <Instagram className="w-4 h-4" />
               </a>
@@ -72,7 +72,7 @@ const Footer = () => {
                 rel="noopener noreferrer"
                 aria-label="LinkedIn"
                 data-testid="link-linkedin"
-                className="w-9 h-9 flex items-center justify-center rounded-full border border-border/60 bg-background/60 text-muted-foreground hover:text-blue-400 hover:border-blue-400/50 transition-all duration-200"
+                className="w-9 h-9 flex items-center justify-center rounded-none border border-primary/40 bg-background/60 text-muted-foreground hover:text-primary hover:border-primary/70 transition-all duration-200"
               >
                 <Linkedin className="w-4 h-4" />
               </a>
@@ -80,7 +80,7 @@ const Footer = () => {
                 href="mailto:borsepranav700@gmail.com"
                 aria-label="Email"
                 data-testid="link-email"
-                className="w-9 h-9 flex items-center justify-center rounded-full border border-border/60 bg-background/60 text-muted-foreground hover:text-violet-400 hover:border-violet-400/50 transition-all duration-200"
+                className="w-9 h-9 flex items-center justify-center rounded-none border border-primary/40 bg-background/60 text-muted-foreground hover:text-primary hover:border-primary/70 transition-all duration-200"
               >
                 <Mail className="w-4 h-4" />
               </a>
@@ -92,7 +92,7 @@ const Footer = () => {
             <h3 className="text-lg font-semibold">Get in Touch</h3>
             <div className="space-y-3 text-sm">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 flex items-center justify-center rounded-full bg-violet-500/10 text-violet-400 shrink-0">
+                <div className="w-8 h-8 flex items-center justify-center rounded-none bg-primary/15 text-primary shrink-0 border border-primary/40">
                   <Mail className="w-3.5 h-3.5" />
                 </div>
                 <a
@@ -104,7 +104,7 @@ const Footer = () => {
                 </a>
               </div>
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 flex items-center justify-center rounded-full bg-violet-500/10 text-violet-400 shrink-0">
+                <div className="w-8 h-8 flex items-center justify-center rounded-none bg-primary/15 text-primary shrink-0 border border-primary/40">
                   <Phone className="w-3.5 h-3.5" />
                 </div>
                 <a
@@ -116,7 +116,7 @@ const Footer = () => {
                 </a>
               </div>
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 flex items-center justify-center rounded-full bg-pink-500/10 text-pink-400 shrink-0">
+                <div className="w-8 h-8 flex items-center justify-center rounded-none bg-primary/15 text-primary shrink-0 border border-primary/40">
                   <Instagram className="w-3.5 h-3.5" />
                 </div>
                 <a
@@ -130,7 +130,7 @@ const Footer = () => {
                 </a>
               </div>
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 flex items-center justify-center rounded-full bg-blue-500/10 text-blue-400 shrink-0">
+                <div className="w-8 h-8 flex items-center justify-center rounded-none bg-primary/15 text-primary shrink-0 border border-primary/40">
                   <Linkedin className="w-3.5 h-3.5" />
                 </div>
                 <a
@@ -149,7 +149,7 @@ const Footer = () => {
           {/* Feedback */}
           <div className="space-y-4">
             <h3 className="text-lg font-semibold flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-violet-400" />
+              <MessageSquare className="w-4 h-4 text-primary" />
               Send Feedback
             </h3>
             <form onSubmit={handleFeedbackSubmit} className="space-y-2.5">
@@ -158,7 +158,7 @@ const Footer = () => {
                 value={feedbackName}
                 onChange={(e) => setFeedbackName(e.target.value)}
                 data-testid="input-feedback-name"
-                className="bg-background/50 border-border/50 text-sm h-8"
+                className="bg-background/50 border-primary/35 text-sm h-8 rounded-none"
               />
               <Input
                 type="email"
@@ -166,14 +166,14 @@ const Footer = () => {
                 value={feedbackEmail}
                 onChange={(e) => setFeedbackEmail(e.target.value)}
                 data-testid="input-feedback-email"
-                className="bg-background/50 border-border/50 text-sm h-8"
+                className="bg-background/50 border-primary/35 text-sm h-8 rounded-none"
               />
               <Textarea
                 placeholder="Share your thoughts, bugs, or ideas..."
                 value={feedbackMessage}
                 onChange={(e) => setFeedbackMessage(e.target.value)}
                 data-testid="textarea-feedback-message"
-                className="bg-background/50 border-border/50 text-sm resize-none min-h-[72px]"
+                className="bg-background/50 border-primary/35 text-sm resize-none min-h-[72px] rounded-none"
                 required
               />
               <Button
@@ -181,7 +181,7 @@ const Footer = () => {
                 disabled={submitting || !feedbackMessage.trim()}
                 data-testid="button-submit-feedback"
                 size="sm"
-                className="w-full gap-2 bg-violet-600 hover:bg-violet-500 text-white"
+                className="w-full gap-2 gradient-primary hover:opacity-90 text-black rounded-none border border-primary/60"
               >
                 <Send className="w-3.5 h-3.5" />
                 {submitting ? "Sending..." : "Send Feedback"}
@@ -191,7 +191,7 @@ const Footer = () => {
         </div>
 
         {/* Bottom Bar */}
-        <div className="mt-8 pt-5 border-t border-border/50">
+        <div className="mt-8 pt-5 border-t border-primary/25">
           <div className="flex items-center justify-center text-xs text-muted-foreground">
             <p>© {new Date().getFullYear()} AniCircle. All rights reserved.</p>
           </div>

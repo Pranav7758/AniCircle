@@ -89,7 +89,7 @@ const AnimeGroupCard = ({
   };
 
   return (
-    <div className={`group relative flex flex-col rounded-2xl overflow-hidden border border-border/40 bg-card transition-all duration-400 cursor-default perspective-1000 card-3d-hover ${neon}`}>
+    <div className={`group relative flex flex-col rounded-none overflow-hidden border border-primary/35 bg-card transition-all duration-400 cursor-default perspective-1000 card-3d-hover deco-corners ${neon}`}>
 
       {/* ── Cover art ── */}
       <div className="aspect-[3/4] relative overflow-hidden">
@@ -110,12 +110,12 @@ const AnimeGroupCard = ({
 
         {/* Top badges */}
         <div className="absolute top-2 left-2 right-2 flex items-start justify-between gap-1 z-10">
-          <span className={`inline-flex items-center gap-1.5 text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full font-semibold backdrop-blur-sm ${cfg.badgeClass}`}>
+            <span className={`inline-flex items-center gap-1.5 text-[9px] sm:text-[10px] px-2 py-0.5 rounded-none font-semibold backdrop-blur-sm border border-primary/45 ${cfg.badgeClass}`}>
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cfg.dotClass}`} />
             {cfg.label}
           </span>
           {seasons.length > 1 && (
-            <span className="text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full font-bold bg-black/50 text-white/80 backdrop-blur-sm border border-white/10">
+            <span className="text-[9px] sm:text-[10px] px-2 py-0.5 rounded-none font-bold bg-black/60 text-white/80 backdrop-blur-sm border border-primary/45">
               {seasons.length}S
             </span>
           )}
@@ -140,8 +140,8 @@ const AnimeGroupCard = ({
                   className="h-full rounded-full transition-all"
                   style={{
                     width: `${overallProgress}%`,
-                    background: 'linear-gradient(90deg, hsl(268 88% 62%), hsl(215 90% 58%))',
-                    boxShadow: '0 0 6px hsl(268 88% 62% / 0.6)',
+                    background: 'linear-gradient(90deg, hsl(45 64% 52%), hsl(45 64% 36%))',
+                    boxShadow: '0 0 6px hsl(45 64% 52% / 0.55)',
                   }}
                 />
               </div>
@@ -151,11 +151,11 @@ const AnimeGroupCard = ({
       </div>
 
       {/* ── Expandable seasons ── */}
-      <div className="bg-card/95 backdrop-blur-sm">
+      <div className="bg-card/95 backdrop-blur-sm border-t border-primary/25">
         <Collapsible open={isOpen} onOpenChange={setIsOpen}>
           <div className="flex items-center border-t border-border/30">
             <CollapsibleTrigger asChild>
-              <button className="flex-1 flex items-center justify-between px-3 py-2 text-[10px] sm:text-xs text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors">
+              <button className="flex-1 flex items-center justify-between px-3 py-2 text-[10px] sm:text-xs text-muted-foreground hover:text-foreground hover:bg-primary/10 transition-colors">
                 <span className="font-medium">{isOpen ? "Hide" : "View"} {seasons.length === 1 ? "Season" : `${seasons.length} Seasons`}</span>
                 {isOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
               </button>
@@ -163,7 +163,7 @@ const AnimeGroupCard = ({
             {!readOnly && onAddSeason && (
               <button
                 title="Add another season"
-                className="flex items-center gap-0.5 text-[9px] sm:text-[10px] px-2.5 py-2 border-l border-border/30 text-primary/70 hover:text-primary hover:bg-primary/10 transition-colors font-semibold"
+                className="flex items-center gap-0.5 text-[9px] sm:text-[10px] px-2.5 py-2 border-l border-primary/30 text-primary/70 hover:text-primary hover:bg-primary/10 transition-colors font-semibold"
                 onClick={(e) => { e.stopPropagation(); onAddSeason(title); }}
               >
                 <Plus className="w-2.5 h-2.5" />
@@ -192,11 +192,11 @@ const AnimeGroupCard = ({
                       {!readOnly && (
                         <div className="flex items-center gap-0.5 shrink-0">
                           <Button variant="ghost" size="sm" onClick={() => onEdit(season.id)}
-                            className="h-6 w-6 p-0 hover:bg-primary/10 hover:text-primary rounded-lg">
+                            className="h-6 w-6 p-0 hover:bg-primary/10 hover:text-primary rounded-none">
                             <Pencil className="w-3 h-3" />
                           </Button>
                           <Button variant="ghost" size="sm" onClick={() => onDelete(season.id)}
-                            className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive rounded-lg">
+                            className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive rounded-none">
                             <Trash2 className="w-3 h-3" />
                           </Button>
                         </div>
@@ -210,7 +210,7 @@ const AnimeGroupCard = ({
                             <button
                               disabled={!canDecrement || isUpdating}
                               onClick={() => handleEpisodeChange(season, -1)}
-                              className="w-4 h-4 rounded flex items-center justify-center hover:bg-muted/60 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-muted-foreground hover:text-foreground"
+                            className="w-4 h-4 rounded-none flex items-center justify-center hover:bg-muted/60 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-muted-foreground hover:text-foreground"
                               title="Remove episode"
                             >
                               <Minus className="w-2.5 h-2.5" />
@@ -223,7 +223,7 @@ const AnimeGroupCard = ({
                             <button
                               disabled={!canIncrement || isUpdating}
                               onClick={() => handleEpisodeChange(season, 1)}
-                              className="w-4 h-4 rounded flex items-center justify-center hover:bg-primary/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-primary/70 hover:text-primary"
+                            className="w-4 h-4 rounded-none flex items-center justify-center hover:bg-primary/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-primary/70 hover:text-primary"
                               title="Add episode"
                             >
                               <Plus className="w-2.5 h-2.5" />
@@ -240,7 +240,7 @@ const AnimeGroupCard = ({
                         <div className="w-full h-0.5 rounded-full bg-muted/50 overflow-hidden">
                           <div className="h-full rounded-full transition-all duration-300" style={{
                             width: `${prog}%`,
-                            background: 'linear-gradient(90deg, hsl(268 88% 62%), hsl(215 90% 58%))',
+                            background: 'linear-gradient(90deg, hsl(45 64% 52%), hsl(45 64% 36%))',
                           }} />
                         </div>
                       )}

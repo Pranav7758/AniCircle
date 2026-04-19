@@ -713,21 +713,27 @@ const Index = () => {
           </div>
 
           <TabsContent value="watch" className="pt-4 animate-tab-in">
-            <Watch
-              animeList={animeList}
-              onAutoProgress={handleWatchAutoProgress}
-            />
+            {activeTab === "watch" && (
+              <Watch
+                animeList={animeList}
+                onAutoProgress={handleWatchAutoProgress}
+              />
+            )}
           </TabsContent>
 
           <TabsContent value="discover" className="pt-4 animate-tab-in">
-            <Discover
-              animeList={animeList}
-              onAddAnime={handleAddAnime}
-              showMature={hentaiFilter !== "hide"}
-            />
+            {activeTab === "discover" && (
+              <Discover
+                animeList={animeList}
+                onAddAnime={handleAddAnime}
+                showMature={hentaiFilter !== "hide"}
+              />
+            )}
           </TabsContent>
 
           <TabsContent value="list" className="space-y-4 animate-tab-in">
+            {activeTab === "list" && (
+              <>
             {user && <NewEpisodesBanner userId={user.id} />}
 
             {animeList.length > 0 && <StatsBar animeList={animeList} />}
@@ -846,10 +852,12 @@ const Index = () => {
                 </div>
               </>
             )}
+              </>
+            )}
           </TabsContent>
 
           <TabsContent value="radar" className="pt-2 animate-tab-in">
-            {user && (
+            {activeTab === "radar" && user && (
               <Radar
                 userId={user.id}
                 animeList={animeList}
@@ -859,6 +867,8 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="ranking" className="space-y-4 animate-tab-in">
+            {activeTab === "ranking" && (
+              <>
             <div className="mb-6">
               <div className="flex items-center gap-2 mb-1">
                 <Trophy className="w-5 h-5 text-amber-400" />
@@ -867,14 +877,16 @@ const Index = () => {
               <p className="text-sm text-muted-foreground">Drag to reorder your all-time favourite anime.</p>
             </div>
             {user && <AnimeRanking userId={user.id} isOwnProfile={true} />}
+              </>
+            )}
           </TabsContent>
 
           <TabsContent value="friends" className="space-y-4 animate-tab-in">
-            {user && <Friends currentUserId={user.id} />}
+            {activeTab === "friends" && user && <Friends currentUserId={user.id} />}
           </TabsContent>
 
           <TabsContent value="analytics" className="space-y-4 pt-4 animate-tab-in">
-            <AnalyticsDashboard />
+            {activeTab === "analytics" && <AnalyticsDashboard />}
           </TabsContent>
         </Tabs>
       </main>

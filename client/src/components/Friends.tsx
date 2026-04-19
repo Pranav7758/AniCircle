@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { getFriends, getFriendRequests, getFriendAnimeList, sendFriendRequest, updateFriendStatus, getProfileByShortId, getFriendsActivity, getFriendsWatchPresence, getFriendsUserPresence, type WatchPresenceData, type UserPresenceData } from "@/services/supabaseData";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -202,14 +202,16 @@ const Friends = ({ currentUserId }: FriendsProps) => {
     setFilteredFriendAnimeList(filtered);
   }, [friendAnimeList, friendSearchQuery, friendStatusFilter, friendHentaiFilter, friendRankingFilter]);
 
-  const groupedFriendAnime = filteredFriendAnimeList.reduce((groups, anime) => {
-    const title = anime.title;
-    if (!groups[title]) {
-      groups[title] = [];
-    }
-    groups[title].push(anime);
-    return groups;
-  }, {} as Record<string, Anime[]>);
+  const groupedFriendAnime = useMemo(() => (
+    filteredFriendAnimeList.reduce((groups, anime) => {
+      const title = anime.title;
+      if (!groups[title]) {
+        groups[title] = [];
+      }
+      groups[title].push(anime);
+      return groups;
+    }, {} as Record<string, Anime[]>)
+  ), [filteredFriendAnimeList]);
 
   const handleSendFriendRequest = async () => {
     if (!searchShortId || searchShortId.trim().length !== 5) {
@@ -278,7 +280,7 @@ const Friends = ({ currentUserId }: FriendsProps) => {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="friends" className="w-full">
-        <TabsList className="grid w-full h-auto grid-cols-3 gap-1 p-1 md:grid-cols-5">
+        <TabsList className="grid w-full h-auto grid-cols-3 gap-1 p-1 md:grid-cols-5 deco-card deco-corners">
           <TabsTrigger value="friends" data-testid="tab-my-friends" className="gap-1 text-xs py-2">
             <Users className="w-3.5 h-3.5 shrink-0" />
             Friends
@@ -502,13 +504,13 @@ const Friends = ({ currentUserId }: FriendsProps) => {
               </p>
             </div>
           ) : (
-            <div className="space-y-2.5">
+            <div className="space-y-3">
               {activityFeed.map((item, ai) => {
                 const icon =
                   item.type === "completed" ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> :
                   item.type === "rated" ? <Star className="w-4 h-4 text-amber-400 shrink-0" /> :
                   item.type === "dropped" ? <Trash2 className="w-4 h-4 text-red-400 shrink-0" /> :
-                  item.type === "started" ? <Play className="w-4 h-4 text-blue-400 shrink-0" /> :
+                  item.type === "started" ? <Play className="w-4 h-4 text-primary shrink-0" /> :
                   <Plus className="w-4 h-4 text-primary shrink-0" />;
 
                 const verb =
@@ -523,11 +525,11 @@ const Friends = ({ currentUserId }: FriendsProps) => {
                   item.type === "completed" && item.rating ? ` — ${item.rating}/10` : "";
 
                 return (
-                  <div key={item.id} className="flex items-center gap-3 p-3 rounded-xl bg-muted/20 border border-border/30 holo-glass hover:bg-muted/30 transition-colors animate-stagger-in" style={{ animationDelay: `${ai * 60}ms` }}>
+                  <div key={item.id} className="relative flex items-center gap-3 p-3 rounded-none bg-card/80 border border-primary/30 hover:border-primary/60 transition-colors animate-stagger-in deco-corners" style={{ animationDelay: `${ai * 60}ms` }}>
                     {item.coverImage ? (
-                      <img src={item.coverImage} alt={item.animeTitle} className="w-10 h-14 object-cover rounded-lg shrink-0" />
+                      <img src={item.coverImage} alt={item.animeTitle} className="w-10 h-14 object-cover rounded-none border border-primary/30 shrink-0" />
                     ) : (
-                      <div className="w-10 h-14 bg-muted/40 rounded-lg shrink-0 flex items-center justify-center">
+                      <div className="w-10 h-14 bg-muted/40 rounded-none border border-primary/30 shrink-0 flex items-center justify-center">
                         {icon}
                       </div>
                     )}
