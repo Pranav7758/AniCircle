@@ -47,6 +47,10 @@ interface AutoProgressEvent {
     anime: AnimeData;
 }
 
+type UiSeason = AniwatchSeason & {
+    uiSeasonNumber: number;
+};
+
 function metaChips(details: Record<string, string> | undefined): { label: string; value: string }[] {
     if (!details) return [];
     const order = ["status", "aired", "premiered", "duration", "genres", "studios", "mal score"];
@@ -80,6 +84,17 @@ function parseSeasonNumber(label?: string | null): number {
     const match = label.match(/season\s*(\d+)/i);
     if (match) return parseInt(match[1], 10);
     return 1;
+}
+
+function resolveSeasonNumber(season: Pick<AniwatchSeason, "title" | "anime_id">, fallback: number): number {
+    const fromTitle = parseSeasonNumber(season.title);
+    if (fromTitle > 1) return fromTitle;
+    const idMatch = season.anime_id.match(/(?:season|s)[-_ ]?(\d{1,2})/i);
+    if (idMatch) {
+        const n = parseInt(idMatch[1], 10);
+        if (Number.isFinite(n) && n > 0) return n;
+    }
+    return fallback;
 }
 
 // ── Player ───────────────────────────────────────────────────────────────────
@@ -372,7 +387,7 @@ export default function Watch({
     const [details, setDetails] = useState<AniwatchAnimeDetails | null>(null);
     const [detailLoading, setDetailLoading] = useState(false);
 
-    const [seasonPick, setSeasonPick] = useState<AniwatchSeason | null>(null);
+    const [seasonPick, setSeasonPick] = useState<UiSeason | null>(null);
     const [episodes, setEpisodes] = useState<AniwatchEpisode[]>([]);
     const [epLoading, setEpLoading] = useState(false);
     const [selectedEpId, setSelectedEpId] = useState<string | null>(null);
@@ -434,14 +449,19 @@ export default function Watch({
         setDetailLoading(false);
     };
 
-    const seasonsForUi: AniwatchSeason[] = useMemo(() => {
+    const seasonsForUi: UiSeason[] = useMemo(() => {
         if (!hubShow) return [];
         const raw = details?.seasons;
-        if (raw && raw.length > 0) return raw;
-        return [{ title: "All episodes", anime_id: hubShow.id }];
+        if (raw && raw.length > 0) {
+            return raw.map((season, index) => ({
+                ...season,
+                uiSeasonNumber: resolveSeasonNumber(season, index + 1),
+            }));
+        }
+        return [{ title: "All episodes", anime_id: hubShow.id, uiSeasonNumber: 1 }];
     }, [details, hubShow]);
 
-    const pickSeason = async (season: AniwatchSeason) => {
+    const pickSeason = async (season: UiSeason) => {
         setSeasonPick(season);
         setEpisodes([]);
         setSelectedEpId(null);
@@ -487,10 +507,7 @@ export default function Watch({
         const n = parseInt(ep.number, 10);
         return Number.isFinite(n) && n > 0 ? n : null;
     }, [episodes, selectedEpId]);
-    const resolvedSeasonNumber = useMemo(
-        () => parseSeasonNumber(seasonPick?.title),
-        [seasonPick?.title],
-    );
+    const resolvedSeasonNumber = useMemo(() => seasonPick?.uiSeasonNumber ?? 1, [seasonPick?.uiSeasonNumber]);
     const canonicalTitle = useMemo(
         () => (details?.title || hubShow?.title || "").trim(),
         [details?.title, hubShow?.title],

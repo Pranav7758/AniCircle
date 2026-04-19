@@ -427,9 +427,13 @@ const Friends = ({ currentUserId }: FriendsProps) => {
                         ? (Date.now() - new Date(presence.updatedAt).getTime()) < 10 * 60 * 1000
                         : false;
                       const onlinePresence = onlineByUserId[friendId];
-                      const isOnline = onlinePresence?.updatedAt
+                      const hasRecentHeartbeat = onlinePresence?.updatedAt
                         ? (Date.now() - new Date(onlinePresence.updatedAt).getTime()) < 2 * 60 * 1000
                         : false;
+                      const hasRecentWatchPulse = presence?.updatedAt
+                        ? (Date.now() - new Date(presence.updatedAt).getTime()) < 2 * 60 * 1000
+                        : false;
+                      const isOnline = hasRecentHeartbeat || hasRecentWatchPulse;
                       return (
                         <Card key={friend.id} className="cursor-pointer hover:bg-accent/50 animate-stagger-in" style={{ animationDelay: `${fi * 70}ms` }} data-testid={`friend-card-${friend.id}`}>
                           <CardContent className="p-4">
