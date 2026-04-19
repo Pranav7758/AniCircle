@@ -19,7 +19,7 @@ import NewEpisodesBanner from "@/components/NewEpisodesBanner";
 import Radar from "@/components/Radar";
 import AnalyticsDashboard from "@/components/AnalyticsDashboard";
 import Discover from "@/components/Discover";
-import Watch from "@/components/Watch";
+import Watch, { type WatchListSyncPayload } from "@/components/Watch";
 import Footer from "@/components/Footer";
 import SuggestionPopup from "@/components/SuggestionPopup";
 import FloatingSocialBar from "@/components/FloatingSocialBar";
@@ -383,6 +383,48 @@ const Index = () => {
       setAnimeList(prev => prev.map(a => a.id === id ? { ...a, episodesWatched: newEpisodes } : a));
     } catch (error) {
       toast.error("Failed to update episode count");
+    }
+  };
+
+  const handleWatchListSync = async (meta: WatchListSyncPayload) => {
+    try {
+      const fresh = await getAnimeList();
+      const existing = fresh.find((a) => a.malId === meta.malId && a.seasonNumber === 1);
+      const nextWatched = Math.max(existing?.episodesWatched ?? 0, meta.episodesWatched);
+
+      if (!existing) {
+        await createAnime([{
+          title: meta.title,
+          episodesWatched: nextWatched,
+          totalEpisodes: meta.totalEpisodes,
+          status: "watching",
+          seasonNumber: 1,
+          malId: meta.malId,
+          anilistId: null,
+          coverImage: meta.coverImage,
+          notes: null,
+          rating: null,
+          isHentai: false,
+        }]);
+        logActivity("started", meta.title, meta.coverImage, 1);
+      } else {
+        const patch: Partial<Anime> = { episodesWatched: nextWatched };
+        if (meta.totalEpisodes != null && (existing.totalEpisodes == null || meta.totalEpisodes > existing.totalEpisodes)) {
+          patch.totalEpisodes = meta.totalEpisodes;
+        }
+        if (existing.status === "plan_to_watch") patch.status = "watching";
+        if (
+          nextWatched !== existing.episodesWatched ||
+          patch.totalEpisodes != null ||
+          patch.status != null
+        ) {
+          await updateAnime(existing.id, patch);
+        }
+      }
+      await fetchAnimeList();
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "Could not sync your list from Watch");
     }
   };
 
@@ -756,7 +798,7 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="watch" className="pt-4 animate-tab-in">
-            <Watch animeList={animeList} />
+            <Watch animeList={animeList} onWatchListSync={handleWatchListSync} />
           </TabsContent>
         </Tabs>
       </main>

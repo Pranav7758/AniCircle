@@ -412,6 +412,195 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ── Jikan (MyAnimeList) + Aniwatch scraper proxies ─────────────────────────
+  // Server-side fetch avoids browser CORS and keeps Vercel-friendly timeouts.
+  // Override base URL on Vercel with ANIWATCH_SCRAPER_URL if you deploy your own scraper.
+
+  const ANIWATCH_SCRAPER_BASE = (process.env.ANIWATCH_SCRAPER_URL || "https://aniwatch-scraper-kappa.vercel.app").replace(/\/$/, "");
+  const JIKAN_BASE = "https://api.jikan.moe/v4";
+
+  async function fetchAniwatchJson(path: string): Promise<any> {
+    const url = `${ANIWATCH_SCRAPER_BASE}${path.startsWith("/") ? path : `/${path}`}`;
+    const upstream = await fetch(url, {
+      headers: { Accept: "application/json", "User-Agent": "AniCircle/1.0" },
+      signal: AbortSignal.timeout(25000),
+    });
+    if (!upstream.ok) {
+      const t = await upstream.text().catch(() => "");
+      throw new Error(`Aniwatch ${upstream.status}: ${t.slice(0, 120)}`);
+    }
+    return upstream.json();
+  }
+
+  app.get("/api/jikan/search", async (req: any, res) => {
+    const { q, limit = "15" } = req.query;
+    if (!q || !String(q).trim()) return res.status(400).json({ error: "q is required" });
+    const lim = Math.min(25, Math.max(1, parseInt(String(limit), 10) || 15));
+    try {
+      const url = `${JIKAN_BASE}/anime?q=${encodeURIComponent(String(q))}&limit=${lim}&order_by=popularity&sort=desc`;
+      const upstream = await fetch(url, {
+        headers: { Accept: "application/json", "User-Agent": "AniCircle/1.0" },
+        signal: AbortSignal.timeout(12000),
+      });
+      if (!upstream.ok) {
+        return res.status(upstream.status).json({ error: "Jikan search failed", data: [], pagination: {} });
+      }
+      const json = await upstream.json();
+      res.setHeader("Cache-Control", "public, max-age=60");
+      res.json(json);
+    } catch (err: any) {
+      console.error("Jikan search error:", err?.message);
+      res.status(500).json({ error: "Jikan search failed", message: err?.message });
+    }
+  });
+
+  app.get("/api/jikan/anime/:malId/relations", async (req: any, res) => {
+    const malId = parseInt(String(req.params.malId), 10);
+    if (!malId || Number.isNaN(malId)) return res.status(400).json({ error: "Invalid malId" });
+    try {
+      const url = `${JIKAN_BASE}/anime/${malId}/relations`;
+      const upstream = await fetch(url, {
+        headers: { Accept: "application/json", "User-Agent": "AniCircle/1.0" },
+        signal: AbortSignal.timeout(12000),
+      });
+      if (!upstream.ok) {
+        return res.status(upstream.status).json({ error: "Jikan relations failed", data: [] });
+      }
+      const json = await upstream.json();
+      res.setHeader("Cache-Control", "public, max-age=600");
+      res.json(json);
+    } catch (err: any) {
+      console.error("Jikan relations error:", err?.message);
+      res.status(500).json({ error: "Jikan relations failed", message: err?.message, data: [] });
+    }
+  });
+
+  app.get("/api/jikan/anime/:malId", async (req: any, res) => {
+    const malId = parseInt(String(req.params.malId), 10);
+    if (!malId || Number.isNaN(malId)) return res.status(400).json({ error: "Invalid malId" });
+    try {
+      const url = `${JIKAN_BASE}/anime/${malId}`;
+      const upstream = await fetch(url, {
+        headers: { Accept: "application/json", "User-Agent": "AniCircle/1.0" },
+        signal: AbortSignal.timeout(12000),
+      });
+      if (!upstream.ok) {
+        return res.status(upstream.status).json({ error: "Jikan lookup failed" });
+      }
+      const json = await upstream.json();
+      res.setHeader("Cache-Control", "public, max-age=300");
+      res.json(json);
+    } catch (err: any) {
+      console.error("Jikan anime error:", err?.message);
+      res.status(500).json({ error: "Jikan lookup failed", message: err?.message });
+    }
+  });
+
+  app.get("/api/aniwatch/home", async (_req: any, res) => {
+    try {
+      const json = await fetchAniwatchJson("/home");
+      res.setHeader("Cache-Control", "public, max-age=120");
+      res.json(json);
+    } catch (err: any) {
+      console.error("Aniwatch home error:", err?.message);
+      res.status(500).json({ error: "Aniwatch home failed", message: err?.message });
+    }
+  });
+
+  app.get("/api/aniwatch/search", async (req: any, res) => {
+    const { q } = req.query;
+    if (!q || !String(q).trim()) return res.status(400).json({ error: "q is required" });
+    try {
+      const json = await fetchAniwatchJson(`/search?q=${encodeURIComponent(String(q))}`);
+      res.setHeader("Cache-Control", "public, max-age=120");
+      res.json(json);
+    } catch (err: any) {
+      console.error("Aniwatch search error:", err?.message);
+      res.status(500).json({ error: "Aniwatch search failed", message: err?.message });
+    }
+  });
+
+  app.get("/api/aniwatch/episodes/:animeId", async (req: any, res) => {
+    const animeId = req.params.animeId;
+    if (!animeId) return res.status(400).json({ error: "animeId is required" });
+    try {
+      const json = await fetchAniwatchJson(`/episodes/${encodeURIComponent(animeId)}`);
+      res.setHeader("Cache-Control", "public, max-age=120");
+      res.json(json);
+    } catch (err: any) {
+      console.error("Aniwatch episodes error:", err?.message);
+      res.status(500).json({ error: "Aniwatch episodes failed", message: err?.message });
+    }
+  });
+
+  app.get("/api/aniwatch/megaplay/:epId", async (req: any, res) => {
+    const epId = req.params.epId;
+    if (!epId) return res.status(400).json({ error: "epId is required" });
+    try {
+      const json = await fetchAniwatchJson(`/megaplay/${encodeURIComponent(epId)}`);
+      res.setHeader("Cache-Control", "public, max-age=60");
+      res.json(json);
+    } catch (err: any) {
+      console.error("Aniwatch megaplay error:", err?.message);
+      res.status(500).json({ error: "Aniwatch megaplay failed", message: err?.message });
+    }
+  });
+
+  // Resolve playable URL: megaplay page (iframe) or embed from servers → sources.
+  app.get("/api/aniwatch/playback", async (req: any, res) => {
+    const epId = String(req.query.epId || "");
+    const lang = String(req.query.lang || "sub").toLowerCase();
+    if (!epId) return res.status(400).json({ error: "epId is required" });
+
+    try {
+      const mega = await fetchAniwatchJson(`/megaplay/${encodeURIComponent(epId)}`);
+      const wantDub = lang === "dub";
+      const wantRaw = lang === "raw";
+      let streamUrl: string | null = null;
+      if (wantRaw && mega.raw) streamUrl = mega.raw;
+      else if (wantDub && mega.dub) streamUrl = mega.dub;
+      else if (!wantDub && !wantRaw && mega.sub) streamUrl = mega.sub;
+      else if (mega.sub) streamUrl = mega.sub;
+
+      if (streamUrl && typeof streamUrl === "string") {
+        return res.json({ mode: "iframe", url: streamUrl, source: "megaplay" });
+      }
+
+      const serversData = await fetchAniwatchJson(`/servers/${encodeURIComponent(epId)}`);
+      const servers: { server_id: string; name: string; type: string }[] = serversData.servers || [];
+      const matchType = wantDub ? "dub" : "sub";
+      let ordered = servers.filter((s) => s.type === matchType);
+      if (ordered.length === 0) ordered = servers;
+
+      for (const srv of ordered) {
+        try {
+          const srcData = await fetchAniwatchJson(`/sources/${encodeURIComponent(srv.server_id)}`);
+          if (srcData.link && srcData.type === "iframe") {
+            return res.json({ mode: "iframe", url: srcData.link, source: srv.name || "embed" });
+          }
+          const sources = Array.isArray(srcData.sources) ? srcData.sources : [];
+          for (const s of sources) {
+            const file = s.file || s.url;
+            if (!file || typeof file !== "string") continue;
+            if (file.includes(".m3u8")) {
+              return res.json({ mode: "hls", url: file, source: srv.name || "hls" });
+            }
+            if (/\.mp4(\?|#|$)/i.test(file)) {
+              return res.json({ mode: "mp4", url: file, source: srv.name || "mp4" });
+            }
+          }
+        } catch {
+          continue;
+        }
+      }
+
+      return res.status(404).json({ error: "No playable source for this episode" });
+    } catch (err: any) {
+      console.error("Aniwatch playback error:", err?.message);
+      res.status(500).json({ error: "Playback resolve failed", message: err?.message });
+    }
+  });
+
   // ── Gogoanime Scraper Endpoints ──────────────────────────────────────────
   // Public endpoints — no auth needed.
 

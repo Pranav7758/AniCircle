@@ -1,14 +1,16 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import Hls from "hls.js";
 import {
     Search, Play, Pause, Loader2, Tv, ChevronLeft, ChevronRight,
     Film, RefreshCw, Maximize2, Minimize2, Volume2, VolumeX, Volume1,
-    SkipForward, SkipBack, AlertTriangle, Wifi
+    SkipForward, SkipBack, AlertTriangle, Wifi, Library, ArrowRight,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -20,25 +22,86 @@ interface Anime {
     status: string;
     rating: number | null;
     coverImage: string | null;
+    seasonNumber: number;
     anilistId: number | null;
     malId: number | null;
 }
 
-interface GogoResult {
-    id: string;
-    title: string;
-    url: string;
-    image: string;
-    isAllAnime?: boolean;
-    subEps?: number;
-    dubEps?: number;
+interface JikanSearchItem {
+    mal_id: number;
+    title?: string;
+    titles?: { en?: string; ja_jp?: string; default?: string };
+    episodes?: number | null;
+    images?: { jpg?: { image_url?: string; large_image_url?: string } };
+    type?: string;
 }
 
-interface EpisodeInfo {
-    start: number;
-    end: number;
-    dubId: string | null;
-    dubEnd: number | null;
+interface AniwatchSearchItem {
+    anime_id: string;
+    title: string;
+    image?: string;
+    sub?: string | null;
+    dub?: string | null;
+}
+
+interface AniwatchEpisodeRow {
+    ep_id: string;
+    number: string;
+    title?: string;
+}
+
+interface FranchiseSeason {
+    malId: number;
+    title: string;
+    relation: string;
+    image: string | null;
+    episodes: number | null;
+}
+
+function jikanDataToSearchItem(d: any): JikanSearchItem {
+    if (!d?.mal_id) throw new Error("Invalid anime payload");
+    return {
+        mal_id: d.mal_id,
+        title: d.title,
+        titles: d.titles,
+        episodes: d.episodes ?? null,
+        images: d.images,
+        type: d.type,
+    };
+}
+
+function dedupeFranchiseSeasons(rows: FranchiseSeason[]): FranchiseSeason[] {
+    const seen = new Set<number>();
+    const out: FranchiseSeason[] = [];
+    for (const r of rows) {
+        if (seen.has(r.malId)) continue;
+        seen.add(r.malId);
+        out.push(r);
+    }
+    return out;
+}
+
+function buildFranchiseFromRelations(
+    groups: { relation: string; entry: { mal_id: number; type: string; name: string }[] }[],
+    currentMalId: number,
+): FranchiseSeason[] {
+    const WANT = new Set(["Sequel", "Prequel", "Side story", "Parent story", "Alternative version", "Spin-off"]);
+    const raw: FranchiseSeason[] = [];
+    for (const g of groups || []) {
+        const rel = String(g.relation || "");
+        if (!WANT.has(rel)) continue;
+        for (const e of g.entry || []) {
+            if (e.type !== "anime" || e.mal_id === currentMalId) continue;
+            raw.push({
+                malId: e.mal_id,
+                title: e.name,
+                relation: rel,
+                image: null,
+                episodes: null,
+            });
+        }
+    }
+    return dedupeFranchiseSeasons(raw);
 }
 
 interface StreamResult {
@@ -99,12 +162,14 @@ function HlsPlayer({
     anilistId,
     episode,
     onError,
+    onEpisodeNearFinished,
 }: {
     streamResult: StreamResult;
     malId?: number | null;
     anilistId?: number | null;
     episode: number;
     onError: () => void;
+    onEpisodeNearFinished?: (episode: number) => void;
 }) {
     const videoRef = useRef<HTMLVideoElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -126,6 +191,7 @@ function HlsPlayer({
     const [buffered, setBuffered] = useState(0);
     const [clickFlash, setClickFlash] = useState<"play" | "pause" | "rewind" | "forward" | null>(null);
     const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const nearEndFiredForEp = useRef<number | null>(null);
 
     // Fetch skip timestamps
     useEffect(() => {
@@ -140,6 +206,10 @@ function HlsPlayer({
         load();
         return () => { cancelled = true; };
     }, [malId, anilistId, episode]);
+
+    useEffect(() => {
+        nearEndFiredForEp.current = null;
+    }, [episode]);
 
     // Set up HLS source
     useEffect(() => {
@@ -175,6 +245,13 @@ function HlsPlayer({
         const onTimeUpdate = () => {
             setCurrentTime(v.currentTime);
             if (v.buffered.length > 0) setBuffered(v.buffered.end(v.buffered.length - 1));
+            const d = v.duration;
+            if (onEpisodeNearFinished && episode > 0 && d > 30 && v.currentTime / d >= 0.82) {
+                if (nearEndFiredForEp.current !== episode) {
+                    nearEndFiredForEp.current = episode;
+                    onEpisodeNearFinished(episode);
+                }
+            }
         };
         const onDurationChange = () => setDuration(v.duration);
         const onVolumeChange = () => { setVolume(v.volume); setMuted(v.muted); };
@@ -190,7 +267,7 @@ function HlsPlayer({
             v.removeEventListener("durationchange", onDurationChange);
             v.removeEventListener("volumechange", onVolumeChange);
         };
-    }, []);
+    }, [episode, onEpisodeNearFinished]);
 
     // Fullscreen change listener
     useEffect(() => {
@@ -555,218 +632,312 @@ function HlsPlayer({
     );
 }
 
-// ── HiAnime-Style Episode List ────────────────────────────────────────────────
+// ── Episode grid + jump (better scrolling than a single cramped list) ───────
 
-function EpisodeList({ total, watched, selected, onSelect }: {
-    total: number; watched: number; selected: number; onSelect: (ep: number) => void;
+const EP_CHUNK = 28;
+
+function WatchEpisodePicker({
+    episodes,
+    selectedEp,
+    watched,
+    onSelect,
+}: {
+    episodes: AniwatchEpisodeRow[];
+    selectedEp: number;
+    watched: number;
+    onSelect: (ep: number) => void;
 }) {
-    const PER_RANGE = 100;
-    const ranges = Math.ceil(total / PER_RANGE);
-    const initRange = Math.ceil(selected / PER_RANGE) || 1;
-    const [range, setRange] = useState(initRange);
+    const total = episodes.length;
+    const chunkCount = Math.max(1, Math.ceil(total / EP_CHUNK));
+    const [chunkIdx, setChunkIdx] = useState(() =>
+        Math.min(chunkCount - 1, Math.floor(Math.max(0, selectedEp - 1) / EP_CHUNK)));
+    const [jumpVal, setJumpVal] = useState("");
 
-    const start = (range - 1) * PER_RANGE + 1;
-    const end = Math.min(range * PER_RANGE, total);
-
-    // Scroll selected episode into view
-    const selRef = useRef<HTMLButtonElement>(null);
     useEffect(() => {
-        selRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-    }, [selected]);
+        setChunkIdx(Math.min(chunkCount - 1, Math.floor(Math.max(0, selectedEp - 1) / EP_CHUNK)));
+    }, [selectedEp, total, chunkCount]);
+
+    const start = chunkIdx * EP_CHUNK + 1;
+    const end = Math.min((chunkIdx + 1) * EP_CHUNK, total);
+    const slice = episodes.slice(start - 1, end);
+
+    const gridRef = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+        const el = gridRef.current?.querySelector(`[data-ep="${selectedEp}"]`);
+        el?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+    }, [selectedEp, chunkIdx]);
+
+    const doJump = () => {
+        const n = parseInt(jumpVal, 10);
+        if (!Number.isFinite(n) || n < 1 || n > total) return;
+        onSelect(n);
+        setJumpVal("");
+    };
 
     return (
-        <div className="space-y-2">
-            {/* Range selector */}
-            {ranges > 1 && (
-                <div className="flex flex-wrap gap-1.5">
-                    {Array.from({ length: ranges }, (_, i) => i + 1).map(r => (
-                        <button
-                            key={r}
-                            onClick={() => setRange(r)}
-                            className={`px-2.5 py-0.5 rounded text-xs font-medium transition-all ${r === range
-                                ? "bg-primary text-primary-foreground"
-                                : "bg-muted/50 text-muted-foreground hover:bg-muted/80 border border-border/30"
-                            }`}
-                        >
-                            {(r - 1) * PER_RANGE + 1}–{Math.min(r * PER_RANGE, total)}
-                        </button>
-                    ))}
+        <div className="rounded-2xl border border-border/50 bg-gradient-to-b from-card/90 to-muted/20 shadow-sm overflow-hidden">
+            <div className="flex flex-col gap-2.5 border-b border-border/40 px-3 py-3 sm:flex-row sm:items-center sm:justify-between bg-muted/25">
+                <div className="flex items-center gap-2">
+                    <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Episodes</p>
+                    <Badge variant="secondary" className="text-[10px] font-mono tabular-nums">
+                        {total} total
+                    </Badge>
                 </div>
-            )}
-
-            {/* Episode scroll list */}
-            <div className="max-h-52 overflow-y-auto rounded-xl border border-border/30 bg-muted/10 divide-y divide-border/20">
-                {Array.from({ length: end - start + 1 }, (_, i) => start + i).map(ep => {
-                    const isWatched = ep <= watched;
-                    const isSel = ep === selected;
-                    return (
-                        <button
-                            key={ep}
-                            ref={isSel ? selRef : undefined}
-                            onClick={() => onSelect(ep)}
-                            data-testid={`button-episode-${ep}`}
-                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-all hover:bg-muted/40 ${
-                                isSel
-                                    ? "bg-primary/15 border-l-2 border-primary text-primary font-semibold"
-                                    : isWatched
-                                        ? "text-muted-foreground/70"
-                                        : "text-foreground"
-                            }`}
-                        >
-                            <span className={`text-xs font-mono w-8 shrink-0 ${isSel ? "text-primary" : "text-muted-foreground/60"}`}>
-                                {ep}
-                            </span>
-                            <span className="flex-1 truncate">Episode {ep}</span>
-                            {isWatched && !isSel && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500/60 shrink-0" />
-                            )}
-                            {isSel && (
-                                <span className="flex items-center gap-1 text-[10px] text-primary/80 shrink-0">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                                    Playing
-                                </span>
-                            )}
-                        </button>
-                    );
-                })}
+                <div className="flex flex-wrap items-center gap-2">
+                    {chunkCount > 1 && (
+                        <div className="flex flex-wrap gap-1">
+                            {Array.from({ length: chunkCount }, (_, i) => (
+                                <button
+                                    key={i}
+                                    type="button"
+                                    onClick={() => setChunkIdx(i)}
+                                    className={cn(
+                                        "px-2 py-1 rounded-md text-[11px] font-semibold border transition-colors",
+                                        i === chunkIdx
+                                            ? "bg-primary text-primary-foreground border-primary"
+                                            : "bg-background/60 border-border/50 text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                                    )}
+                                >
+                                    {i * EP_CHUNK + 1}–{Math.min((i + 1) * EP_CHUNK, total)}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                    <div className="flex items-center gap-1.5">
+                        <Input
+                            inputMode="numeric"
+                            placeholder="Go to #"
+                            value={jumpVal}
+                            onChange={e => setJumpVal(e.target.value)}
+                            onKeyDown={e => e.key === "Enter" && doJump()}
+                            className="h-8 w-24 text-xs rounded-lg bg-background/80"
+                        />
+                        <Button type="button" size="sm" variant="secondary" className="h-8 text-xs" onClick={doJump}>
+                            Go
+                        </Button>
+                    </div>
+                </div>
             </div>
+
+            <ScrollArea className="h-[min(52vh,560px)] w-full touch-pan-y">
+                <div
+                    ref={gridRef}
+                    className="p-3 sm:p-4 grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-2"
+                >
+                    {slice.map((row, i) => {
+                        const epNum = start + i;
+                        const isSel = epNum === selectedEp;
+                        const isWatched = epNum <= watched;
+                        const label = row.title?.trim() || `Ep ${row.number}`;
+                        return (
+                            <button
+                                key={row.ep_id}
+                                type="button"
+                                data-ep={epNum}
+                                data-testid={`button-episode-${epNum}`}
+                                title={label}
+                                onClick={() => onSelect(epNum)}
+                                className={cn(
+                                    "group relative flex min-h-[4.25rem] flex-col items-center justify-center rounded-xl border px-1 py-2 text-center transition-all",
+                                    isSel
+                                        ? "border-primary bg-primary/20 shadow-[0_0_20px_rgba(139,92,246,0.35)] ring-1 ring-primary/50"
+                                        : "border-border/50 bg-background/50 hover:border-primary/40 hover:bg-muted/50",
+                                    isWatched && !isSel && "opacity-75",
+                                )}
+                            >
+                                <span className={cn(
+                                    "text-sm font-black tabular-nums leading-none",
+                                    isSel ? "text-primary" : "text-foreground",
+                                )}>
+                                    {row.number || epNum}
+                                </span>
+                                <span className="mt-1 line-clamp-2 w-full px-0.5 text-[9px] leading-tight text-muted-foreground group-hover:text-foreground/90">
+                                    {row.title?.trim() || "—"}
+                                </span>
+                                {isWatched && !isSel && (
+                                    <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-emerald-500/80" />
+                                )}
+                                {isSel && (
+                                    <span className="absolute bottom-1 left-1/2 -translate-x-1/2 h-0.5 w-6 rounded-full bg-primary" />
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
+            </ScrollArea>
         </div>
     );
 }
 
-// ── Stream Extraction Panel ───────────────────────────────────────────────────
+function FranchiseSeasonStrip({
+    currentMalId,
+    seasons,
+    disabled,
+    onPickSeason,
+}: {
+    currentMalId: number;
+    seasons: FranchiseSeason[];
+    disabled: boolean;
+    onPickSeason: (malId: number) => void;
+}) {
+    const nextLike = seasons.filter(s =>
+        s.malId !== currentMalId && (s.relation === "Sequel" || s.relation === "Side story"));
+    const earlierLike = seasons.filter(s =>
+        s.malId !== currentMalId && ["Prequel", "Parent story", "Alternative version", "Spin-off"].includes(s.relation));
 
-const EXTRACT_LOGS = [
-    "Fetching stream servers…",
-    "Connecting to video host…",
-    "Intercepting network requests…",
-    "Decoding video stream…",
-    "Almost there…",
+    if (nextLike.length === 0 && earlierLike.length === 0) return null;
+
+    const card = (s: FranchiseSeason) => (
+        <button
+            key={`${s.malId}-${s.relation}`}
+            type="button"
+            disabled={disabled}
+            onClick={() => onPickSeason(s.malId)}
+            className={cn(
+                "group flex w-[148px] shrink-0 flex-col overflow-hidden rounded-xl border border-border/50 bg-card text-left transition-all",
+                "hover:border-primary/50 hover:shadow-md disabled:pointer-events-none disabled:opacity-50",
+            )}
+        >
+            <div className="relative aspect-[4/5] bg-muted/40">
+                {s.image
+                    ? <img src={s.image} alt="" className="h-full w-full object-cover transition group-hover:scale-[1.03]" />
+                    : <div className="flex h-full w-full items-center justify-center"><Tv className="h-8 w-8 text-muted-foreground/30" /></div>}
+                <Badge className="absolute left-1.5 top-1.5 max-w-[90%] truncate text-[9px]" variant="secondary">
+                    {s.relation}
+                </Badge>
+            </div>
+            <div className="flex flex-1 flex-col gap-0.5 p-2">
+                <p className="line-clamp-3 text-[11px] font-semibold leading-snug">{s.title}</p>
+                {s.episodes != null && (
+                    <p className="text-[10px] text-muted-foreground">{s.episodes === 0 ? "?" : s.episodes} eps (MAL)</p>
+                )}
+                <span className="mt-auto flex items-center gap-0.5 text-[10px] font-medium text-primary opacity-0 transition group-hover:opacity-100">
+                    Watch <ArrowRight className="h-3 w-3" />
+                </span>
+            </div>
+        </button>
+    );
+
+    return (
+        <div className="space-y-5 rounded-2xl border border-border/40 bg-card/30 p-4">
+            {nextLike.length > 0 && (
+                <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                        <Library className="h-4 w-4 text-primary" />
+                        <h4 className="text-sm font-bold tracking-tight">What&apos;s next</h4>
+                        <span className="text-[10px] text-muted-foreground">Sequels &amp; related cours from MAL</span>
+                    </div>
+                    <div className="flex gap-3 overflow-x-auto pb-1 [scrollbar-width:thin]">
+                        {nextLike.map(card)}
+                    </div>
+                </div>
+            )}
+            {earlierLike.length > 0 && (
+                <div className="space-y-2">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Earlier / alternate entries</h4>
+                    <div className="flex gap-3 overflow-x-auto pb-1 [scrollbar-width:thin]">
+                        {earlierLike.map(card)}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function normalizeTitle(s: string): string {
+    return s.toLowerCase().replace(/[^a-z0-9]+/gi, " ").trim();
+}
+
+function pickAniwatchMatch(jikanTitle: string, results: AniwatchSearchItem[]): AniwatchSearchItem | null {
+    if (!results.length) return null;
+    const jn = normalizeTitle(jikanTitle);
+    const exact = results.find(r => normalizeTitle(r.title) === jn);
+    if (exact) return exact;
+    const contains = results.find(r => {
+        const rn = normalizeTitle(r.title);
+        return rn.includes(jn) || jn.includes(rn);
+    });
+    return contains || results[0];
+}
+
+const LOAD_LOGS = [
+    "Resolving playback from Aniwatch…",
+    "Handshaking with video CDN…",
+    "Buffering stream…",
 ];
 
-type ExState = "idle" | "extracting" | "ready" | "error";
+type PbState = "loading" | "ready" | "error";
 
-interface AllAnimeSource { url: string; sourceName: string; priority: number; type: string; }
-
-function StreamPanel({
-    gogoId, animeTitle, episode, watched, totalEps,
-    malId, anilistId, isDub, aniwavesAnimeId, aniwavesSlug,
-    isAllAnime,
-    onEpisodeChange, onChangeSource, onAniwavesFound,
+function AniwatchStreamPanel({
+    animeTitle,
+    epId,
+    episode,
+    totalEps,
+    watched,
+    malId,
+    anilistId,
+    lang,
+    onEpisodeChange,
+    onBack,
+    onReportEpisodeFinished,
+    onPlaybackReady,
 }: {
-    gogoId: string; animeTitle: string; episode: number; watched: number; totalEps: number;
-    malId?: number | null; anilistId?: number | null; isDub?: boolean;
-    aniwavesAnimeId?: string; aniwavesSlug?: string;
-    isAllAnime?: boolean;
-    onEpisodeChange: (ep: number) => void; onChangeSource: () => void;
-    onAniwavesFound?: (animeId: string, slug: string) => void;
+    animeTitle: string;
+    epId: string;
+    episode: number;
+    totalEps: number;
+    watched: number;
+    malId: number;
+    anilistId?: number | null;
+    lang: "sub" | "dub";
+    onEpisodeChange: (ep: number) => void;
+    onBack: () => void;
+    onReportEpisodeFinished: (completedEpisode: number) => void;
+    onPlaybackReady: () => void;
 }) {
-    const [state, setState] = useState<ExState>("idle");
-    const [streamResult, setStreamResult] = useState<StreamResult | null>(null);
+    const [state, setState] = useState<PbState>("loading");
     const [error, setError] = useState("");
     const [logIdx, setLogIdx] = useState(0);
-    const [allAnimeSources, setAllAnimeSources] = useState<AllAnimeSource[]>([]);
-    const [sourceIdx, setSourceIdx] = useState(0);
+    const [playback, setPlayback] = useState<{ mode: "iframe" | "hls" | "mp4"; url: string; source: string } | null>(null);
 
-    const extract = useCallback(async () => {
-        setState("extracting");
-        setStreamResult(null);
-        setAllAnimeSources([]);
-        setSourceIdx(0);
+    const load = useCallback(async () => {
+        setState("loading");
         setError("");
-        setLogIdx(0);
-        const timer = setInterval(() => setLogIdx(i => (i + 1) % EXTRACT_LOGS.length), 2500);
+        setPlayback(null);
+        const timer = setInterval(() => setLogIdx(i => (i + 1) % LOAD_LOGS.length), 2200);
         try {
-            // ── AllAnime path (Vercel fallback) ──────────────────────────────
-            if (isAllAnime) {
-                const params = new URLSearchParams({
-                    showId: gogoId,
-                    episode: String(episode),
-                    type: isDub ? "dub" : "sub",
-                });
-                const res = await fetch(`/api/watch/sources?${params}`);
-                const json = await res.json();
-                clearInterval(timer);
-                if (!res.ok) throw new Error(json.error || "Failed to fetch sources");
-                const sources: AllAnimeSource[] = json.sources || [];
-                if (sources.length === 0) throw new Error("No sources available for this episode");
-                // Try to find a direct HLS/MP4 source first
-                const direct = sources.find(s => s.type === "hls" || s.type === "mp4");
-                if (direct) {
-                    setStreamResult({ stream: direct.url, type: direct.type as "hls" | "mp4", source: direct.sourceName });
-                    setState("ready");
-                } else {
-                    // Iframe sources
-                    setAllAnimeSources(sources);
-                    setState("ready");
-                }
-                return;
-            }
-
-            // ── Gogoanime / Puppeteer path (with AllAnime fallback) ──────────
-            let puppeteerOk = false;
-            try {
-                let url: string;
-                if (isDub) {
-                    const params = new URLSearchParams({ episode: String(episode) });
-                    if (aniwavesAnimeId && aniwavesSlug) {
-                        params.set("animeId", aniwavesAnimeId);
-                        params.set("slug", aniwavesSlug);
-                    } else {
-                        params.set("title", animeTitle);
-                    }
-                    url = `/api/extract/dub?${params}`;
-                } else {
-                    url = `/api/extract?id=${encodeURIComponent(gogoId)}&episode=${episode}`;
-                }
-                const res = await fetch(url);
-                const json = await res.json();
-                if (res.ok) {
-                    clearInterval(timer);
-                    setStreamResult(json);
-                    setState("ready");
-                    if (isDub && json.animeId && json.slug) {
-                        onAniwavesFound?.(json.animeId, json.slug);
-                    }
-                    puppeteerOk = true;
-                }
-            } catch {}
-
-            // If Puppeteer extraction failed (e.g. Chromium not available on server),
-            // fall back to AllAnime which uses a plain API — no Puppeteer needed.
-            if (!puppeteerOk) {
-                const params = new URLSearchParams({
-                    title: animeTitle,
-                    episode: String(episode),
-                    type: isDub ? "dub" : "sub",
-                });
-                const res = await fetch(`/api/watch/sources?${params}`);
-                const json = await res.json();
-                clearInterval(timer);
-                if (!res.ok) throw new Error(json.error || "Playback failed");
-                const sources: AllAnimeSource[] = json.sources || [];
-                if (sources.length === 0) throw new Error("No sources available for this episode");
-                const direct = sources.find(s => s.type === "hls" || s.type === "mp4");
-                if (direct) {
-                    setStreamResult({ stream: direct.url, type: direct.type as "hls" | "mp4", source: direct.sourceName });
-                    setState("ready");
-                } else {
-                    setAllAnimeSources(sources);
-                    setState("ready");
-                }
-            }
+            const params = new URLSearchParams({ epId, lang });
+            const res = await fetch(`/api/aniwatch/playback?${params}`, { signal: AbortSignal.timeout(28000) });
+            const json = await res.json();
+            clearInterval(timer);
+            if (!res.ok) throw new Error(json.error || json.message || "Playback failed");
+            if (!json.url || !json.mode) throw new Error("Invalid playback response");
+            setPlayback({ mode: json.mode, url: json.url, source: json.source || "stream" });
+            setState("ready");
         } catch (err: any) {
             clearInterval(timer);
             setError(err.message || "Unknown error");
             setState("error");
         }
-    }, [gogoId, animeTitle, episode, isDub, aniwavesAnimeId, aniwavesSlug, isAllAnime]);
+    }, [epId, lang]);
 
-    useEffect(() => { extract(); }, [gogoId, episode, isDub, isAllAnime]);
+    useEffect(() => { load(); }, [load]);
+
+    useEffect(() => {
+        if (state === "ready") onPlaybackReady();
+    }, [state, onPlaybackReady]);
+
+    const streamResult: StreamResult | null = playback && (playback.mode === "hls" || playback.mode === "mp4")
+        ? { stream: playback.url, type: playback.mode, source: playback.source }
+        : null;
+
+    const goNext = () => {
+        onReportEpisodeFinished(episode);
+        onEpisodeChange(episode + 1);
+    };
 
     return (
         <div className="space-y-4">
-            {/* Prev / Next */}
             <div className="flex items-center justify-between gap-2">
                 <Button variant="outline" size="sm" disabled={episode <= 1}
                     onClick={() => onEpisodeChange(episode - 1)}
@@ -775,76 +946,44 @@ function StreamPanel({
                 </Button>
                 <span className="text-sm font-semibold">Episode {episode}</span>
                 <Button variant="outline" size="sm" disabled={episode >= totalEps}
-                    onClick={() => onEpisodeChange(episode + 1)}
+                    onClick={goNext}
                     className="gap-1.5 h-8" data-testid="button-next-episode">
                     Next <ChevronRight className="w-3.5 h-3.5" />
                 </Button>
             </div>
 
-            {/* Extracting state */}
-            {state === "extracting" && (
+            {state === "loading" && (
                 <div className="aspect-video rounded-xl border border-border/40 bg-black flex flex-col items-center justify-center gap-5">
-                    <div className="relative">
-                        <div className="w-14 h-14 rounded-full border-2 border-primary/20 flex items-center justify-center">
-                            <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                        </div>
-                        <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-primary animate-pulse" />
-                    </div>
-                    <div className="text-center space-y-1.5">
-                        <p className="text-sm font-semibold text-white">Loading stream</p>
-                        <p className="text-xs text-muted-foreground font-mono">{EXTRACT_LOGS[logIdx]}</p>
-                    </div>
-                    <div className="w-48 h-0.5 bg-muted/30 rounded-full overflow-hidden">
-                        <div className="h-full bg-primary/60 rounded-full animate-pulse w-2/3" />
-                    </div>
+                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                    <p className="text-xs text-muted-foreground font-mono">{LOAD_LOGS[logIdx]}</p>
                 </div>
             )}
 
-            {/* HLS/MP4 Player */}
+            {state === "ready" && playback?.mode === "iframe" && (
+                <div className="aspect-video rounded-xl overflow-hidden border border-border/40 bg-black">
+                    <iframe
+                        key={`${epId}-${lang}-${playback.url}`}
+                        src={playback.url}
+                        className="w-full h-full"
+                        allowFullScreen
+                        allow="autoplay; fullscreen; encrypted-media"
+                        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
+                        title={`${animeTitle} — Episode ${episode}`}
+                    />
+                </div>
+            )}
+
             {state === "ready" && streamResult && (
                 <HlsPlayer
                     streamResult={streamResult}
                     malId={malId}
-                    anilistId={anilistId}
+                    anilistId={anilistId ?? null}
                     episode={episode}
-                    onError={() => { setError("Playback error. Try retrying."); setState("error"); }}
+                    onError={() => { setError("Playback error."); setState("error"); }}
+                    onEpisodeNearFinished={onReportEpisodeFinished}
                 />
             )}
 
-            {/* AllAnime iframe player (when no direct stream is available) */}
-            {state === "ready" && !streamResult && allAnimeSources.length > 0 && (
-                <div className="space-y-2">
-                    <div className="aspect-video rounded-xl overflow-hidden border border-border/40 bg-black">
-                        <iframe
-                            src={allAnimeSources[sourceIdx]?.url}
-                            className="w-full h-full"
-                            allowFullScreen
-                            allow="autoplay; fullscreen"
-                            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                            title={`Episode ${episode} — ${allAnimeSources[sourceIdx]?.sourceName}`}
-                        />
-                    </div>
-                    {allAnimeSources.length > 1 && (
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs text-muted-foreground">Server:</span>
-                            {allAnimeSources.map((s, i) => (
-                                <Button
-                                    key={i}
-                                    size="sm"
-                                    variant={i === sourceIdx ? "default" : "outline"}
-                                    className="h-7 text-xs px-2"
-                                    onClick={() => setSourceIdx(i)}
-                                    data-testid={`button-allanime-source-${i}`}
-                                >
-                                    {s.sourceName}
-                                </Button>
-                            ))}
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* Error state */}
             {state === "error" && (
                 <div className="aspect-video rounded-xl border border-orange-500/20 bg-black flex flex-col items-center justify-center gap-4 p-6 text-center">
                     <AlertTriangle className="h-10 w-10 text-orange-400 opacity-60" />
@@ -853,131 +992,239 @@ function StreamPanel({
                         <p className="text-xs text-muted-foreground mt-1 max-w-xs line-clamp-3">{error}</p>
                     </div>
                     <div className="flex gap-2 flex-wrap justify-center">
-                        <Button size="sm" variant="outline" onClick={extract} className="gap-1.5" data-testid="button-retry-extract">
+                        <Button size="sm" variant="outline" onClick={load} className="gap-1.5" data-testid="button-retry-extract">
                             <RefreshCw className="w-3.5 h-3.5" /> Retry
                         </Button>
-                        <Button size="sm" variant="outline" onClick={onChangeSource} className="gap-1.5">
-                            <Search className="w-3.5 h-3.5" /> Change source
+                        <Button size="sm" variant="outline" onClick={onBack} className="gap-1.5">
+                            <Search className="w-3.5 h-3.5" /> Back
                         </Button>
                     </div>
                 </div>
             )}
 
-            {/* Episode list */}
-            <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Episodes</p>
-                    <button
-                        onClick={onChangeSource}
-                        className="text-[11px] text-muted-foreground/60 hover:text-primary transition-colors"
-                        data-testid="button-change-gogo-source"
-                    >
-                        Change source
-                    </button>
-                </div>
-                <EpisodeList total={totalEps} watched={watched} selected={episode} onSelect={onEpisodeChange} />
-            </div>
-
             <p className="text-[11px] text-muted-foreground/40 flex items-center gap-1">
                 <Wifi className="w-3 h-3" />
-                Sub via Gogoanime · Dub via Aniwaves · Content belongs to respective rights holders.
+                Metadata from Jikan · Streams via your Aniwatch scraper (Vercel). For your list only.
             </p>
         </div>
     );
 }
 
+export interface WatchListSyncPayload {
+    malId: number;
+    title: string;
+    coverImage: string | null;
+    totalEpisodes: number | null;
+    episodesWatched: number;
+}
+
 // ── Main Watch Component ──────────────────────────────────────────────────────
 
-export default function Watch({ animeList }: { animeList: Anime[] }) {
+export default function Watch({
+    animeList,
+    onWatchListSync,
+}: {
+    animeList: Anime[];
+    onWatchListSync?: (payload: WatchListSyncPayload) => Promise<void>;
+}) {
     const [search, setSearch] = useState("");
-    const [results, setResults] = useState<GogoResult[]>([]);
+    const [results, setResults] = useState<JikanSearchItem[]>([]);
     const [searching, setSearching] = useState(false);
     const [searched, setSearched] = useState(false);
-    const [gogoMatch, setGogoMatch] = useState<GogoResult | null>(null);
-    const [epInfo, setEpInfo] = useState<EpisodeInfo | null>(null);
-    const [epInfoLoading, setEpInfoLoading] = useState(false);
+    const [session, setSession] = useState<{
+        jikan: JikanSearchItem;
+        aniwatchId: string;
+        aniwatchTitle: string;
+        episodes: AniwatchEpisodeRow[];
+    } | null>(null);
+    const [linking, setLinking] = useState(false);
+    const [linkError, setLinkError] = useState("");
     const [selectedEp, setSelectedEp] = useState(1);
     const [lang, setLang] = useState<"sub" | "dub">("sub");
-    const [aniwavesInfo, setAniwavesInfo] = useState<{ animeId: string; slug: string } | null>(null);
+    const [homeData, setHomeData] = useState<{ spotlight: AniwatchSearchItem[]; trending: AniwatchSearchItem[] } | null>(null);
+    const [franchiseSeasons, setFranchiseSeasons] = useState<FranchiseSeason[]>([]);
+    const listEnsureRef = useRef(false);
+
+    useEffect(() => {
+        if (!session) {
+            setFranchiseSeasons([]);
+            return;
+        }
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await fetch(`/api/jikan/anime/${session.jikan.mal_id}/relations`, { signal: AbortSignal.timeout(15000) });
+                if (!res.ok) {
+                    if (!cancelled) setFranchiseSeasons([]);
+                    return;
+                }
+                const json = await res.json();
+                const built = buildFranchiseFromRelations(json.data || [], session.jikan.mal_id);
+                const take = built.slice(0, 16);
+                const enriched = await Promise.all(take.map(async (s) => {
+                    try {
+                        const ar = await fetch(`/api/jikan/anime/${s.malId}`, { signal: AbortSignal.timeout(8000) });
+                        if (!ar.ok) return s;
+                        const aj = await ar.json();
+                        const d = aj.data;
+                        return {
+                            ...s,
+                            image: d?.images?.jpg?.small_image_url || d?.images?.jpg?.image_url || null,
+                            episodes: d?.episodes ?? null,
+                        };
+                    } catch {
+                        return s;
+                    }
+                }));
+                if (!cancelled) setFranchiseSeasons(enriched);
+            } catch {
+                if (!cancelled) setFranchiseSeasons([]);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [session?.jikan.mal_id]);
+
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const res = await fetch("/api/aniwatch/home", { signal: AbortSignal.timeout(15000) });
+                if (!res.ok) return;
+                const json = await res.json();
+                if (!cancelled) {
+                    setHomeData({
+                        spotlight: (json.spotlight || []).slice(0, 8),
+                        trending: (json.trending || []).slice(0, 10),
+                    });
+                }
+            } catch { /* optional home rail */ }
+        })();
+        return () => { cancelled = true; };
+    }, []);
+
+    const jikanDisplayTitle = (j: JikanSearchItem) =>
+        j.title || j.titles?.en || j.titles?.default || j.titles?.ja_jp || "Untitled";
+
+    const jikanImage = (j: JikanSearchItem) =>
+        j.images?.jpg?.large_image_url || j.images?.jpg?.image_url || null;
 
     const doSearch = useCallback(async (q: string) => {
         if (!q.trim()) return;
         setSearching(true);
         setSearched(false);
-        let found: GogoResult[] = [];
         try {
-            // Try gogoanime first
-            const res = await fetch(`/api/gogoanime/search?q=${encodeURIComponent(q)}`);
-            if (res.ok) {
-                const json = await res.json();
-                found = json.results || [];
-            }
-        } catch {}
-
-        // If gogoanime failed or returned nothing (e.g. blocked on Vercel), fall back to AllAnime
-        if (found.length === 0) {
-            try {
-                const aaRes = await fetch(`/api/allanime/search?q=${encodeURIComponent(q)}`);
-                if (aaRes.ok) {
-                    const aaJson = await aaRes.json();
-                    found = (aaJson.results || []).map((r: any) => ({
-                        id: r.id,
-                        title: r.name,
-                        url: "",
-                        image: r.thumbnail || "",
-                        isAllAnime: true,
-                        subEps: r.subEpisodes || 0,
-                        dubEps: r.dubEpisodes || 0,
-                    }));
-                }
-            } catch {}
+            const res = await fetch(`/api/jikan/search?q=${encodeURIComponent(q)}&limit=20`, { signal: AbortSignal.timeout(15000) });
+            const json = await res.json();
+            setResults(res.ok && Array.isArray(json.data) ? json.data : []);
+        } catch {
+            setResults([]);
         }
-
-        setResults(found);
         setSearching(false);
         setSearched(true);
     }, []);
 
-    const selectMatch = async (result: GogoResult) => {
-        setGogoMatch(result);
-        setLang("sub");
-        setSelectedEp(1);
-        setEpInfo(null);
-        setAniwavesInfo(null);
+    const syncList = useCallback(async (episodesWatched: number, j: JikanSearchItem, totalEpisodes: number) => {
+        if (!onWatchListSync) return;
+        await onWatchListSync({
+            malId: j.mal_id,
+            title: jikanDisplayTitle(j),
+            coverImage: jikanImage(j),
+            totalEpisodes: j.episodes ?? totalEpisodes ?? null,
+            episodesWatched,
+        });
+    }, [onWatchListSync]);
 
-        // AllAnime results already carry episode counts — no extra fetch needed
-        if (result.isAllAnime) {
-            setEpInfo({
-                start: 1,
-                end: result.subEps || 12,
-                dubId: (result.dubEps && result.dubEps > 0) ? "dub" : null,
-                dubEnd: result.dubEps || null,
-            });
-            return;
+    const listByMal = useCallback((malId: number) =>
+        animeList.find(a => a.malId === malId && a.seasonNumber === 1) || null,
+    [animeList]);
+
+    const resolveStreamingSession = useCallback(async (j: JikanSearchItem) => {
+        const title = j.title || j.titles?.en || j.titles?.default || j.titles?.ja_jp || "Untitled";
+        const res = await fetch(`/api/aniwatch/search?q=${encodeURIComponent(title)}`, { signal: AbortSignal.timeout(20000) });
+        const json = await res.json();
+        const raw: AniwatchSearchItem[] = json.results || [];
+        const match = pickAniwatchMatch(title, raw);
+        if (!match) {
+            throw new Error("No streaming source found for this title. Try a different spelling or search.");
         }
+        const epRes = await fetch(`/api/aniwatch/episodes/${encodeURIComponent(match.anime_id)}`, { signal: AbortSignal.timeout(20000) });
+        const epJson = await epRes.json();
+        if (!epRes.ok) throw new Error(epJson.error || "Episode list failed");
+        const episodes: AniwatchEpisodeRow[] = epJson.episodes || [];
+        if (episodes.length === 0) throw new Error("No episodes returned");
+        listEnsureRef.current = false;
+        setSession({
+            jikan: j,
+            aniwatchId: match.anime_id,
+            aniwatchTitle: match.title,
+            episodes,
+        });
+        const resume = listByMal(j.mal_id)?.episodesWatched || 0;
+        const startEp = Math.min(Math.max(1, resume), episodes.length);
+        setSelectedEp(startEp);
+    }, [listByMal]);
 
-        setEpInfoLoading(true);
+    const selectJikan = async (j: JikanSearchItem) => {
+        setLinking(true);
+        setLinkError("");
+        setSession(null);
+        setSelectedEp(1);
+        setLang("sub");
         try {
-            const res = await fetch(`/api/gogoanime/episodes?id=${encodeURIComponent(result.id)}`);
-            if (res.ok) setEpInfo(await res.json());
-        } catch {}
-        setEpInfoLoading(false);
+            await resolveStreamingSession(j);
+        } catch (e: any) {
+            setLinkError(e.message || "Failed to link stream source");
+        }
+        setLinking(false);
     };
 
-    const goBack = () => { setGogoMatch(null); setEpInfo(null); setLang("sub"); setAniwavesInfo(null); };
+    const switchToSeasonMal = async (malId: number) => {
+        setLinking(true);
+        setLinkError("");
+        listEnsureRef.current = false;
+        try {
+            const res = await fetch(`/api/jikan/anime/${malId}`, { signal: AbortSignal.timeout(12000) });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.error || "Could not load that season from MAL.");
+            const j = jikanDataToSearchItem(json.data);
+            setSelectedEp(1);
+            setLang("sub");
+            await resolveStreamingSession(j);
+        } catch (e: any) {
+            setLinkError(e.message || "Could not switch season.");
+        }
+        setLinking(false);
+    };
 
-    const listAnime = useMemo(() => {
-        if (!gogoMatch) return null;
-        const t = gogoMatch.title.toLowerCase();
-        return animeList.find(a =>
-            a.title.toLowerCase() === t ||
-            t.includes(a.title.toLowerCase()) ||
-            a.title.toLowerCase().includes(t)
-        ) || null;
-    }, [gogoMatch, animeList]);
+    const openHomePick = async (item: AniwatchSearchItem) => {
+        setSearch(item.title);
+        await doSearch(item.title);
+        setSearched(true);
+    };
 
-    const activeGogoId = gogoMatch?.id || "";
-    const totalEps = epInfo?.end || listAnime?.totalEpisodes || 24;
+    const goBack = () => {
+        listEnsureRef.current = false;
+        setSession(null);
+        setLinkError("");
+        setSelectedEp(1);
+        setLang("sub");
+    };
+
+    const currentEpRow = session?.episodes[selectedEp - 1];
+    const totalEps = session?.episodes.length || 1;
+    const listEntry = session ? listByMal(session.jikan.mal_id) : null;
+    const watched = listEntry?.episodesWatched || 0;
+
+    const reportFinished = useCallback((completedEpisode: number) => {
+        if (!session) return;
+        void syncList(completedEpisode, session.jikan, totalEps);
+    }, [session, syncList, totalEps]);
+
+    const onPlaybackReady = useCallback(() => {
+        if (!session || listEnsureRef.current) return;
+        listEnsureRef.current = true;
+        void syncList(Math.max(0, watched), session.jikan, totalEps);
+    }, [session, syncList, totalEps, watched]);
 
     return (
         <div className="space-y-6">
@@ -986,76 +1233,92 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                 <h2 className="text-2xl font-bold">Watch</h2>
             </div>
             <p className="text-muted-foreground text-sm -mt-4">
-                Search any anime, pick an episode, and stream directly — sub &amp; dub.
+                Search with Jikan (MyAnimeList), stream via your Aniwatch scraper — progress syncs to your list.
             </p>
 
-            {gogoMatch ? (
-                <div className="space-y-4">
-                    {/* Header */}
-                    <div className="flex items-center gap-3 flex-wrap">
-                        <Button variant="ghost" size="sm" onClick={goBack}
-                            className="gap-1.5 -ml-2 h-8 text-muted-foreground hover:text-foreground shrink-0"
-                            data-testid="button-back-to-list">
-                            <ChevronLeft className="w-4 h-4" /> Back
-                        </Button>
-                        <div className="flex-1 min-w-0">
-                            <h3 className="font-bold text-base truncate">{gogoMatch.title}</h3>
-                            {epInfoLoading && (
-                                <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                                    <Loader2 className="w-3 h-3 animate-spin" /> Loading info…
+            {session && currentEpRow ? (
+                <div className="mx-auto max-w-6xl space-y-5">
+                    <div className="flex flex-col gap-3 rounded-2xl border border-border/50 bg-card/40 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex min-w-0 flex-1 items-start gap-3">
+                            <Button variant="ghost" size="sm" onClick={goBack}
+                                className="gap-1.5 -ml-1 h-9 shrink-0 text-muted-foreground hover:text-foreground"
+                                data-testid="button-back-to-list">
+                                <ChevronLeft className="w-4 h-4" /> Back
+                            </Button>
+                            <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <h3 className="text-lg font-bold leading-tight tracking-tight sm:text-xl">
+                                        {jikanDisplayTitle(session.jikan)}
+                                    </h3>
+                                    <Badge variant="outline" className="font-mono text-[10px]">
+                                        MAL {session.jikan.mal_id}
+                                    </Badge>
+                                </div>
+                                <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
+                                    <span className="font-medium text-foreground/80">Source:</span>{" "}
+                                    {session.aniwatchTitle} · {totalEps} episodes on site
                                 </p>
-                            )}
-                            {epInfo && !epInfoLoading && (
-                                <p className="text-[11px] text-muted-foreground">
-                                    {epInfo.end} episodes · Sub &amp; Dub available
-                                </p>
-                            )}
+                            </div>
                         </div>
-
-                        {/* Sub / Dub toggle */}
-                        <div className="flex items-center shrink-0 rounded-lg border border-border/50 overflow-hidden">
-                            <button
-                                onClick={() => { if (lang !== "sub") { setLang("sub"); setSelectedEp(1); } }}
-                                data-testid="button-type-sub"
-                                className={`px-3 py-1.5 text-xs font-semibold transition-all ${lang === "sub" ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground hover:bg-muted/40"}`}>
-                                SUB
-                            </button>
-                            <div className="w-px h-4 bg-border/50" />
-                            <button
-                                onClick={() => { if (lang !== "dub") { setLang("dub"); setSelectedEp(1); } }}
-                                data-testid="button-type-dub"
-                                className={`px-3 py-1.5 text-xs font-semibold transition-all ${lang === "dub" ? "bg-primary text-white" : "text-muted-foreground hover:text-foreground hover:bg-muted/40"}`}>
-                                DUB
-                            </button>
+                        <div className="flex shrink-0 items-center gap-2 self-end sm:self-center">
+                            <div className="flex overflow-hidden rounded-lg border border-border/50">
+                                <button
+                                    type="button"
+                                    onClick={() => { if (lang !== "sub") setLang("sub"); }}
+                                    data-testid="button-type-sub"
+                                    className={`px-3 py-2 text-xs font-semibold transition-all ${lang === "sub" ? "bg-primary text-white" : "text-muted-foreground hover:bg-muted/50"}`}>
+                                    SUB
+                                </button>
+                                <div className="w-px bg-border/50" />
+                                <button
+                                    type="button"
+                                    onClick={() => { if (lang !== "dub") setLang("dub"); }}
+                                    data-testid="button-type-dub"
+                                    className={`px-3 py-2 text-xs font-semibold transition-all ${lang === "dub" ? "bg-primary text-white" : "text-muted-foreground hover:bg-muted/50"}`}>
+                                    DUB
+                                </button>
+                            </div>
                         </div>
                     </div>
 
-                    <StreamPanel
-                        key={`${activeGogoId}-${lang}-${selectedEp}`}
-                        gogoId={activeGogoId}
-                        animeTitle={gogoMatch.title}
-                        episode={selectedEp}
-                        watched={listAnime?.episodesWatched || 0}
-                        totalEps={totalEps}
-                        malId={listAnime?.malId}
-                        anilistId={listAnime?.anilistId}
-                        isDub={lang === "dub"}
-                        aniwavesAnimeId={aniwavesInfo?.animeId}
-                        aniwavesSlug={aniwavesInfo?.slug}
-                        isAllAnime={gogoMatch.isAllAnime}
-                        onEpisodeChange={setSelectedEp}
-                        onChangeSource={goBack}
-                        onAniwavesFound={(animeId, slug) => setAniwavesInfo({ animeId, slug })}
+                    <div key={`${currentEpRow.ep_id}-${lang}`} className="rounded-2xl border border-border/30 bg-black/20 p-2 sm:p-3">
+                        <AniwatchStreamPanel
+                            animeTitle={jikanDisplayTitle(session.jikan)}
+                            epId={currentEpRow.ep_id}
+                            episode={selectedEp}
+                            totalEps={totalEps}
+                            watched={watched}
+                            malId={session.jikan.mal_id}
+                            anilistId={listEntry?.anilistId}
+                            lang={lang}
+                            onEpisodeChange={setSelectedEp}
+                            onBack={goBack}
+                            onReportEpisodeFinished={reportFinished}
+                            onPlaybackReady={onPlaybackReady}
+                        />
+                    </div>
+
+                    <WatchEpisodePicker
+                        episodes={session.episodes}
+                        selectedEp={selectedEp}
+                        watched={watched}
+                        onSelect={setSelectedEp}
+                    />
+
+                    <FranchiseSeasonStrip
+                        currentMalId={session.jikan.mal_id}
+                        seasons={franchiseSeasons}
+                        disabled={linking}
+                        onPickSeason={(id) => { void switchToSeasonMal(id); }}
                     />
                 </div>
             ) : (
                 <>
-                    {/* Search */}
                     <div className="flex gap-2 max-w-sm">
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                             <Input
-                                placeholder="Search anime to watch…"
+                                placeholder="Search anime (Jikan)…"
                                 value={search}
                                 onChange={e => setSearch(e.target.value)}
                                 onKeyDown={e => e.key === "Enter" && doSearch(search)}
@@ -1070,12 +1333,56 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                         </Button>
                     </div>
 
-                    {!searched && !searching && (
-                        <p className="text-xs text-muted-foreground/50 text-center pt-2">
-                            Search any anime title to start watching.
+                    {linking && (
+                        <p className="text-xs text-muted-foreground flex items-center gap-2">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" /> Linking Jikan entry to Aniwatch…
                         </p>
                     )}
-                    {searching && <p className="text-xs text-muted-foreground py-1">Searching…</p>}
+                    {linkError && (
+                        <Card className="border-orange-500/30 bg-orange-500/5">
+                            <CardContent className="p-4 text-sm text-orange-200">{linkError}</CardContent>
+                        </Card>
+                    )}
+
+                    {homeData && (homeData.spotlight.length > 0 || homeData.trending.length > 0) && !searched && !searching && (
+                        <div className="space-y-3">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">From scraper home</p>
+                            <div className="flex gap-2 overflow-x-auto pb-1">
+                                {(() => {
+                                    const seen = new Set<string>();
+                                    const merged: AniwatchSearchItem[] = [];
+                                    for (const item of [...homeData.spotlight, ...homeData.trending]) {
+                                        if (seen.has(item.anime_id)) continue;
+                                        seen.add(item.anime_id);
+                                        merged.push(item);
+                                        if (merged.length >= 12) break;
+                                    }
+                                    return merged;
+                                })().map((item) => (
+                                    <button
+                                        key={item.anime_id}
+                                        type="button"
+                                        onClick={() => void openHomePick(item)}
+                                        className="shrink-0 w-24 text-left rounded-lg border border-border/40 overflow-hidden bg-card hover:border-primary/50 transition-colors"
+                                    >
+                                        <div className="aspect-[3/4] bg-muted/40">
+                                            {item.image
+                                                ? <img src={item.image} alt="" className="w-full h-full object-cover" />
+                                                : <div className="w-full h-full flex items-center justify-center"><Tv className="w-6 h-6 opacity-30" /></div>}
+                                        </div>
+                                        <p className="p-1.5 text-[10px] font-medium line-clamp-2 leading-tight">{item.title}</p>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {!searched && !searching && (
+                        <p className="text-xs text-muted-foreground/50 text-center pt-2">
+                            Search by title, or tap a poster above to search that name.
+                        </p>
+                    )}
+                    {searching && <p className="text-xs text-muted-foreground py-1">Searching Jikan…</p>}
                     {searched && !searching && results.length === 0 && (
                         <Card className="bg-muted/30 border-dashed">
                             <CardContent className="flex flex-col items-center justify-center p-10 text-center text-muted-foreground gap-2">
@@ -1088,31 +1395,35 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
                     {results.length > 0 && (
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                             {results.map(r => {
-                                const listEntry = animeList.find(a => a.title.toLowerCase() === r.title.toLowerCase());
-                                const watchedEps = listEntry?.episodesWatched || 0;
+                                const listEntryRow = listByMal(r.mal_id);
+                                const watchedEps = listEntryRow?.episodesWatched || 0;
                                 return (
-                                    <button key={r.id} onClick={() => selectMatch(r)}
-                                        data-testid={`button-watch-result-${r.id}`}
-                                        className="group relative rounded-xl overflow-hidden border border-border/40 bg-card hover:border-primary/50 transition-all hover:shadow-neon text-left">
+                                    <button
+                                        key={r.mal_id}
+                                        type="button"
+                                        onClick={() => void selectJikan(r)}
+                                        disabled={linking}
+                                        data-testid={`button-watch-result-${r.mal_id}`}
+                                        className="group relative rounded-xl overflow-hidden border border-border/40 bg-card hover:border-primary/50 transition-all hover:shadow-neon text-left disabled:opacity-50"
+                                    >
                                         <div className="aspect-[3/4] overflow-hidden bg-muted/30 relative">
-                                            {r.image
-                                                ? <img src={r.image} alt={r.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                                                : <div className="w-full h-full flex items-center justify-center"><Tv className="w-8 h-8 opacity-20" /></div>
-                                            }
+                                            {jikanImage(r)
+                                                ? <img src={jikanImage(r)!} alt={jikanDisplayTitle(r)} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                                : <div className="w-full h-full flex items-center justify-center"><Tv className="w-8 h-8 opacity-20" /></div>}
                                             <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                                 <div className="w-12 h-12 rounded-full bg-primary/90 flex items-center justify-center shadow-neon">
                                                     <Play className="w-5 h-5 text-white fill-white ml-0.5" />
                                                 </div>
                                             </div>
-                                            {listEntry && (
+                                            {listEntryRow && (
                                                 <div className="absolute top-1.5 left-1.5">
                                                     <Badge className="text-[9px] px-1.5 py-0 h-4 bg-primary/80 text-white">In List</Badge>
                                                 </div>
                                             )}
                                         </div>
                                         <div className="p-2">
-                                            <p className="text-xs font-semibold line-clamp-2 leading-tight">{r.title}</p>
-                                            {watchedEps > 0 && <p className="text-[10px] text-muted-foreground mt-0.5">{watchedEps} ep watched</p>}
+                                            <p className="text-xs font-semibold line-clamp-2 leading-tight">{jikanDisplayTitle(r)}</p>
+                                            {watchedEps > 0 && <p className="text-[10px] text-muted-foreground mt-0.5">{watchedEps} ep in list</p>}
                                         </div>
                                     </button>
                                 );
