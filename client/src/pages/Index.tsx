@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { getAnimeList, createAnime, updateAnime, deleteAnime, logActivity } from "@/services/supabaseData";
+import { getAnimeList, createAnime, updateAnime, deleteAnime, logActivity, upsertUserPresence, type AnimeData } from "@/services/supabaseData";
 import { fetchAniList, GET_ANALYTICS_QUERY } from "@/services/anilist";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -121,6 +121,37 @@ const Index = () => {
       fetchAnimeList();
     }
   }, [user, activeTab]);
+
+  // Lightweight online heartbeat for friends list "online" indicator.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+
+    const pulse = async () => {
+      if (cancelled) return;
+      try {
+        await upsertUserPresence();
+      } catch {
+        // Ignore presence errors; core app should continue working.
+      }
+    };
+
+    pulse();
+    const iv = setInterval(pulse, 45000);
+    const onFocus = () => { pulse(); };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") pulse();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     filterAnimeList();
@@ -384,6 +415,33 @@ const Index = () => {
     } catch (error) {
       toast.error("Failed to update episode count");
     }
+  };
+
+  const handleWatchAutoProgress = ({ anime }: { action: "created" | "updated"; anime: AnimeData }) => {
+    setAnimeList((prev) => {
+      const existingIndex = prev.findIndex((a) => a.id === anime.id);
+      const mapped: Anime = {
+        id: anime.id,
+        title: anime.title,
+        episodesWatched: anime.episodesWatched,
+        totalEpisodes: anime.totalEpisodes,
+        status: anime.status,
+        rating: anime.rating,
+        notes: anime.notes,
+        coverImage: anime.coverImage,
+        seasonNumber: anime.seasonNumber,
+        anilistId: anime.anilistId,
+        malId: anime.malId,
+        ranking: anime.ranking,
+        isHentai: anime.isHentai,
+      };
+      if (existingIndex >= 0) {
+        const next = [...prev];
+        next[existingIndex] = mapped;
+        return next;
+      }
+      return [mapped, ...prev];
+    });
   };
 
   const handleSignOut = async () => {
@@ -756,7 +814,7 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="watch" className="pt-4 animate-tab-in">
-            <Watch animeList={animeList} />
+            <Watch animeList={animeList} onAutoProgress={handleWatchAutoProgress} />
           </TabsContent>
         </Tabs>
       </main>

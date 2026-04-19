@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import {
     Search, Play, Loader2, Tv, ChevronLeft, ChevronRight, Film,
     RefreshCw, AlertTriangle, Wifi, Clapperboard, Library, Sparkles,
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { createAnime, updateAnime, upsertWatchPresence, type AnimeData } from "@/services/supabaseData";
 import {
     fetchAniwatchSearch,
     fetchAniwatchAnimeDetails,
@@ -41,6 +42,11 @@ interface SearchResult {
     image: string;
 }
 
+interface AutoProgressEvent {
+    action: "created" | "updated";
+    anime: AnimeData;
+}
+
 function metaChips(details: Record<string, string> | undefined): { label: string; value: string }[] {
     if (!details) return [];
     const order = ["status", "aired", "premiered", "duration", "genres", "studios", "mal score"];
@@ -59,6 +65,21 @@ function metaChips(details: Record<string, string> | undefined): { label: string
         out.push({ label: k.replace(/\b\w/g, (c) => c.toUpperCase()), value: String(v).trim() });
     }
     return out.slice(0, 6);
+}
+
+function normalizeTitle(value: string): string {
+    return value
+        .toLowerCase()
+        .replace(/season\s*\d+|part\s*\d+/gi, "")
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim();
+}
+
+function parseSeasonNumber(label?: string | null): number {
+    if (!label) return 1;
+    const match = label.match(/season\s*(\d+)/i);
+    if (match) return parseInt(match[1], 10);
+    return 1;
 }
 
 // ── Player ───────────────────────────────────────────────────────────────────
@@ -334,7 +355,13 @@ function WatchPlayer({
 
 type Flow = "browse" | "series" | "watch";
 
-export default function Watch({ animeList }: { animeList: Anime[] }) {
+export default function Watch({
+    animeList,
+    onAutoProgress,
+}: {
+    animeList: Anime[];
+    onAutoProgress?: (event: AutoProgressEvent) => void;
+}) {
     const [search, setSearch] = useState("");
     const [results, setResults] = useState<SearchResult[]>([]);
     const [searching, setSearching] = useState(false);
@@ -350,6 +377,8 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
     const [epLoading, setEpLoading] = useState(false);
     const [selectedEpId, setSelectedEpId] = useState<string | null>(null);
     const [lang, setLang] = useState<"sub" | "dub">("sub");
+    const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const syncedSelectionsRef = useRef<Set<string>>(new Set());
 
     const doSearch = useCallback(async (q: string) => {
         if (!q.trim()) return;
@@ -452,6 +481,109 @@ export default function Watch({ animeList }: { animeList: Anime[] }) {
     const chips = metaChips(details?.details);
 
     const epCount = episodes.length;
+    const selectedEpisodeNumber = useMemo(() => {
+        const ep = episodes.find((e) => e.ep_id === selectedEpId);
+        if (!ep) return null;
+        const n = parseInt(ep.number, 10);
+        return Number.isFinite(n) && n > 0 ? n : null;
+    }, [episodes, selectedEpId]);
+    const resolvedSeasonNumber = useMemo(
+        () => parseSeasonNumber(seasonPick?.title),
+        [seasonPick?.title],
+    );
+    const canonicalTitle = useMemo(
+        () => (details?.title || hubShow?.title || "").trim(),
+        [details?.title, hubShow?.title],
+    );
+
+    useEffect(() => {
+        if (syncTimerRef.current) {
+            clearTimeout(syncTimerRef.current);
+            syncTimerRef.current = null;
+        }
+        if (flow !== "watch" || !hubShow || !seasonPick || !selectedEpId || !selectedEpisodeNumber || !canonicalTitle) {
+            return;
+        }
+
+        const selectionKey = `${hubShow.id}:${seasonPick.anime_id}:${selectedEpId}:${selectedEpisodeNumber}`;
+        if (syncedSelectionsRef.current.has(selectionKey)) return;
+
+        syncTimerRef.current = setTimeout(async () => {
+            try {
+                const normalizedTarget = normalizeTitle(canonicalTitle);
+                const candidates = animeList.filter((a) => {
+                    const left = normalizeTitle(a.title);
+                    return left === normalizedTarget || left.includes(normalizedTarget) || normalizedTarget.includes(left);
+                });
+
+                const matched = candidates.find((a) => (a.seasonNumber || 1) === resolvedSeasonNumber) || null;
+
+                if (matched) {
+                    const nextEpisodes = Math.max(matched.episodesWatched || 0, selectedEpisodeNumber);
+                    const reachedEnd = matched.totalEpisodes !== null && nextEpisodes >= matched.totalEpisodes;
+                    const nextStatus = reachedEnd ? "completed" : "watching";
+                    if (nextEpisodes !== matched.episodesWatched || nextStatus !== matched.status) {
+                        const updated = await updateAnime(matched.id, {
+                            episodesWatched: nextEpisodes,
+                            status: nextStatus,
+                        });
+                        onAutoProgress?.({ action: "updated", anime: updated });
+                    }
+                } else {
+                    const [created] = await createAnime([{
+                        title: canonicalTitle,
+                        episodesWatched: selectedEpisodeNumber,
+                        totalEpisodes: epCount || null,
+                        status: "watching",
+                        rating: null,
+                        notes: null,
+                        coverImage: poster || null,
+                        seasonNumber: resolvedSeasonNumber,
+                        anilistId: null,
+                        malId: null,
+                        ranking: null,
+                        isHentai: false,
+                    }]);
+                    if (created) onAutoProgress?.({ action: "created", anime: created });
+                }
+                syncedSelectionsRef.current.add(selectionKey);
+            } catch {
+                // Fail silently; manual controls remain available.
+            }
+        }, 90000);
+
+        return () => {
+            if (syncTimerRef.current) {
+                clearTimeout(syncTimerRef.current);
+                syncTimerRef.current = null;
+            }
+        };
+    }, [
+        flow,
+        hubShow,
+        seasonPick,
+        selectedEpId,
+        selectedEpisodeNumber,
+        canonicalTitle,
+        animeList,
+        resolvedSeasonNumber,
+        epCount,
+        poster,
+        onAutoProgress,
+    ]);
+
+    // Presence: "currently watching <title> Sx Ep y" for friends UI.
+    useEffect(() => {
+        if (flow !== "watch" || !selectedEpId || !selectedEpisodeNumber || !canonicalTitle) return;
+        const timer = setTimeout(() => {
+            upsertWatchPresence({
+                animeTitle: canonicalTitle,
+                seasonNumber: resolvedSeasonNumber,
+                episodeNumber: selectedEpisodeNumber,
+            }).catch(() => {});
+        }, 15000);
+        return () => clearTimeout(timer);
+    }, [flow, selectedEpId, selectedEpisodeNumber, canonicalTitle, resolvedSeasonNumber]);
 
     return (
         <div className="space-y-6 pb-6">
