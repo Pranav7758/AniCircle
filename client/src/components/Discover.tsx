@@ -221,7 +221,7 @@ function Hero({ animes, allKnownIds, onAdd, onPlay, addingId }: {
 
   return (
     <div
-      className="relative deco-card deco-corners overflow-hidden cursor-pointer"
+      className="relative premium-section overflow-hidden cursor-pointer interactive-lift"
       style={{ height: 260 }}
       onClick={() => onPlay?.(a)}
       role="button"
@@ -685,7 +685,7 @@ export function DiscoverSections({ animeList, onAddAnime, showMature = false, on
       )}
 
       {/* ── Genre Browser ── */}
-      <section className="deco-card deco-corners p-4">
+      <section className="premium-section p-4">
         <div className="mb-3">
           <span className="text-sm font-bold text-foreground deco-divider">Browse Genres</span>
           <p className="text-xs text-muted-foreground mt-0.5">Pick a genre — we'll show the best anime you haven't seen yet</p>
@@ -731,7 +731,7 @@ export function DiscoverSections({ animeList, onAddAnime, showMature = false, on
       </section>
 
       {/* ── Find Similar ── */}
-      <div className="deco-card deco-corners p-4">
+      <div className="premium-section p-4">
         <FindSimilar
           animeList={animeList}
           allKnownIds={allKnownIds}
@@ -744,7 +744,7 @@ export function DiscoverSections({ animeList, onAddAnime, showMature = false, on
 
       {/* ── Personalized Genre Row ── */}
       {(genreInfo || loadingGenre) && (
-        <section className="deco-card deco-corners p-4">
+        <section className="premium-section p-4">
           <div className="flex items-center gap-2 mb-0.5">
             <span className="text-sm">{genreInfo?.emoji ?? "🎯"}</span>
             <span className="text-sm font-bold text-foreground">{userTopGenre ? `More ${userTopGenre} for You` : "Your Taste"}</span>
@@ -764,7 +764,7 @@ export function DiscoverSections({ animeList, onAddAnime, showMature = false, on
 
       {/* ── Handpicked Recommendations ── */}
       {(hasRatedAnime || loadingRecs) && (
-        <section className="deco-card deco-corners p-4">
+        <section className="premium-section p-4">
           <div className="flex items-center gap-2 mb-0.5">
             <Brain className="w-4 h-4 text-primary" />
             <span className="text-sm font-bold text-foreground">Handpicked for You</span>
@@ -792,7 +792,7 @@ export function DiscoverSections({ animeList, onAddAnime, showMature = false, on
       )}
 
       {/* ── Trending Now ── */}
-        <section className="deco-card deco-corners p-4">
+        <section className="premium-section p-4">
         <div className="flex items-center gap-2 mb-0.5">
           <Flame className="w-4 h-4 text-orange-400" />
           <span className="text-sm font-bold text-foreground">Trending Now</span>
@@ -810,7 +810,7 @@ export function DiscoverSections({ animeList, onAddAnime, showMature = false, on
       </section>
 
       {/* ── Season Picks ── */}
-      <section className="deco-card deco-corners p-4">
+      <section className="premium-section p-4">
         <div className="flex items-center gap-2 mb-0.5">
           <CalendarDays className="w-4 h-4 text-sky-400" />
           <span className="text-sm font-bold text-foreground">{seasonLabel} Picks</span>

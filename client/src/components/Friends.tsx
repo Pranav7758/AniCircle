@@ -322,7 +322,7 @@ const Friends = ({ currentUserId }: FriendsProps) => {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="friends" className="w-full">
-        <TabsList className="grid w-full h-auto grid-cols-3 gap-1 p-1 md:grid-cols-5 deco-card deco-corners">
+        <TabsList className="grid w-full h-auto grid-cols-3 gap-1 p-1 md:grid-cols-5 premium-section">
           <TabsTrigger value="friends" data-testid="tab-my-friends" className="gap-1 text-xs py-2 rounded-none border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black">
             <Users className="w-3.5 h-3.5 shrink-0" />
             Friends
@@ -491,7 +491,7 @@ const Friends = ({ currentUserId }: FriendsProps) => {
                         : false;
                       const isOnline = hasRecentHeartbeat || hasRecentWatchPulse;
                       return (
-                        <Card key={friend.id} className="cursor-pointer hover:bg-accent/50 animate-stagger-in" style={{ animationDelay: `${fi * 70}ms` }} data-testid={`friend-card-${friend.id}`}>
+                        <Card key={friend.id} className="cursor-pointer premium-shell interactive-lift animate-stagger-in" style={{ animationDelay: `${fi * 70}ms` }} data-testid={`friend-card-${friend.id}`}>
                           <CardContent className="p-4">
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-3">

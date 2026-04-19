@@ -45,7 +45,7 @@ const Footer = () => {
   return (
     <footer className="border-t border-primary/30 bg-background/80 backdrop-blur-lg mt-auto">
       <div className="container mx-auto px-4 py-10">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 lg:gap-10 deco-card deco-corners p-6 sm:p-7">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 lg:gap-10 premium-section p-6 sm:p-7">
 
           {/* About + Social */}
           <div className="space-y-4">
@@ -62,7 +62,7 @@ const Footer = () => {
                 rel="noopener noreferrer"
                 aria-label="Instagram"
                 data-testid="link-instagram"
-                className="w-9 h-9 flex items-center justify-center rounded-none border border-primary/40 bg-background/60 text-muted-foreground hover:text-primary hover:border-primary/70 transition-all duration-200"
+                className="w-9 h-9 flex items-center justify-center rounded-none border border-primary/40 bg-background/60 text-muted-foreground hover:text-primary hover:border-primary/70 transition-all duration-200 interactive-lift"
               >
                 <Instagram className="w-4 h-4" />
               </a>
@@ -72,7 +72,7 @@ const Footer = () => {
                 rel="noopener noreferrer"
                 aria-label="LinkedIn"
                 data-testid="link-linkedin"
-                className="w-9 h-9 flex items-center justify-center rounded-none border border-primary/40 bg-background/60 text-muted-foreground hover:text-primary hover:border-primary/70 transition-all duration-200"
+                className="w-9 h-9 flex items-center justify-center rounded-none border border-primary/40 bg-background/60 text-muted-foreground hover:text-primary hover:border-primary/70 transition-all duration-200 interactive-lift"
               >
                 <Linkedin className="w-4 h-4" />
               </a>
@@ -80,7 +80,7 @@ const Footer = () => {
                 href="mailto:borsepranav700@gmail.com"
                 aria-label="Email"
                 data-testid="link-email"
-                className="w-9 h-9 flex items-center justify-center rounded-none border border-primary/40 bg-background/60 text-muted-foreground hover:text-primary hover:border-primary/70 transition-all duration-200"
+                className="w-9 h-9 flex items-center justify-center rounded-none border border-primary/40 bg-background/60 text-muted-foreground hover:text-primary hover:border-primary/70 transition-all duration-200 interactive-lift"
               >
                 <Mail className="w-4 h-4" />
               </a>

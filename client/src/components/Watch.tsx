@@ -649,7 +649,7 @@ export default function Watch({
         <div className="space-y-6 pb-6">
             {/* Header — browse only full title; series/watch slimmer */}
             {flow === "browse" && (
-                <div className="space-y-3 deco-card deco-corners p-4 sm:p-5">
+                <div className="space-y-3 premium-section p-4 sm:p-5 interactive-lift">
                     <div className="flex items-center gap-3">
                         <div className="flex h-11 w-11 items-center justify-center rounded-none border border-[#D4AF37]/50 bg-black/70">
                             <Film className="h-5 w-5 text-[#D4AF37]" />
@@ -671,7 +671,7 @@ export default function Watch({
 
             {flow === "browse" && (
                 <>
-                    <div className="flex flex-col sm:flex-row gap-3 max-w-2xl deco-card deco-corners p-2 sm:p-3">
+                    <div className="flex flex-col sm:flex-row gap-3 max-w-2xl premium-section p-2 sm:p-3">
                         <div className="relative flex-1">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                             <Input
@@ -839,7 +839,7 @@ export default function Watch({
                     </div>
 
                     {/* Hero — series hub (always show when not browse); watch keeps context */}
-                    <div className="relative overflow-hidden deco-card deco-corners shadow-xl ring-1 ring-white/5">
+                    <div className="relative overflow-hidden premium-section shadow-xl ring-1 ring-white/5">
                         <div className="absolute inset-0 pointer-events-none">
                             {poster ? (
                                 <img src={poster} alt="" className="h-full w-full object-cover blur-3xl scale-125 opacity-35" />

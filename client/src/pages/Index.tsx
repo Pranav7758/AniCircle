@@ -568,7 +568,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <header className="sticky top-0 z-50 border-b border-border/40 glass bg-glow">
+      <header className="sticky top-0 z-50 border-b border-border/40 premium-shell bg-glow">
         <div className="header-accent-strip" />
         <div className="container mx-auto px-4 py-2.5">
           <div className="flex items-center justify-between gap-2">
@@ -620,7 +620,7 @@ const Index = () => {
                 size="icon"
                 onClick={() => setActiveTab("friends")}
                 title="Friends Activity"
-                className="relative h-8 w-8 hover:bg-muted/50 text-muted-foreground hover:text-foreground rounded-xl"
+                className="relative h-8 w-8 hover:bg-primary/10 text-muted-foreground hover:text-foreground rounded-none border border-transparent hover:border-primary/40"
                 data-testid="button-friends-quick"
               >
                 <Users className="w-4 h-4" />
@@ -635,7 +635,7 @@ const Index = () => {
                 size="icon"
                 onClick={() => setIsSettingsOpen(true)}
                 title="Settings"
-                className="h-8 w-8 hover:bg-muted/50 text-muted-foreground hover:text-foreground rounded-xl"
+                className="h-8 w-8 hover:bg-primary/10 text-muted-foreground hover:text-foreground rounded-none border border-transparent hover:border-primary/40"
               >
                 <Settings className="w-4 h-4" />
               </Button>
@@ -667,7 +667,7 @@ const Index = () => {
         <Tabs value={activeTab} onValueChange={(next) => startTransition(() => setActiveTab(next))} className="w-full">
           <div className="mb-6 space-y-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <TabsList className="h-12 deco-card deco-corners p-1 gap-0.5 overflow-x-auto flex-nowrap shadow-[0_0_14px_rgba(212,175,55,0.12)]">
+              <TabsList className="h-12 premium-section p-1 gap-0.5 overflow-x-auto flex-nowrap shadow-[0_0_14px_rgba(212,175,55,0.12)]">
                 <TabsTrigger value="watch" data-testid="tab-watch"
                   className="rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1">
                   <Play className="w-3.5 h-3.5" />
@@ -760,7 +760,7 @@ const Index = () => {
 
             {animeList.length > 0 && <StatsBar animeList={animeList} />}
 
-            <div className="mb-4 deco-card deco-corners p-3 sm:p-4">
+            <div className="mb-4 premium-section p-3 sm:p-4">
               <div className="flex flex-col md:flex-row gap-3">
                 <div className="flex-1 relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
@@ -814,7 +814,7 @@ const Index = () => {
             </div>
 
             {filteredAnimeList.length === 0 ? (
-              <div className="deco-card deco-corners flex flex-col items-center justify-center py-24 gap-5 animate-fade-in">
+              <div className="premium-section flex flex-col items-center justify-center py-24 gap-5 animate-fade-in">
                 <div className="relative">
                   <div className="w-24 h-24 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
                     <span className="text-4xl opacity-60">📺</span>
