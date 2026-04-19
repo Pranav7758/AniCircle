@@ -27,8 +27,9 @@ const Auth = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
-    if (user && !isRecoveryMode) setLocation("/");
-  }, [user, setLocation, isRecoveryMode]);
+    // Prevent redirect while the user is actively in forgot-password flow.
+    if (user && !isRecoveryMode && !showForgotPassword) setLocation("/");
+  }, [user, setLocation, isRecoveryMode, showForgotPassword]);
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
