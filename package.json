@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "NODE_ENV=development npx tsx server/index.ts",
+    "dev": "NODE_ENV=development node --import tsx/esm server/index.ts",
     "build": "vite build",
     "start": "NODE_ENV=production node dist/index.js",
     "db:push": "drizzle-kit push",
