@@ -21,14 +21,49 @@ export const THEME_PRESETS: ThemePreset[] = [
 ];
 
 const STORAGE_KEY = "anicircle-theme";
+const listeners = new Set<(theme: ThemePreset) => void>();
 
-function applyTheme(h: number, s: number, l: number, fg: string) {
+function getInitialTheme(): ThemePreset {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) return JSON.parse(saved);
+  } catch {
+    // ignore malformed storage values and fall back
+  }
+  return THEME_PRESETS[0];
+}
+
+let currentTheme: ThemePreset | null = null;
+
+function getThemeSnapshot(): ThemePreset {
+  if (!currentTheme) {
+    currentTheme = getInitialTheme();
+  }
+  return currentTheme;
+}
+
+function persistAndBroadcast(theme: ThemePreset) {
+  currentTheme = theme;
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(theme));
+  } catch {
+    // ignore storage failures
+  }
+  listeners.forEach((listener) => listener(theme));
+}
+
+function applyTheme(themeName: string, h: number, s: number, l: number, fg: string) {
   const root = document.documentElement;
+  root.setAttribute("data-theme-name", themeName);
 
   const main  = `${h} ${s}% ${l}%`;
   const light = `${h} ${s}% ${Math.min(l + 10, 92)}%`;
   const dark  = `${h} ${s}% ${Math.max(l - 12, 10)}%`;
   const dim   = `${h} ${Math.round(s * 0.7)}% ${Math.max(l - 18, 8)}%`;
+  const surface = `${h} ${Math.max(Math.round(s * 0.22), 8)}% 9%`;
+  const muted = `${h} ${Math.max(Math.round(s * 0.18), 7)}% 14%`;
+  const border = `${h} ${Math.max(Math.round(s * 0.42), 20)}% ${Math.max(l - 12, 20)}%`;
+  const input = `${h} ${Math.max(Math.round(s * 0.38), 18)}% ${Math.max(l - 14, 18)}%`;
 
   root.style.setProperty("--primary", main);
   root.style.setProperty("--primary-light", light);
@@ -39,12 +74,15 @@ function applyTheme(h: number, s: number, l: number, fg: string) {
   root.style.setProperty("--accent", main);
   root.style.setProperty("--accent-foreground", fg);
   root.style.setProperty("--ring", main);
-  root.style.setProperty("--border", main);
-  root.style.setProperty("--input", main);
+  root.style.setProperty("--border", border);
+  root.style.setProperty("--input", input);
+  root.style.setProperty("--secondary", dim);
+  root.style.setProperty("--muted", muted);
+  root.style.setProperty("--sidebar-accent", surface);
 
   root.style.setProperty("--sidebar-primary", main);
   root.style.setProperty("--sidebar-primary-foreground", fg);
-  root.style.setProperty("--sidebar-border", main);
+  root.style.setProperty("--sidebar-border", border);
   root.style.setProperty("--sidebar-ring", main);
 
   root.style.setProperty("--neon-purple", main);
@@ -76,21 +114,25 @@ function hexToHsl(hex: string): [number, number, number] | null {
 }
 
 export function useTheme() {
-  const [theme, setThemeState] = useState<ThemePreset>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) return JSON.parse(saved);
-    } catch { /* ignore */ }
-    return THEME_PRESETS[0];
-  });
+  const [theme, setThemeState] = useState<ThemePreset>(() => getThemeSnapshot());
 
   useEffect(() => {
-    applyTheme(theme.h, theme.s, theme.l, theme.fg);
+    const listener = (nextTheme: ThemePreset) => {
+      setThemeState(nextTheme);
+    };
+
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  }, []);
+
+  useEffect(() => {
+    applyTheme(theme.name, theme.h, theme.s, theme.l, theme.fg);
   }, [theme]);
 
   const setTheme = (preset: ThemePreset) => {
-    setThemeState(preset);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(preset));
+    persistAndBroadcast(preset);
   };
 
   const setCustomColor = (hex: string) => {

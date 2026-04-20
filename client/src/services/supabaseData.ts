@@ -401,7 +401,12 @@ export async function upsertWatchPresence(data: {
   const { error } = await supabase
     .from("watch_presence")
     .upsert(payload, { onConflict: "user_id" });
-  if (error) throw error;
+  // Some projects keep strict RLS on presence tables. Treat auth/policy denial as non-fatal.
+  if (error) {
+    const status = (error as any).status;
+    if (status === 401 || status === 403) return;
+    throw error;
+  }
 }
 
 export async function getFriendsWatchPresence(friendIds: string[]): Promise<WatchPresenceData[]> {
@@ -423,7 +428,12 @@ export async function upsertUserPresence(): Promise<void> {
       { user_id: user.id, updated_at: new Date().toISOString() },
       { onConflict: "user_id" },
     );
-  if (error) throw error;
+  // Some projects keep strict RLS on presence tables. Treat auth/policy denial as non-fatal.
+  if (error) {
+    const status = (error as any).status;
+    if (status === 401 || status === 403) return;
+    throw error;
+  }
 }
 
 export async function getFriendsUserPresence(friendIds: string[]): Promise<UserPresenceData[]> {

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -13,9 +14,28 @@ import PublicProfile from "./pages/PublicProfile";
 import FeedbackAdmin from "./pages/FeedbackAdmin";
 import { Loader2 } from "lucide-react";
 import RemEffects from "@/components/RemEffects";
+import remFloatImg from "@assets/re-zero-cute-blue-hair-rem-sticker_1776671235770.webp";
+import remStickerImg from "@assets/re-zero-sad-kawaii-rem-sticker_1776671137105.webp";
+import remMainFullbodyImg from "@assets/rem-main-fullbody.png";
+import remEyesImg from "@assets/rem-eyes-default.png";
+import remGifImg from "@assets/rem-rezero.gif";
 
 function ThemeInitializer() {
   useTheme();
+
+  useEffect(() => {
+    const preload = [remFloatImg, remStickerImg, remMainFullbodyImg, remEyesImg, remGifImg].map((src) => {
+      const img = new Image();
+      img.decoding = "async";
+      img.src = src;
+      return img;
+    });
+
+    return () => {
+      preload.length = 0;
+    };
+  }, []);
+
   return null;
 }
 

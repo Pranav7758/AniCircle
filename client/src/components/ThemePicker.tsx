@@ -3,7 +3,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { THEME_PRESETS, useTheme } from "@/hooks/use-theme";
 import { Check, Palette } from "lucide-react";
 import { toast } from "sonner";
-import remStickerImg from "@assets/re-zero-sad-kawaii-rem-sticker_1776671137105.png";
+import remStickerImg from "@assets/re-zero-sad-kawaii-rem-sticker_1776671137105.webp";
+import remEyesImg from "@assets/rem-eyes-default.png";
+import RemEyes from "@/components/RemEyes";
 
 export default function ThemePicker() {
   const { theme, setTheme, setCustomColor } = useTheme();
@@ -47,7 +49,7 @@ export default function ThemePicker() {
         <button
           data-testid="button-theme-picker"
           title="Change Theme Color"
-          className="relative h-8 w-8 rounded-none border border-transparent hover:border-primary/40 hover:bg-primary/10 flex items-center justify-center transition-all duration-200 group"
+          className="relative h-8 w-8 rounded-lg border border-transparent hover:border-primary/40 hover:bg-primary/10 flex items-center justify-center transition-all duration-200 group"
           aria-label="Open theme picker"
         >
           {theme.name === "Rem" ? (
@@ -67,7 +69,7 @@ export default function ThemePicker() {
       <PopoverContent
         align="end"
         sideOffset={8}
-        className="w-72 p-4 rounded-none border border-primary/30 bg-card/95 backdrop-blur-xl shadow-[0_8px_32px_hsl(0_0%_0%/0.6)]"
+        className="w-72 p-4 rounded-2xl border border-primary/30 bg-card/95 backdrop-blur-xl shadow-[0_8px_32px_hsl(0_0%_0%/0.6)]"
       >
         <div className="space-y-4">
           <div>
@@ -88,7 +90,7 @@ export default function ThemePicker() {
                     title={preset.name}
                   >
                     <div
-                      className={`relative w-10 h-10 rounded-none border-2 transition-all duration-150 flex items-center justify-center
+                      className={`relative w-10 h-10 rounded-lg border-2 transition-all duration-150 flex items-center justify-center
                         ${isActive ? "border-white/80 scale-110" : "border-transparent hover:border-white/30 hover:scale-105"}`}
                       style={{
                         background: `hsl(${preset.h} ${preset.s}% ${preset.l}%)`,
@@ -106,7 +108,7 @@ export default function ThemePicker() {
             </div>
 
             {/* ── Rem special preset ── */}
-            <div className="rounded-none overflow-hidden" style={{
+            <div className="rounded-xl overflow-hidden" style={{
               border: theme.name === "Rem"
                 ? "1px solid rgba(100,160,255,0.6)"
                 : "1px solid rgba(100,160,255,0.18)",
@@ -123,7 +125,7 @@ export default function ThemePicker() {
                 style={{ background: theme.name === "Rem" ? "rgba(30,58,138,0.2)" : undefined }}
               >
                 {/* Rem portrait thumbnail */}
-                <div className="relative shrink-0 overflow-hidden rounded-none"
+                <div className="relative shrink-0 overflow-hidden rounded-lg"
                   style={{
                     width: "44px", height: "54px",
                     border: "1px solid rgba(100,160,255,0.3)",
@@ -161,6 +163,9 @@ export default function ThemePicker() {
                       <span key={i} className="text-[9px]" style={{ opacity: 0.4 }}>{e}</span>
                     ))}
                   </div>
+                  <div className="mt-1.5 w-[96px]">
+                    <RemEyes imageSrc={remEyesImg} maxOffset={1.4} />
+                  </div>
                 </div>
               </button>
             </div>
@@ -176,7 +181,7 @@ export default function ThemePicker() {
           {/* Custom color picker */}
           <div className="flex items-center gap-3">
             <div
-              className="relative w-10 h-10 rounded-none border border-white/20 overflow-hidden cursor-pointer shrink-0 hover:border-white/40 transition-colors"
+              className="relative w-10 h-10 rounded-lg border border-white/20 overflow-hidden cursor-pointer shrink-0 hover:border-white/40 transition-colors"
               style={{ background: currentHex }}
               onClick={() => colorInputRef.current?.click()}
               title="Pick custom color"

@@ -10,6 +10,8 @@ const Footer = () => {
   const [feedbackEmail, setFeedbackEmail] = useState("");
   const [feedbackMessage, setFeedbackMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") || "";
+  const feedbackEndpoint = `${apiBase}/api/feedback`;
 
   const handleFeedbackSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -17,7 +19,7 @@ const Footer = () => {
 
     setSubmitting(true);
     try {
-      const res = await fetch("/api/feedback", {
+      const res = await fetch(feedbackEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -33,7 +35,11 @@ const Footer = () => {
         setFeedbackEmail("");
         setFeedbackMessage("");
       } else {
-        toast.error("Failed to send feedback. Please try again.");
+        if (res.status === 404) {
+          toast.error("Feedback API is unavailable. Start full backend (`npm run dev`) or set `VITE_API_BASE_URL`.");
+        } else {
+          toast.error("Failed to send feedback. Please try again.");
+        }
       }
     } catch {
       toast.error("Failed to send feedback. Please try again.");

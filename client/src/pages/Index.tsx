@@ -25,7 +25,7 @@ import SuggestionPopup from "@/components/SuggestionPopup";
 import FloatingSocialBar from "@/components/FloatingSocialBar";
 import ThemePicker from "@/components/ThemePicker";
 import { useTheme } from "@/hooks/use-theme";
-import remSadImg from "@assets/re-zero-sad-kawaii-rem-sticker_1776671137105.png";
+import remSadImg from "@assets/re-zero-sad-kawaii-rem-sticker_1776671137105.webp";
 
 interface Anime {
   id: string;
@@ -43,6 +43,43 @@ interface Anime {
   isHentai: boolean | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+}
+
+interface RemCustomization {
+  showGif: boolean;
+  showEyes: boolean;
+  showCharacter: boolean;
+  showSnow: boolean;
+  draggable: boolean;
+  sizeMode: "small" | "normal";
+}
+
+const REM_CUSTOMIZE_KEY = "anicircle-rem-customization";
+const DEFAULT_REM_CUSTOMIZATION: RemCustomization = {
+  showGif: true,
+  showEyes: true,
+  showCharacter: true,
+  showSnow: true,
+  draggable: true,
+  sizeMode: "normal",
+};
+
+function readRemCustomization(): RemCustomization {
+  try {
+    const raw = localStorage.getItem(REM_CUSTOMIZE_KEY);
+    if (!raw) return DEFAULT_REM_CUSTOMIZATION;
+    const parsed = JSON.parse(raw) as Partial<RemCustomization>;
+    return {
+      showGif: parsed.showGif ?? true,
+      showEyes: parsed.showEyes ?? true,
+      showCharacter: parsed.showCharacter ?? true,
+      showSnow: parsed.showSnow ?? true,
+      draggable: parsed.draggable ?? true,
+      sizeMode: parsed.sizeMode === "small" ? "small" : "normal",
+    };
+  } catch {
+    return DEFAULT_REM_CUSTOMIZATION;
+  }
 }
 
 const SkeletonCard = () => (
@@ -122,6 +159,7 @@ const Index = () => {
   const genreFetchRef = useRef<string>("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [remCustomize, setRemCustomize] = useState<RemCustomization>(() => readRemCustomization());
   const [newUsername, setNewUsername] = useState("");
   const [isSavingUsername, setIsSavingUsername] = useState(false);
   const [prefilledSearchQuery, setPrefilledSearchQuery] = useState("");
@@ -532,6 +570,12 @@ const Index = () => {
     setLocation("/auth");
   };
 
+  const saveRemCustomize = (next: RemCustomization) => {
+    setRemCustomize(next);
+    localStorage.setItem(REM_CUSTOMIZE_KEY, JSON.stringify(next));
+    window.dispatchEvent(new Event("rem-customize-change"));
+  };
+
   const openEditDialog = (id: string) => {
     const anime = animeList.find((a) => a.id === id);
     if (!anime) return;
@@ -561,10 +605,11 @@ const Index = () => {
     ? "grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4"
     : "grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3";
 
+  const remRootClass = isRemTheme ? "rem-ui" : "";
   if (isLoading) {
     return (
-      <div className="min-h-screen flex flex-col bg-background">
-        <header className="sticky top-0 z-50 border-b border-border/40 glass bg-glow">
+      <div className={`min-h-screen flex flex-col bg-background ${remRootClass}`}>
+        <header className={`sticky top-0 z-50 border-b border-border/40 glass bg-glow ${isRemTheme ? "rem-nav" : ""}`}>
           <div className="header-accent-strip" />
           <div className="container mx-auto px-4 py-2.5">
             <div className="flex items-center gap-2.5">
@@ -590,11 +635,11 @@ const Index = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
-      <header className="sticky top-0 z-50 border-b border-border/40 premium-shell bg-glow">
+    <div className={`min-h-screen flex flex-col bg-background ${remRootClass}`}>
+      <header className={`sticky top-0 z-50 border-b border-border/40 premium-shell bg-glow ${isRemTheme ? "rem-nav" : ""}`}>
         <div className="header-accent-strip" />
         <div className="container mx-auto px-4 py-2.5">
-          <div className="flex items-center justify-between gap-2">
+          <div className={`flex items-center justify-between gap-2 ${isRemTheme ? "rem-nav-inner" : ""}`}>
             <div className="flex items-center gap-2.5">
               <div className="relative">
                 <div className="absolute inset-0 rounded-full bg-primary/25 blur-md animate-glow-pulse" />
@@ -609,7 +654,7 @@ const Index = () => {
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className={`flex items-center gap-1.5 ${isRemTheme ? "rem-top-actions" : ""}`}>
               {user && <Notifications userId={user.id} />}
               {user?.email === "borsepranav700@gmail.com" && (
                 <Button
@@ -691,38 +736,38 @@ const Index = () => {
         <Tabs value={activeTab} onValueChange={(next) => startTransition(() => setActiveTab(next))} className="w-full">
           <div className="mb-6 space-y-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <TabsList className="h-12 premium-section p-1 gap-0.5 overflow-x-auto flex-nowrap shadow-[0_0_14px_rgba(212,175,55,0.12)]">
+              <TabsList className={`h-12 premium-section p-1 gap-0.5 overflow-x-auto flex-nowrap shadow-[0_0_14px_rgba(212,175,55,0.12)] ${isRemTheme ? "rem-tabs-shell" : ""}`}>
                 <TabsTrigger value="watch" data-testid="tab-watch"
-                  className="rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1">
+                  className={`rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1 ${isRemTheme ? "rem-tab-trigger" : ""}`}>
                   <Play className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Watch</span>
                 </TabsTrigger>
                 <TabsTrigger value="list" data-testid="tab-list"
-                  className="rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium">
+                  className={`rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium ${isRemTheme ? "rem-tab-trigger" : ""}`}>
                   My List
                 </TabsTrigger>
                 <TabsTrigger value="radar" data-testid="tab-radar"
-                  className="rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1">
+                  className={`rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1 ${isRemTheme ? "rem-tab-trigger" : ""}`}>
                   <Sparkles className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Radar</span>
                 </TabsTrigger>
                 <TabsTrigger value="ranking" data-testid="tab-ranking"
-                  className="rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1">
+                  className={`rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1 ${isRemTheme ? "rem-tab-trigger" : ""}`}>
                   <Trophy className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Rankings</span>
                 </TabsTrigger>
                 <TabsTrigger value="analytics" data-testid="tab-analytics"
-                  className="rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1">
+                  className={`rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1 ${isRemTheme ? "rem-tab-trigger" : ""}`}>
                   <PieChart className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Analytics</span>
                 </TabsTrigger>
                 <TabsTrigger value="friends" data-testid="tab-friends"
-                  className="rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1">
+                  className={`rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1 ${isRemTheme ? "rem-tab-trigger" : ""}`}>
                   <Users className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Friends</span>
                 </TabsTrigger>
                 <TabsTrigger value="discover" data-testid="tab-discover"
-                  className="rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1">
+                  className={`rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1 ${isRemTheme ? "rem-tab-trigger" : ""}`}>
                   <Compass className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Discover</span>
                 </TabsTrigger>
@@ -734,7 +779,7 @@ const Index = () => {
                     setGridSize(value);
                     localStorage.setItem("animeGridSize", value);
                   }}>
-                    <SelectTrigger className="h-9 w-36 sm:w-40 text-xs rounded-xl border-border/50 bg-muted/30" data-testid="select-grid-size">
+                    <SelectTrigger className={`h-9 w-36 sm:w-40 text-xs rounded-xl border-border/50 bg-muted/30 ${isRemTheme ? "rem-control" : ""}`} data-testid="select-grid-size">
                       <SelectValue placeholder="View size" />
                     </SelectTrigger>
                     <SelectContent>
@@ -747,7 +792,7 @@ const Index = () => {
                   </Select>
                   <Button
                     onClick={() => setIsAddDialogOpen(true)}
-                    className="h-9 gradient-primary hover:opacity-90 transition-smooth shadow-neon rounded-xl text-sm font-semibold px-4"
+                    className={`h-9 gradient-primary hover:opacity-90 transition-smooth shadow-neon rounded-xl text-sm font-semibold px-4 ${isRemTheme ? "rem-primary-btn" : ""}`}
                     data-testid="button-add-anime"
                   >
                     <Plus className="w-4 h-4 mr-1.5" />
@@ -814,7 +859,7 @@ const Index = () => {
               </div>
             )}
 
-            <div className="mb-4 premium-section p-3 sm:p-4">
+            <div className={`mb-4 premium-section p-3 sm:p-4 ${isRemTheme ? "rem-filter-shell" : ""}`}>
               <div className="flex flex-col sm:flex-row gap-2.5">
                 <div className="flex-1 relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
@@ -822,13 +867,13 @@ const Index = () => {
                     placeholder="Search your anime..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 h-9 rounded-none border-border/40 bg-black/30 text-sm focus:border-primary/50 text-foreground placeholder:text-muted-foreground/40"
+                    className={`pl-9 h-9 rounded-none border-border/40 bg-black/30 text-sm focus:border-primary/50 text-foreground placeholder:text-muted-foreground/40 ${isRemTheme ? "rem-search" : ""}`}
                     data-testid="input-search"
                   />
                 </div>
                 <div className="flex gap-2 flex-wrap sm:flex-nowrap">
                   <Select value={sortBy} onValueChange={(v) => { setSortBy(v); localStorage.setItem("animeSortBy", v); }}>
-                    <SelectTrigger className="h-9 w-full sm:w-40 rounded-none border-border/40 bg-black/30 text-xs" data-testid="select-sort">
+                    <SelectTrigger className={`h-9 w-full sm:w-40 rounded-none border-border/40 bg-black/30 text-xs ${isRemTheme ? "rem-control" : ""}`} data-testid="select-sort">
                       <ArrowUpDown className="w-3 h-3 mr-1.5 text-muted-foreground/50" />
                       <SelectValue placeholder="Sort by" />
                     </SelectTrigger>
@@ -842,7 +887,7 @@ const Index = () => {
                   </Select>
                   {allGenres.length > 0 && (
                     <Select value={genreFilter} onValueChange={setGenreFilter}>
-                      <SelectTrigger className="h-9 w-full sm:w-36 rounded-none border-border/40 bg-black/30 text-xs" data-testid="select-genre">
+                      <SelectTrigger className={`h-9 w-full sm:w-36 rounded-none border-border/40 bg-black/30 text-xs ${isRemTheme ? "rem-control" : ""}`} data-testid="select-genre">
                         <Tag className="w-3 h-3 mr-1.5 text-muted-foreground/50" />
                         <SelectValue placeholder="Genre" />
                       </SelectTrigger>
@@ -1041,7 +1086,7 @@ const Index = () => {
         />
       )}
 
-      <Dialog open={isSettingsOpen} onOpenChange={(open) => { setIsSettingsOpen(open); if (open) setNewUsername(user?.username || ""); }}>
+      <Dialog open={isSettingsOpen} onOpenChange={(open) => { setIsSettingsOpen(open); if (open) { setNewUsername(user?.username || ""); setRemCustomize(readRemCustomization()); } }}>
         <DialogContent className="sm:max-w-md bg-card/95 backdrop-blur-xl border-border/50 shadow-neon">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1153,6 +1198,98 @@ const Index = () => {
                 </Select>
               </div>
             </div>
+
+            {isRemTheme && (
+              <div className="space-y-4">
+                <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Customize Rem</h4>
+                <div className="p-4 rounded-xl border border-border/50 bg-background/50 holo-glass space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8"
+                      onClick={() => saveRemCustomize(DEFAULT_REM_CUSTOMIZATION)}
+                    >
+                      Default
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8"
+                      onClick={() =>
+                        saveRemCustomize({
+                          ...DEFAULT_REM_CUSTOMIZATION,
+                          showGif: false,
+                          showEyes: false,
+                          sizeMode: "small",
+                        })
+                      }
+                    >
+                      Minimal
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {[
+                      { key: "showCharacter", label: "Show Rem" },
+                      { key: "showGif", label: "Show GIF" },
+                      { key: "showEyes", label: "Show Eyes" },
+                      { key: "showSnow", label: "Show Snow" },
+                      { key: "draggable", label: "Draggable" },
+                    ].map((item) => (
+                      <label key={item.key} className="flex items-center gap-2 text-foreground/90">
+                        <input
+                          type="checkbox"
+                          checked={remCustomize[item.key as keyof RemCustomization] as boolean}
+                          onChange={(event) =>
+                            saveRemCustomize({
+                              ...remCustomize,
+                              [item.key]: event.target.checked,
+                            } as RemCustomization)
+                          }
+                        />
+                        {item.label}
+                      </label>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2">
+                    <Select
+                      value={remCustomize.sizeMode}
+                      onValueChange={(value: "small" | "normal") =>
+                        saveRemCustomize({ ...remCustomize, sizeMode: value })
+                      }
+                    >
+                      <SelectTrigger className="h-8 w-36 text-xs">
+                        <SelectValue placeholder="Rem size" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="small">Small widgets</SelectItem>
+                        <SelectItem value="normal">Normal widgets</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8"
+                      onClick={() => {
+                        ["rem-gif", "rem-eyes", "rem-main"].forEach((k) =>
+                          localStorage.removeItem(`anicircle-rem-pos-${k}`),
+                        );
+                        window.dispatchEvent(new Event("rem-reset-layout"));
+                        window.dispatchEvent(new Event("rem-customize-change"));
+                        toast.success("Rem widget layout reset");
+                      }}
+                    >
+                      Reset Layout
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>

@@ -36,7 +36,7 @@
     --input: 45 64% 52%;
     --ring: 45 64% 52%;
 
-    --radius: 0.125rem;
+    --radius: 0.75rem;
 
     /* Derived primary shades (updated by theme system) */
     --primary-light: 45 64% 62%;
@@ -172,7 +172,7 @@
     @apply h-px w-12 bg-primary/60;
   }
   .deco-card {
-    @apply relative border border-primary/40 bg-card/90 rounded-none;
+    @apply relative border border-primary/40 bg-card/90 rounded-xl;
     box-shadow: var(--shadow-card);
   }
   .deco-corners::before,
@@ -515,7 +515,7 @@
   }
 
   .premium-section {
-    @apply premium-shell deco-corners rounded-none;
+    @apply premium-shell deco-corners rounded-xl;
   }
 
   .interactive-lift {
@@ -530,12 +530,249 @@
   }
 }
 
+/* Unified soft geometry across all themes */
+html {
+  --radius: 0.9rem;
+}
+
+html .rounded-none {
+  border-radius: calc(var(--radius) - 2px) !important;
+}
+
+html .deco-corners::before,
+html .deco-corners::after {
+  display: none !important;
+  content: none !important;
+}
+
+html .premium-shell,
+html .premium-section,
+html .deco-card,
+html .holo-glass,
+html .glass,
+html .glass-light {
+  border-radius: calc(var(--radius) + 2px) !important;
+}
+
+html button,
+html [role="button"],
+html input,
+html textarea,
+html [role="tab"],
+html [role="combobox"],
+html [role="dialog"],
+html [role="menu"],
+html [role="listbox"] {
+  border-radius: var(--radius);
+}
+
 /* ── Rem theme — snowfall animation ── */
 @keyframes rem-snowfall {
   0%   { transform: translateY(-30px) rotate(0deg);   opacity: 0; }
   6%   { opacity: 1; }
   94%  { opacity: 1; }
   100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+}
+
+/* ── Full Rem UI skin (enabled only for Rem theme) ── */
+html[data-theme-name="Rem"] {
+  --background: 222 64% 8%;
+  --foreground: 210 95% 96%;
+  --card: 221 49% 12%;
+  --card-foreground: 210 95% 96%;
+  --popover: 222 58% 10%;
+  --popover-foreground: 210 95% 96%;
+  --secondary: 225 41% 18%;
+  --secondary-foreground: 210 95% 96%;
+  --muted: 222 28% 16%;
+  --muted-foreground: 214 43% 76%;
+  --border: 210 74% 62%;
+  --input: 210 74% 62%;
+  --ring: 210 90% 72%;
+  --gradient-card: linear-gradient(180deg, hsl(223 47% 14%), hsl(223 44% 11%));
+  --gradient-hero: linear-gradient(135deg, hsl(210 90% 66% / 0.14), hsl(226 80% 70% / 0.09));
+  --shadow-card: 0 8px 28px hsl(220 40% 5% / 0.65);
+  --shadow-glow: 0 0 32px hsl(209 90% 66% / 0.2), 0 0 64px hsl(220 85% 70% / 0.08);
+}
+
+html[data-theme-name="Rem"] body {
+  background-image:
+    radial-gradient(circle at 14% 8%, hsl(206 92% 74% / 0.2) 0%, transparent 28%),
+    radial-gradient(circle at 88% 6%, hsl(228 84% 76% / 0.14) 0%, transparent 30%),
+    linear-gradient(180deg, hsl(222 58% 8%), hsl(222 55% 6%));
+}
+
+html[data-theme-name="Rem"] .premium-shell,
+html[data-theme-name="Rem"] .premium-section,
+html[data-theme-name="Rem"] .deco-card,
+html[data-theme-name="Rem"] .holo-glass,
+html[data-theme-name="Rem"] .glass,
+html[data-theme-name="Rem"] .glass-light {
+  border-color: hsl(210 80% 68% / 0.35) !important;
+  background: linear-gradient(160deg, hsl(222 44% 14% / 0.9), hsl(224 38% 10% / 0.92)) !important;
+  box-shadow:
+    0 10px 30px hsl(220 62% 3% / 0.5),
+    0 0 24px hsl(210 85% 68% / 0.12),
+    inset 0 1px 0 hsl(210 100% 94% / 0.12) !important;
+}
+
+html[data-theme-name="Rem"] .header-accent-strip {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    hsl(204 92% 74% / 0.9) 24%,
+    hsl(223 84% 76% / 0.95) 50%,
+    hsl(204 92% 74% / 0.9) 76%,
+    transparent 100%
+  );
+  opacity: 0.95;
+}
+
+html[data-theme-name="Rem"] [role="tablist"] {
+  border-color: hsl(210 74% 62% / 0.45) !important;
+  box-shadow: 0 0 24px hsl(210 85% 66% / 0.14) !important;
+}
+
+html[data-theme-name="Rem"] [role="tab"] {
+  color: hsl(214 52% 84%) !important;
+}
+
+html[data-theme-name="Rem"] [role="tab"][data-state="active"] {
+  background: linear-gradient(135deg, hsl(209 84% 66%), hsl(223 82% 72%)) !important;
+  color: hsl(223 58% 8%) !important;
+  border-color: hsl(209 92% 80% / 0.75) !important;
+  box-shadow: 0 0 18px hsl(210 84% 68% / 0.32) !important;
+}
+
+html[data-theme-name="Rem"] input[type="text"],
+html[data-theme-name="Rem"] input[type="email"],
+html[data-theme-name="Rem"] input[type="password"],
+html[data-theme-name="Rem"] [role="combobox"] {
+  border-color: hsl(210 72% 66% / 0.45) !important;
+  background: hsl(222 40% 10% / 0.85) !important;
+  color: hsl(210 95% 96%) !important;
+  box-shadow: inset 0 0 0 1px hsl(210 78% 64% / 0.12);
+}
+
+html[data-theme-name="Rem"] input::placeholder {
+  color: hsl(214 38% 72% / 0.7) !important;
+}
+
+html[data-theme-name="Rem"] button {
+  transition: border-color 180ms ease, box-shadow 220ms ease, background-color 180ms ease;
+}
+
+html[data-theme-name="Rem"] button:hover {
+  border-color: hsl(210 84% 72% / 0.6);
+  box-shadow: 0 0 16px hsl(210 84% 70% / 0.15);
+}
+
+html[data-theme-name="Rem"] .rem-ui .rem-nav {
+  border-bottom-color: hsl(210 80% 68% / 0.4) !important;
+  background: linear-gradient(180deg, hsl(223 48% 14% / 0.94), hsl(223 46% 10% / 0.9)) !important;
+  box-shadow:
+    0 8px 26px hsl(220 70% 2% / 0.45),
+    inset 0 1px 0 hsl(210 100% 95% / 0.12);
+}
+
+html[data-theme-name="Rem"] .rem-ui .rem-nav-inner {
+  border: 1px solid hsl(210 80% 72% / 0.25);
+  padding: 0.35rem 0.5rem;
+  background: linear-gradient(120deg, hsl(223 40% 15% / 0.55), hsl(223 36% 10% / 0.35));
+  border-radius: 14px;
+}
+
+html[data-theme-name="Rem"] .rem-ui .rem-top-actions button {
+  border-color: hsl(210 72% 68% / 0.2) !important;
+  background: hsl(223 36% 12% / 0.4) !important;
+  color: hsl(210 95% 96%) !important;
+  box-shadow: none !important;
+}
+
+html[data-theme-name="Rem"] .rem-ui .rem-tabs-shell {
+  border-color: hsl(210 84% 74% / 0.36) !important;
+  background: linear-gradient(145deg, hsl(223 42% 15% / 0.9), hsl(224 36% 11% / 0.88)) !important;
+  border-radius: 14px !important;
+}
+
+html[data-theme-name="Rem"] .rem-ui .rem-tab-trigger {
+  border-color: transparent !important;
+  color: hsl(213 46% 82%) !important;
+  border-radius: 10px !important;
+}
+
+html[data-theme-name="Rem"] .rem-ui .rem-tab-trigger[data-state="active"] {
+  background: linear-gradient(135deg, hsl(204 88% 72%), hsl(222 82% 76%)) !important;
+  border-color: hsl(205 100% 90% / 0.65) !important;
+  color: hsl(224 62% 10%) !important;
+  box-shadow: 0 0 20px hsl(210 92% 74% / 0.35) !important;
+}
+
+html[data-theme-name="Rem"] .rem-ui .rem-filter-shell {
+  border-color: hsl(209 74% 68% / 0.35) !important;
+  background: linear-gradient(160deg, hsl(223 43% 14% / 0.95), hsl(225 38% 10% / 0.94)) !important;
+  border-radius: 14px !important;
+}
+
+html[data-theme-name="Rem"] .rem-ui .rem-search,
+html[data-theme-name="Rem"] .rem-ui .rem-control {
+  border-color: hsl(210 84% 72% / 0.42) !important;
+  background: linear-gradient(165deg, hsl(223 34% 13% / 0.95), hsl(224 31% 10% / 0.95)) !important;
+  color: hsl(210 96% 96%) !important;
+  box-shadow: inset 0 1px 0 hsl(208 100% 96% / 0.12);
+  border-radius: 10px !important;
+}
+
+html[data-theme-name="Rem"] .rem-ui .rem-search:focus,
+html[data-theme-name="Rem"] .rem-ui .rem-control:focus-within {
+  border-color: hsl(204 96% 76% / 0.78) !important;
+  box-shadow:
+    0 0 0 1px hsl(205 100% 88% / 0.35),
+    0 0 18px hsl(208 90% 72% / 0.22);
+}
+
+html[data-theme-name="Rem"] .rem-ui .rem-primary-btn {
+  background: linear-gradient(135deg, hsl(204 88% 72%), hsl(222 82% 76%)) !important;
+  color: hsl(224 62% 10%) !important;
+  border: 1px solid hsl(206 100% 92% / 0.7) !important;
+  box-shadow:
+    0 0 20px hsl(209 100% 76% / 0.3),
+    inset 0 1px 0 hsl(207 100% 96% / 0.45);
+  border-radius: 12px !important;
+}
+
+/* One consistent Rem shape language across list UI */
+html[data-theme-name="Rem"] .rem-ui .premium-shell,
+html[data-theme-name="Rem"] .rem-ui .premium-section,
+html[data-theme-name="Rem"] .rem-ui .deco-card,
+html[data-theme-name="Rem"] .rem-ui .holo-glass,
+html[data-theme-name="Rem"] .rem-ui .glass,
+html[data-theme-name="Rem"] .rem-ui .glass-light,
+html[data-theme-name="Rem"] .rem-ui [role="dialog"],
+html[data-theme-name="Rem"] .rem-ui [role="menu"],
+html[data-theme-name="Rem"] .rem-ui [role="listbox"] {
+  border-radius: 14px !important;
+}
+
+html[data-theme-name="Rem"] .rem-ui button,
+html[data-theme-name="Rem"] .rem-ui [role="button"],
+html[data-theme-name="Rem"] .rem-ui input,
+html[data-theme-name="Rem"] .rem-ui textarea,
+html[data-theme-name="Rem"] .rem-ui [role="tab"],
+html[data-theme-name="Rem"] .rem-ui [role="combobox"] {
+  border-radius: 10px !important;
+}
+
+/* Neutralize legacy sharp-corner utility for Rem mode */
+html[data-theme-name="Rem"] .rem-ui .rounded-none {
+  border-radius: 10px !important;
+}
+
+/* Remove old art-deco corner brackets in Rem mode */
+html[data-theme-name="Rem"] .rem-ui .deco-corners::before,
+html[data-theme-name="Rem"] .rem-ui .deco-corners::after {
+  display: none !important;
+  content: none !important;
 }
 
 @media (prefers-reduced-transparency: reduce) {
