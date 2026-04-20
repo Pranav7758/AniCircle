@@ -24,6 +24,7 @@ import Footer from "@/components/Footer";
 import SuggestionPopup from "@/components/SuggestionPopup";
 import FloatingSocialBar from "@/components/FloatingSocialBar";
 import ThemePicker from "@/components/ThemePicker";
+import { useTheme } from "@/hooks/use-theme";
 
 interface Anime {
   id: string;
@@ -106,6 +107,8 @@ const StatsBar = ({ animeList }: { animeList: Anime[] }) => {
 const Index = () => {
   const [, setLocation] = useLocation();
   const { user, logout, updateUsername } = useAuth();
+  const { theme } = useTheme();
+  const isRemTheme = theme.name === "Rem";
   const [animeList, setAnimeList] = useState<Anime[]>([]);
   const [filteredAnimeList, setFilteredAnimeList] = useState<Anime[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -595,9 +598,24 @@ const Index = () => {
               <div className="relative">
                 <div className="absolute inset-0 rounded-full bg-primary/25 blur-md animate-glow-pulse" />
                 <img src="/logo.png" alt="AniCircle" className="relative h-8 w-8 sm:h-9 sm:w-9 rounded-full shadow-neon" />
+                {isRemTheme && (
+                  <span
+                    className="absolute -top-1.5 -right-1.5 text-sm leading-none select-none animate-bounce"
+                    title="Rem theme active 💙"
+                    style={{ filter: "drop-shadow(0 0 4px rgba(147,197,253,0.9))" }}
+                  >
+                    🔱
+                  </span>
+                )}
               </div>
               <div className="flex items-baseline gap-2">
                 <h2 className="text-lg sm:text-xl font-black text-gradient">AniCircle</h2>
+                {isRemTheme && (
+                  <span className="hidden sm:inline text-[9px] tracking-[0.18em] font-semibold animate-pulse"
+                    style={{ color: "rgba(147,197,253,0.6)" }}>
+                    × REM
+                  </span>
+                )}
                 {user?.email && (
                   <span className="hidden md:inline text-[10px] text-muted-foreground/50 font-normal">
                     {user.email.split("@")[0]}
@@ -855,30 +873,76 @@ const Index = () => {
             </div>
 
             {filteredAnimeList.length === 0 ? (
-              <div className="premium-section flex flex-col items-center justify-center py-24 gap-5 animate-fade-in">
-                <div className="relative">
-                  <div className="w-24 h-24 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
-                    <span className="text-4xl opacity-60">📺</span>
-                  </div>
-                  <div className="absolute -top-1 -right-1 w-7 h-7 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center">
-                    <Sparkles className="w-3.5 h-3.5 text-primary" />
-                  </div>
-                </div>
-                <div className="text-center space-y-2 max-w-xs">
-                  <h2 className="text-xl font-bold text-foreground">
-                    {searchQuery || statusFilter !== "all" || rankingFilter !== "all" ? "No results found" : "Your list is empty"}
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    {searchQuery || statusFilter !== "all" || rankingFilter !== "all"
-                      ? "Try adjusting your search or filters"
-                      : "Start building your anime collection — add your first title!"}
-                  </p>
-                </div>
-                {!searchQuery && statusFilter === "all" && rankingFilter === "all" && (
-                  <Button onClick={() => setIsAddDialogOpen(true)}
-                    className="gradient-primary shadow-neon rounded-xl text-sm font-semibold px-6">
-                    <Plus className="w-4 h-4 mr-2" /> Add Your First Anime
-                  </Button>
+              <div className="premium-section flex flex-col items-center justify-center py-20 gap-5 animate-fade-in overflow-hidden relative">
+                {isRemTheme && !searchQuery && statusFilter === "all" && rankingFilter === "all" ? (
+                  /* ── Rem special empty state ── */
+                  <>
+                    <div className="relative">
+                      <div className="w-28 h-28 rounded-full overflow-hidden border-2 mx-auto"
+                        style={{ borderColor: "rgba(100,160,255,0.5)", boxShadow: "0 0 30px rgba(80,140,255,0.3), 0 0 60px rgba(80,140,255,0.12)" }}>
+                        <img
+                          src="https://static.wikia.nocookie.net/rezero/images/4/4f/Rem_Anime.png"
+                          alt="Rem"
+                          className="w-full h-full object-cover"
+                          style={{ objectPosition: "top center" }}
+                          onError={(e) => {
+                            (e.currentTarget.parentElement as HTMLElement).innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:rgba(29,78,216,0.2);font-size:36px">💙</div>';
+                          }}
+                        />
+                      </div>
+                      <span className="absolute -bottom-1 right-0 text-xl"
+                        style={{ filter: "drop-shadow(0 0 6px rgba(147,197,253,0.9))" }}>❄</span>
+                    </div>
+                    <div className="text-center space-y-2 max-w-sm">
+                      <h2 className="text-xl font-bold" style={{ color: "#93c5fd", textShadow: "0 0 20px rgba(147,197,253,0.4)" }}>
+                        Your list is empty, Subaru
+                      </h2>
+                      <p className="text-sm italic" style={{ color: "rgba(147,197,253,0.5)" }}>
+                        "Even if the world resets, I'll always be by your side… but first, add some anime!"
+                      </p>
+                      <p className="text-[10px] tracking-widest uppercase" style={{ color: "rgba(147,197,253,0.3)" }}>
+                        — Rem, Re:Zero
+                      </p>
+                    </div>
+                    <Button onClick={() => setIsAddDialogOpen(true)}
+                      className="text-sm font-semibold px-6 rounded-none"
+                      style={{
+                        background: "rgba(29,78,216,0.8)",
+                        border: "1px solid rgba(100,160,255,0.45)",
+                        color: "#93c5fd",
+                        boxShadow: "0 0 20px rgba(80,140,255,0.25)",
+                      }}>
+                      <Plus className="w-4 h-4 mr-2" /> Add Your First Anime ❄
+                    </Button>
+                  </>
+                ) : (
+                  /* ── Default empty state ── */
+                  <>
+                    <div className="relative">
+                      <div className="w-24 h-24 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
+                        <span className="text-4xl opacity-60">📺</span>
+                      </div>
+                      <div className="absolute -top-1 -right-1 w-7 h-7 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center">
+                        <Sparkles className="w-3.5 h-3.5 text-primary" />
+                      </div>
+                    </div>
+                    <div className="text-center space-y-2 max-w-xs">
+                      <h2 className="text-xl font-bold text-foreground">
+                        {searchQuery || statusFilter !== "all" || rankingFilter !== "all" ? "No results found" : "Your list is empty"}
+                      </h2>
+                      <p className="text-sm text-muted-foreground">
+                        {searchQuery || statusFilter !== "all" || rankingFilter !== "all"
+                          ? "Try adjusting your search or filters"
+                          : "Start building your anime collection — add your first title!"}
+                      </p>
+                    </div>
+                    {!searchQuery && statusFilter === "all" && rankingFilter === "all" && (
+                      <Button onClick={() => setIsAddDialogOpen(true)}
+                        className="gradient-primary shadow-neon rounded-xl text-sm font-semibold px-6">
+                        <Plus className="w-4 h-4 mr-2" /> Add Your First Anime
+                      </Button>
+                    )}
+                  </>
                 )}
               </div>
             ) : (

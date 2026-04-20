@@ -12,6 +12,7 @@ import NotFound from "./pages/NotFound";
 import PublicProfile from "./pages/PublicProfile";
 import FeedbackAdmin from "./pages/FeedbackAdmin";
 import { Loader2 } from "lucide-react";
+import RemEffects from "@/components/RemEffects";
 
 function ThemeInitializer() {
   useTheme();
@@ -85,6 +86,7 @@ const App = () => (
     <AuthProvider>
       <TooltipProvider>
         <ThemeInitializer />
+        <RemEffects />
         <Toaster />
         <Sonner />
         <Router />

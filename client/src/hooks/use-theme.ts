@@ -17,6 +17,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   { name: "Orange",  h: 25,  s: 90, l: 55, fg: "0 0% 4%" },
   { name: "Cyan",    h: 185, s: 80, l: 48, fg: "0 0% 4%" },
   { name: "Red",     h: 0,   s: 84, l: 60, fg: "0 0% 100%" },
+  { name: "Rem",     h: 210, s: 80, l: 56, fg: "0 0% 100%" },
 ];
 
 const STORAGE_KEY = "anicircle-theme";

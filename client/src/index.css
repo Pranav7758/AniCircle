@@ -530,6 +530,14 @@
   }
 }
 
+/* ── Rem theme — snowfall animation ── */
+@keyframes rem-snowfall {
+  0%   { transform: translateY(-30px) rotate(0deg);   opacity: 0; }
+  6%   { opacity: 1; }
+  94%  { opacity: 1; }
+  100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+}
+
 @media (prefers-reduced-transparency: reduce) {
   .glass,
   .glass-light,
