@@ -18,6 +18,7 @@ interface AuthContextType {
   register: (email: string, password: string, username: string) => Promise<void>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
+  verifyRecoveryCode: (email: string, code: string) => Promise<void>;
   updatePassword: (newPassword: string) => Promise<void>;
   updateUsername: (newUsername: string) => Promise<void>;
   clearRecoveryMode: () => void;
@@ -243,6 +244,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const verifyRecoveryCode = async (email: string, code: string) => {
+    const token = code.trim();
+    if (!token) {
+      throw new Error("Recovery code is required");
+    }
+
+    const { data, error } = await supabase.auth.verifyOtp({
+      email: email.trim(),
+      token,
+      type: "recovery",
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (data?.session) {
+      setSession(data.session);
+      setIsRecoveryMode(true);
+      await fetchProfile(
+        data.session.user.id,
+        data.session.user.email,
+        data.session.user.user_metadata?.full_name,
+      );
+    }
+  };
+
   const loginWithGoogle = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -291,7 +319,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, isRecoveryMode, login, register, logout, resetPassword, updatePassword, updateUsername, clearRecoveryMode, loginWithGoogle, session }}>
+    <AuthContext.Provider value={{ user, isLoading, isRecoveryMode, login, register, logout, resetPassword, verifyRecoveryCode, updatePassword, updateUsername, clearRecoveryMode, loginWithGoogle, session }}>
       {children}
     </AuthContext.Provider>
   );

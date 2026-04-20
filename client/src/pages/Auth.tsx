@@ -6,11 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Mail, ArrowLeft, KeyRound, Star, Zap, Eye } from "lucide-react";
+import { Loader2, Mail, ArrowLeft, KeyRound, Star, Zap, Eye, EyeOff } from "lucide-react";
 
 const Auth = () => {
   const [, setLocation] = useLocation();
-  const { user, isLoading: authLoading, isRecoveryMode, login, register, resetPassword, updatePassword, clearRecoveryMode, loginWithGoogle } = useAuth();
+  const { user, isLoading: authLoading, isRecoveryMode, login, register, resetPassword, verifyRecoveryCode, updatePassword, clearRecoveryMode, loginWithGoogle } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [email, setEmail] = useState("");
@@ -18,13 +18,18 @@ const Auth = () => {
   const [username, setUsername] = useState("");
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotEmail, setForgotEmail] = useState("");
-  const [resetSent, setResetSent] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState("");
+  const [forgotStep, setForgotStep] = useState<"request" | "verify" | "update" | "success">("request");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showSignInPassword, setShowSignInPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
-    if (user && !isRecoveryMode) setLocation("/");
-  }, [user, setLocation, isRecoveryMode]);
+    // Prevent redirect while the user is actively in forgot-password flow.
+    if (user && !isRecoveryMode && !showForgotPassword) setLocation("/");
+  }, [user, setLocation, isRecoveryMode, showForgotPassword]);
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,10 +75,34 @@ const Auth = () => {
     try {
       if (!forgotEmail.trim()) { toast.error("Please enter your email"); setIsLoading(false); return; }
       await resetPassword(forgotEmail.trim());
-      setResetSent(true);
-      toast.success("Reset email sent!");
+      setForgotStep("verify");
+      toast.success("Recovery code sent to your email!");
     } catch (error: any) {
       toast.error(error.message || "Failed to send reset email");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerifyRecoveryCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    try {
+      if (!forgotEmail.trim()) {
+        toast.error("Please enter your email");
+        setIsLoading(false);
+        return;
+      }
+      if (!recoveryCode.trim()) {
+        toast.error("Please enter the recovery code");
+        setIsLoading(false);
+        return;
+      }
+      await verifyRecoveryCode(forgotEmail.trim(), recoveryCode.trim());
+      setForgotStep("update");
+      toast.success("Code verified. Set your new password.");
+    } catch (error: any) {
+      toast.error(error.message || "Invalid or expired code");
     } finally {
       setIsLoading(false);
     }
@@ -86,10 +115,10 @@ const Auth = () => {
       if (newPassword.length < 6) { toast.error("Password must be at least 6 characters"); setIsLoading(false); return; }
       if (newPassword !== confirmPassword) { toast.error("Passwords do not match"); setIsLoading(false); return; }
       await updatePassword(newPassword);
-      toast.success("Password updated!");
+      toast.success("Password reset successful!");
       clearRecoveryMode();
+      setForgotStep("success");
       setNewPassword(""); setConfirmPassword("");
-      setLocation("/");
     } catch (error: any) {
       toast.error(error.message || "Failed to update password");
     } finally {
@@ -114,71 +143,109 @@ const Auth = () => {
   }
 
   return (
-    <div className="min-h-screen flex overflow-hidden bg-background aurora-bg">
+    <div className="min-h-screen flex overflow-hidden bg-background">
 
-      {/* ── Floating orbs ── */}
+      {/* ── Global background treatment ── */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="orb orb-purple absolute w-96 h-96 -top-20 -left-20 animate-float" />
-        <div className="orb orb-blue absolute w-80 h-80 bottom-0 right-0 animate-float-delayed" />
-        <div className="orb orb-pink absolute w-64 h-64 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-float-slow" />
-
-        {/* Grid pattern overlay */}
-        <div className="absolute inset-0 opacity-[0.03]"
+        {/* Subtle grid */}
+        <div className="absolute inset-0 opacity-[0.035]"
           style={{
-            backgroundImage: `linear-gradient(hsl(268 88% 62% / 0.5) 1px, transparent 1px),
-                              linear-gradient(90deg, hsl(268 88% 62% / 0.5) 1px, transparent 1px)`,
-            backgroundSize: '60px 60px',
+            backgroundImage: `repeating-linear-gradient(45deg, hsl(var(--primary) / 0.4) 0 1px, transparent 1px 14px),
+                              repeating-linear-gradient(-45deg, hsl(var(--primary) / 0.25) 0 1px, transparent 1px 14px)`,
           }}
         />
+        {/* Ambient glow blobs */}
+        <div className="absolute -top-32 -left-32 w-[500px] h-[500px] orb orb-purple opacity-20" />
+        <div className="absolute bottom-0 right-0 w-[400px] h-[400px] orb orb-blue opacity-15" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full opacity-[0.04] border border-primary/30" />
+
+        {/* Floating stars */}
+        {[
+          { size: 2, top: "12%", left: "8%", delay: "0s", dur: "4s" },
+          { size: 1.5, top: "28%", left: "22%", delay: "1.2s", dur: "5s" },
+          { size: 2.5, top: "65%", left: "5%", delay: "0.6s", dur: "6s" },
+          { size: 1, top: "80%", left: "18%", delay: "2s", dur: "4.5s" },
+          { size: 2, top: "45%", left: "35%", delay: "1.8s", dur: "5.5s" },
+          { size: 1.5, top: "15%", right: "10%", delay: "0.3s", dur: "5s" },
+          { size: 2, top: "55%", right: "8%", delay: "1.5s", dur: "4s" },
+          { size: 1, top: "75%", right: "25%", delay: "0.9s", dur: "6s" },
+          { size: 3, top: "35%", right: "40%", delay: "2.5s", dur: "7s" },
+        ].map((s, i) => (
+          <div
+            key={i}
+            className="absolute rounded-full bg-primary/60"
+            style={{
+              width: `${s.size}px`,
+              height: `${s.size}px`,
+              top: s.top,
+              left: (s as any).left,
+              right: (s as any).right,
+              animation: `glow-pulse ${s.dur} ease-in-out ${s.delay} infinite, float ${parseFloat(s.dur) + 2}s ease-in-out ${s.delay} infinite`,
+              boxShadow: `0 0 ${s.size * 3}px hsl(var(--primary) / 0.8)`,
+            }}
+          />
+        ))}
       </div>
 
       {/* ── Left panel (desktop only) ── */}
       <div className="hidden lg:flex lg:w-[52%] relative flex-col items-center justify-center p-12 overflow-hidden">
 
+        {/* Left panel ambient bg */}
+        <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.04] via-transparent to-violet-900/[0.06]" />
+        </div>
+
         {/* Decorative circles */}
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full border border-primary/8" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[380px] h-[380px] rounded-full border border-primary/12" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[260px] h-[260px] rounded-full border border-primary/20" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[520px] h-[520px] rounded-full border border-primary/8" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[390px] h-[390px] rounded-full border border-primary/12" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[270px] h-[270px] rounded-full border border-primary/22" />
           {/* Orbiting dot */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[380px] h-[380px]">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[390px] h-[390px]">
             <div className="animate-orbit absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-primary shadow-neon" />
+          </div>
+          {/* Second orbiting dot, opposite direction */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[270px] h-[270px]" style={{ animation: "orbit 14s linear infinite reverse" }}>
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-violet-400/80" style={{ boxShadow: "0 0 8px hsl(268 88% 62% / 0.6)" }} />
           </div>
         </div>
 
         {/* Content */}
-        <div className="relative z-10 text-center space-y-8 max-w-md">
-          <div className="flex flex-col items-center gap-4">
+          <div className="relative z-10 text-center space-y-8 max-w-md deco-card deco-corners p-10" style={{ background: "hsl(0 0% 5% / 0.85)", backdropFilter: "blur(20px)" }}>
+          <div className="flex flex-col items-center gap-5">
             <div className="relative">
-              <div className="absolute inset-0 rounded-full bg-primary/20 blur-xl animate-glow-pulse" />
-              <img src="/logo.png" alt="AniCircle" className="relative h-24 w-24 rounded-full shadow-neon animate-neon-flicker" />
+              <div className="absolute inset-0 rounded-full bg-primary/30 blur-2xl animate-glow-pulse scale-150" />
+              <div className="absolute inset-0 rounded-full bg-violet-500/15 blur-xl animate-float" />
+              <img src="/logo.png" alt="AniCircle" className="relative h-28 w-28 rounded-full shadow-neon animate-neon-flicker ring-2 ring-primary/30 ring-offset-2 ring-offset-background" />
             </div>
             <div>
-              <h1 className="text-6xl font-black text-gradient mb-2">AniCircle</h1>
-              <p className="text-lg text-muted-foreground font-light tracking-wide">
-                Your anime universe, organized.
-              </p>
+              <h1 className="text-6xl font-black text-gradient mb-3 tracking-wider">AniCircle</h1>
+              <div className="deco-divider justify-center mb-2">
+                <p className="text-sm text-muted-foreground/80 font-light tracking-[0.2em] uppercase">
+                  Your Anime Universe
+                </p>
+              </div>
             </div>
           </div>
 
           {/* Feature pills */}
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2.5">
             {[
-              { icon: Eye, label: "Track every episode with real-time progress" },
-              { icon: Zap, label: "Radar — never miss a sequel or new season" },
-              { icon: Star, label: "Rate and rank your all-time favourites" },
-            ].map(({ icon: Icon, label }, i) => (
-              <div key={label} className="flex items-center gap-3 glass-light rounded-xl px-4 py-3 border border-border/30 animate-stagger-in" style={{ animationDelay: `${i * 120 + 200}ms` }}>
-                <div className="shrink-0 w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center">
-                  <Icon className="w-4 h-4 text-primary" />
+              { icon: Eye, label: "Track every episode with real-time progress", color: "text-violet-400", bg: "bg-violet-500/15 border-violet-500/35" },
+              { icon: Zap, label: "Radar — never miss a sequel or new season", color: "text-amber-400", bg: "bg-amber-500/15 border-amber-500/35" },
+              { icon: Star, label: "Rate and rank your all-time favourites", color: "text-primary", bg: "bg-primary/15 border-primary/35" },
+            ].map(({ icon: Icon, label, color, bg }, i) => (
+              <div key={label} className="flex items-center gap-3.5 rounded-none px-4 py-3.5 border border-primary/25 bg-card/50 animate-stagger-in group hover:border-primary/50 transition-all duration-200" style={{ animationDelay: `${i * 120 + 200}ms` }}>
+                <div className={`shrink-0 w-8 h-8 rounded-none flex items-center justify-center border ${bg}`}>
+                  <Icon className={`w-4 h-4 ${color}`} />
                 </div>
-                <span className="text-sm text-muted-foreground text-left">{label}</span>
+                <span className="text-sm text-muted-foreground/80 text-left group-hover:text-foreground transition-colors">{label}</span>
               </div>
             ))}
           </div>
 
-          <p className="text-xs text-muted-foreground/50 tracking-widest uppercase">
-            Built for anime lovers
+          <p className="text-[10px] text-muted-foreground/40 tracking-[0.3em] uppercase">
+            ✦ Built for Anime Lovers ✦
           </p>
         </div>
       </div>
@@ -197,52 +264,140 @@ const Auth = () => {
           </div>
 
           {/* Card */}
-          <div className="holo-glass rounded-2xl p-6 shadow-[0_24px_80px_-12px_hsl(268_88%_62%/0.25)] border-white/5 animate-scale-in">
+          <div className="deco-card deco-corners p-7 animate-scale-in" style={{ background: "hsl(0 0% 6% / 0.95)", backdropFilter: "blur(24px)", boxShadow: "0 24px 80px -12px hsl(var(--primary) / 0.25), 0 0 0 1px hsl(var(--primary) / 0.08)" }}>
 
             {isRecoveryMode ? (
               <div className="space-y-5">
                 <div className="text-center">
-                  <div className="w-14 h-14 bg-primary/15 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-primary/20">
+                  <div className="w-14 h-14 bg-primary/15 rounded-none flex items-center justify-center mx-auto mb-4 border border-primary/45">
                     <KeyRound className="h-7 w-7 text-primary" />
                   </div>
                   <h3 className="text-xl font-bold">Set New Password</h3>
                   <p className="text-sm text-muted-foreground mt-1">Enter your new password below</p>
                 </div>
                 <form onSubmit={handleUpdatePassword} className="space-y-4">
-                  <FormField label="New Password" id="new-password" type="password" value={newPassword} onChange={setNewPassword} disabled={isLoading} />
-                  <FormField label="Confirm Password" id="confirm-password" type="password" value={confirmPassword} onChange={setConfirmPassword} disabled={isLoading} />
+                  <PasswordField
+                    label="New Password"
+                    id="new-password"
+                    value={newPassword}
+                    onChange={setNewPassword}
+                    disabled={isLoading}
+                    showPassword={showNewPassword}
+                    onToggleShow={() => setShowNewPassword((v) => !v)}
+                  />
+                  <PasswordField
+                    label="Confirm Password"
+                    id="confirm-password"
+                    value={confirmPassword}
+                    onChange={setConfirmPassword}
+                    disabled={isLoading}
+                    showPassword={showConfirmPassword}
+                    onToggleShow={() => setShowConfirmPassword((v) => !v)}
+                  />
                   <SubmitButton isLoading={isLoading} loadingText="Updating..." text="Update Password" />
                 </form>
+                <p className="text-[11px] text-center text-muted-foreground/60">
+                  Opened from recovery link. For OTP flow, go back and use "Forgot?" then "I already have a code".
+                </p>
               </div>
 
             ) : showForgotPassword ? (
               <div className="space-y-4">
-                <button onClick={() => { setShowForgotPassword(false); setResetSent(false); setForgotEmail(""); }}
+                <button onClick={() => {
+                  setShowForgotPassword(false);
+                  setForgotStep("request");
+                  setForgotEmail("");
+                  setRecoveryCode("");
+                  setNewPassword("");
+                  setConfirmPassword("");
+                }}
                   className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-2">
                   <ArrowLeft className="h-4 w-4" /> Back to Sign In
                 </button>
 
-                {resetSent ? (
+                {forgotStep === "success" ? (
                   <div className="text-center space-y-4 py-4">
-                    <div className="w-14 h-14 bg-primary/15 rounded-2xl flex items-center justify-center mx-auto border border-primary/20">
+                    <div className="w-14 h-14 bg-primary/15 rounded-none flex items-center justify-center mx-auto border border-primary/45">
                       <Mail className="h-7 w-7 text-primary" />
                     </div>
-                    <h3 className="text-xl font-bold">Check Your Email</h3>
+                    <h3 className="text-xl font-bold">Password Reset Successful</h3>
                     <p className="text-sm text-muted-foreground">
-                      Reset link sent to <span className="text-foreground font-medium">{forgotEmail}</span>
+                      Your password has been updated. You can sign in now.
                     </p>
-                    <Button variant="outline" onClick={() => { setShowForgotPassword(false); setResetSent(false); setForgotEmail(""); }} className="w-full">
+                    <Button variant="outline" onClick={() => {
+                      setShowForgotPassword(false);
+                      setForgotStep("request");
+                      setForgotEmail("");
+                      setRecoveryCode("");
+                    }} className="w-full rounded-none">
                       Back to Sign In
                     </Button>
                   </div>
-                ) : (
+                ) : forgotStep === "request" ? (
                   <form onSubmit={handleForgotPassword} className="space-y-4">
                     <div>
                       <h3 className="text-xl font-bold">Forgot Password?</h3>
-                      <p className="text-sm text-muted-foreground mt-1">We'll send you a reset link</p>
+                      <p className="text-sm text-muted-foreground mt-1">Enter your email to receive a recovery code</p>
                     </div>
                     <FormField label="Email" id="forgot-email" type="email" value={forgotEmail} onChange={setForgotEmail} disabled={isLoading} placeholder="your@email.com" />
-                    <SubmitButton isLoading={isLoading} loadingText="Sending..." text="Send Reset Link" />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full rounded-none"
+                      onClick={() => setForgotStep("verify")}
+                      disabled={isLoading || !forgotEmail.trim()}
+                    >
+                      I already have a code
+                    </Button>
+                    <SubmitButton isLoading={isLoading} loadingText="Sending..." text="Send Recovery Code" />
+                  </form>
+                ) : forgotStep === "verify" ? (
+                  <form onSubmit={handleVerifyRecoveryCode} className="space-y-4">
+                    <div>
+                      <h3 className="text-xl font-bold">Verify Recovery Code</h3>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Enter the code sent to <span className="text-foreground font-medium">{forgotEmail}</span>
+                      </p>
+                    </div>
+                    <FormField label="Recovery Code" id="recovery-code" type="text" value={recoveryCode} onChange={setRecoveryCode} disabled={isLoading} placeholder="Enter code from Gmail" />
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full rounded-none"
+                        onClick={() => setForgotStep("request")}
+                        disabled={isLoading}
+                      >
+                        Change Email
+                      </Button>
+                      <SubmitButton isLoading={isLoading} loadingText="Verifying..." text="Verify Code" />
+                    </div>
+                  </form>
+                ) : (
+                  <form onSubmit={handleUpdatePassword} className="space-y-4">
+                    <div>
+                      <h3 className="text-xl font-bold">Set New Password</h3>
+                      <p className="text-sm text-muted-foreground mt-1">Create your new password</p>
+                    </div>
+                    <PasswordField
+                      label="New Password"
+                      id="forgot-new-password"
+                      value={newPassword}
+                      onChange={setNewPassword}
+                      disabled={isLoading}
+                      showPassword={showNewPassword}
+                      onToggleShow={() => setShowNewPassword((v) => !v)}
+                    />
+                    <PasswordField
+                      label="Confirm Password"
+                      id="forgot-confirm-password"
+                      value={confirmPassword}
+                      onChange={setConfirmPassword}
+                      disabled={isLoading}
+                      showPassword={showConfirmPassword}
+                      onToggleShow={() => setShowConfirmPassword((v) => !v)}
+                    />
+                    <SubmitButton isLoading={isLoading} loadingText="Updating..." text="Reset Password" />
                   </form>
                 )}
               </div>
@@ -257,7 +412,7 @@ const Auth = () => {
                 {/* Google */}
                 <Button
                   variant="outline"
-                  className="w-full mb-5 h-11 flex items-center justify-center gap-2.5 border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all"
+                  className="w-full mb-5 h-11 rounded-none flex items-center justify-center gap-2.5 border-primary/45 bg-card/40 hover:border-primary/70 hover:bg-primary/10 transition-all"
                   onClick={handleGoogleSignIn}
                   disabled={isGoogleLoading || isLoading}
                 >
@@ -282,13 +437,13 @@ const Auth = () => {
                 </div>
 
                 <Tabs defaultValue="signin" className="w-full">
-                  <TabsList className="w-full grid grid-cols-2 h-10 mb-5 bg-muted/50 border border-border/30 rounded-xl p-0.5">
+                  <TabsList className="w-full grid grid-cols-2 h-10 mb-5 bg-muted/50 border border-primary/35 rounded-none p-0.5">
                     <TabsTrigger value="signin" data-testid="tab-signin"
-                      className="rounded-[10px] text-sm font-medium data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon transition-all">
+                      className="rounded-none text-sm font-medium data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon transition-all">
                       Sign In
                     </TabsTrigger>
                     <TabsTrigger value="signup" data-testid="tab-signup"
-                      className="rounded-[10px] text-sm font-medium data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon transition-all">
+                      className="rounded-none text-sm font-medium data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon transition-all">
                       Sign Up
                     </TabsTrigger>
                   </TabsList>
@@ -304,9 +459,19 @@ const Auth = () => {
                             Forgot?
                           </button>
                         </div>
-                        <Input id="signin-password" data-testid="input-signin-password" type="password" placeholder="••••••••"
-                          value={password} onChange={(e) => setPassword(e.target.value)} required disabled={isLoading}
-                          className="h-11 bg-muted/40 border-border/50 focus:border-primary/50 rounded-xl" />
+                        <div className="relative">
+                          <Input id="signin-password" data-testid="input-signin-password" type={showSignInPassword ? "text" : "password"} placeholder="••••••••"
+                            value={password} onChange={(e) => setPassword(e.target.value)} required disabled={isLoading}
+                            className="h-11 bg-muted/40 border-border/50 focus:border-primary/50 rounded-xl pr-10" />
+                          <button
+                            type="button"
+                            onClick={() => setShowSignInPassword((v) => !v)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-foreground transition-colors"
+                            aria-label={showSignInPassword ? "Hide password" : "Show password"}
+                          >
+                            {showSignInPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </button>
+                        </div>
                       </div>
                       <SubmitButton isLoading={isLoading} loadingText="Signing in..." text="Sign In" testId="button-signin" />
                     </form>
@@ -346,6 +511,43 @@ const FormField = ({
     <Input id={id} data-testid={testId} type={type} placeholder={placeholder} value={value}
       onChange={(e) => onChange(e.target.value)} required disabled={disabled} minLength={minLength}
       className="h-11 bg-muted/40 border-border/50 focus:border-primary/50 rounded-xl" />
+  </div>
+);
+
+const PasswordField = ({
+  label, id, value, onChange, disabled, showPassword, onToggleShow,
+}: {
+  label: string;
+  id: string;
+  value: string;
+  onChange: (v: string) => void;
+  disabled: boolean;
+  showPassword: boolean;
+  onToggleShow: () => void;
+}) => (
+  <div className="space-y-1.5">
+    <Label htmlFor={id} className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</Label>
+    <div className="relative">
+      <Input
+        id={id}
+        type={showPassword ? "text" : "password"}
+        placeholder="••••••••"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        required
+        disabled={disabled}
+        minLength={6}
+        className="h-11 bg-muted/40 border-border/50 focus:border-primary/50 rounded-xl pr-10"
+      />
+      <button
+        type="button"
+        onClick={onToggleShow}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-foreground transition-colors"
+        aria-label={showPassword ? "Hide password" : "Show password"}
+      >
+        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
+    </div>
   </div>
 );
 

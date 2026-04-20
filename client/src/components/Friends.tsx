@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { getFriends, getFriendRequests, getFriendAnimeList, sendFriendRequest, updateFriendStatus, getProfileByShortId, getFriendsActivity, getFriendsWatchPresence, getFriendsUserPresence, type WatchPresenceData, type UserPresenceData } from "@/services/supabaseData";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +38,8 @@ interface Anime {
   malId: number | null;
   ranking: number | null;
   isHentai: boolean | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
 
 const Friends = ({ currentUserId }: FriendsProps) => {
@@ -54,6 +56,7 @@ const Friends = ({ currentUserId }: FriendsProps) => {
   const [friendStatusFilter, setFriendStatusFilter] = useState<string>("all");
   const [friendHentaiFilter, setFriendHentaiFilter] = useState<string>("hide");
   const [friendRankingFilter, setFriendRankingFilter] = useState<string>("all");
+  const [friendSortBy, setFriendSortBy] = useState<string>(() => localStorage.getItem("friendAnimeSortBy") || "default");
   const [activityFeed, setActivityFeed] = useState<any[]>([]);
   const [loadingActivity, setLoadingActivity] = useState(false);
   const [watchPresenceByUserId, setWatchPresenceByUserId] = useState<Record<string, WatchPresenceData>>({});
@@ -202,14 +205,55 @@ const Friends = ({ currentUserId }: FriendsProps) => {
     setFilteredFriendAnimeList(filtered);
   }, [friendAnimeList, friendSearchQuery, friendStatusFilter, friendHentaiFilter, friendRankingFilter]);
 
-  const groupedFriendAnime = filteredFriendAnimeList.reduce((groups, anime) => {
-    const title = anime.title;
-    if (!groups[title]) {
-      groups[title] = [];
-    }
-    groups[title].push(anime);
-    return groups;
-  }, {} as Record<string, Anime[]>);
+  const groupedFriendAnime = useMemo(() => {
+      const groups = filteredFriendAnimeList.reduce((acc, anime) => {
+        const title = anime.title;
+        if (!acc[title]) acc[title] = [];
+        acc[title].push(anime);
+        return acc;
+      }, {} as Record<string, Anime[]>);
+
+      const entries = Object.entries(groups);
+      const getRecentTs = (seasons: Anime[]) =>
+        Math.max(
+          ...seasons.map((s) => {
+            const t = Date.parse(s.createdAt || s.updatedAt || "");
+            return Number.isFinite(t) ? t : 0;
+          }),
+        );
+
+      switch (friendSortBy) {
+        case "title-asc":
+          entries.sort(([a], [b]) => a.localeCompare(b));
+          break;
+        case "title-desc":
+          entries.sort(([a], [b]) => b.localeCompare(a));
+          break;
+        case "rating-desc":
+          entries.sort(([, seasonsA], [, seasonsB]) => {
+            const avgA = seasonsA.filter(s => s.rating).length
+              ? seasonsA.reduce((sum, s) => sum + (s.rating || 0), 0) / seasonsA.filter(s => s.rating).length
+              : 0;
+            const avgB = seasonsB.filter(s => s.rating).length
+              ? seasonsB.reduce((sum, s) => sum + (s.rating || 0), 0) / seasonsB.filter(s => s.rating).length
+              : 0;
+            return avgB - avgA;
+          });
+          break;
+        case "progress-desc":
+          entries.sort(([, seasonsA], [, seasonsB]) => {
+            const progressA = seasonsA.reduce((sum, s) => sum + s.episodesWatched, 0);
+            const progressB = seasonsB.reduce((sum, s) => sum + s.episodesWatched, 0);
+            return progressB - progressA;
+          });
+          break;
+        default:
+          entries.sort(([, seasonsA], [, seasonsB]) => getRecentTs(seasonsB) - getRecentTs(seasonsA));
+          break;
+      }
+
+      return Object.fromEntries(entries);
+  }, [filteredFriendAnimeList, friendSortBy]);
 
   const handleSendFriendRequest = async () => {
     if (!searchShortId || searchShortId.trim().length !== 5) {
@@ -278,24 +322,24 @@ const Friends = ({ currentUserId }: FriendsProps) => {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="friends" className="w-full">
-        <TabsList className="grid w-full h-auto grid-cols-3 gap-1 p-1 md:grid-cols-5">
-          <TabsTrigger value="friends" data-testid="tab-my-friends" className="gap-1 text-xs py-2">
+        <TabsList className="grid w-full h-auto grid-cols-3 gap-1 p-1 md:grid-cols-5 premium-section">
+          <TabsTrigger value="friends" data-testid="tab-my-friends" className="gap-1 text-xs py-2 rounded-none border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black">
             <Users className="w-3.5 h-3.5 shrink-0" />
             Friends
           </TabsTrigger>
-          <TabsTrigger value="feed" data-testid="tab-feed" className="gap-1 text-xs py-2">
+          <TabsTrigger value="feed" data-testid="tab-feed" className="gap-1 text-xs py-2 rounded-none border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black">
             <Activity className="w-3.5 h-3.5 shrink-0" />
             Feed
           </TabsTrigger>
-          <TabsTrigger value="compare" data-testid="tab-compare" className="gap-1 text-xs py-2">
+          <TabsTrigger value="compare" data-testid="tab-compare" className="gap-1 text-xs py-2 rounded-none border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black">
             <Swords className="w-3.5 h-3.5 shrink-0" />
             Compare
           </TabsTrigger>
-          <TabsTrigger value="requests" data-testid="tab-requests" className="gap-1 text-xs py-2 col-span-1">
+          <TabsTrigger value="requests" data-testid="tab-requests" className="gap-1 text-xs py-2 col-span-1 rounded-none border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black">
             <UserPlus className="w-3.5 h-3.5 shrink-0" />
             Requests
           </TabsTrigger>
-          <TabsTrigger value="find" data-testid="tab-find-friends" className="gap-1 text-xs py-2 col-span-2 md:col-span-1">
+          <TabsTrigger value="find" data-testid="tab-find-friends" className="gap-1 text-xs py-2 col-span-2 md:col-span-1 rounded-none border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black">
             <Search className="w-3.5 h-3.5 shrink-0" />
             Find Friends
           </TabsTrigger>
@@ -373,6 +417,18 @@ const Friends = ({ currentUserId }: FriendsProps) => {
                         <SelectItem value="unranked">Unranked Only</SelectItem>
                       </SelectContent>
                     </Select>
+                    <Select value={friendSortBy} onValueChange={(v) => { setFriendSortBy(v); localStorage.setItem("friendAnimeSortBy", v); }}>
+                      <SelectTrigger className="w-full md:w-48" data-testid="select-friend-sort">
+                        <SelectValue placeholder="Sort by" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="default">Recently Added</SelectItem>
+                        <SelectItem value="title-asc">Title A → Z</SelectItem>
+                        <SelectItem value="title-desc">Title Z → A</SelectItem>
+                        <SelectItem value="rating-desc">Highest Rated</SelectItem>
+                        <SelectItem value="progress-desc">Most Watched</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   {filteredFriendAnimeList.length === 0 ? (
@@ -435,7 +491,7 @@ const Friends = ({ currentUserId }: FriendsProps) => {
                         : false;
                       const isOnline = hasRecentHeartbeat || hasRecentWatchPulse;
                       return (
-                        <Card key={friend.id} className="cursor-pointer hover:bg-accent/50 animate-stagger-in" style={{ animationDelay: `${fi * 70}ms` }} data-testid={`friend-card-${friend.id}`}>
+                        <Card key={friend.id} className="cursor-pointer premium-shell interactive-lift animate-stagger-in" style={{ animationDelay: `${fi * 70}ms` }} data-testid={`friend-card-${friend.id}`}>
                           <CardContent className="p-4">
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-3">
@@ -502,13 +558,13 @@ const Friends = ({ currentUserId }: FriendsProps) => {
               </p>
             </div>
           ) : (
-            <div className="space-y-2.5">
+            <div className="space-y-3">
               {activityFeed.map((item, ai) => {
                 const icon =
                   item.type === "completed" ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> :
                   item.type === "rated" ? <Star className="w-4 h-4 text-amber-400 shrink-0" /> :
                   item.type === "dropped" ? <Trash2 className="w-4 h-4 text-red-400 shrink-0" /> :
-                  item.type === "started" ? <Play className="w-4 h-4 text-blue-400 shrink-0" /> :
+                  item.type === "started" ? <Play className="w-4 h-4 text-primary shrink-0" /> :
                   <Plus className="w-4 h-4 text-primary shrink-0" />;
 
                 const verb =
@@ -523,11 +579,11 @@ const Friends = ({ currentUserId }: FriendsProps) => {
                   item.type === "completed" && item.rating ? ` — ${item.rating}/10` : "";
 
                 return (
-                  <div key={item.id} className="flex items-center gap-3 p-3 rounded-xl bg-muted/20 border border-border/30 holo-glass hover:bg-muted/30 transition-colors animate-stagger-in" style={{ animationDelay: `${ai * 60}ms` }}>
+                  <div key={item.id} className="relative flex items-center gap-3 p-3 rounded-none bg-card/80 border border-primary/30 hover:border-primary/60 transition-colors animate-stagger-in deco-corners" style={{ animationDelay: `${ai * 60}ms` }}>
                     {item.coverImage ? (
-                      <img src={item.coverImage} alt={item.animeTitle} className="w-10 h-14 object-cover rounded-lg shrink-0" />
+                      <img src={item.coverImage} alt={item.animeTitle} className="w-10 h-14 object-cover rounded-none border border-primary/30 shrink-0" />
                     ) : (
-                      <div className="w-10 h-14 bg-muted/40 rounded-lg shrink-0 flex items-center justify-center">
+                      <div className="w-10 h-14 bg-muted/40 rounded-none border border-primary/30 shrink-0 flex items-center justify-center">
                         {icon}
                       </div>
                     )}

@@ -1,8 +1,7 @@
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Pencil, Trash2, CheckCircle2 } from "lucide-react";
+import { Pencil, Trash2, CheckCircle2, Star } from "lucide-react";
 
 interface AnimeCardProps {
   id: string;
@@ -18,20 +17,37 @@ interface AnimeCardProps {
   onStatusChange: (id: string, status: string) => void;
 }
 
-const statusColors = {
-  watching: "bg-primary text-primary-foreground",
-  completed: "bg-secondary text-secondary-foreground",
-  plan_to_watch: "bg-muted text-muted-foreground",
-  dropped: "bg-destructive text-destructive-foreground",
-  on_hold: "bg-accent text-accent-foreground",
-};
-
-const statusLabels = {
-  watching: "Watching",
-  completed: "Completed",
-  plan_to_watch: "Plan to Watch",
-  dropped: "Dropped",
-  on_hold: "On Hold",
+const statusConfig = {
+  watching: {
+    label: "Watching",
+    dot: "status-dot-watching",
+    border: "neon-watching",
+    badge: "badge-watching",
+  },
+  completed: {
+    label: "Completed",
+    dot: "status-dot-completed",
+    border: "neon-completed",
+    badge: "badge-completed",
+  },
+  plan_to_watch: {
+    label: "Plan to Watch",
+    dot: "status-dot-plan_to_watch",
+    border: "neon-plan_to_watch",
+    badge: "badge-plan_to_watch",
+  },
+  dropped: {
+    label: "Dropped",
+    dot: "status-dot-dropped",
+    border: "neon-dropped",
+    badge: "badge-dropped",
+  },
+  on_hold: {
+    label: "On Hold",
+    dot: "status-dot-on_hold",
+    border: "neon-on_hold",
+    badge: "badge-on_hold",
+  },
 };
 
 const AnimeCard = ({
@@ -47,89 +63,117 @@ const AnimeCard = ({
   onDelete,
   onStatusChange,
 }: AnimeCardProps) => {
+  const [isHovered, setIsHovered] = useState(false);
   const progress = totalEpisodes ? (episodesWatched / totalEpisodes) * 100 : 0;
+  const cfg = statusConfig[status as keyof typeof statusConfig] ?? statusConfig.plan_to_watch;
 
   return (
-    <Card className="anime-card-hover border-border/50 gradient-card overflow-hidden group">
-      <CardHeader className="p-0 relative">
-        <div className="aspect-[3/4] bg-muted relative overflow-hidden">
-          {coverImage ? (
-            <img 
-              src={coverImage} 
-              alt={title}
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center gradient-hero">
-              <span className="text-6xl opacity-20">📺</span>
-            </div>
-          )}
-          <div className="absolute top-2 right-2">
-            <Badge className={statusColors[status as keyof typeof statusColors]}>
-              {statusLabels[status as keyof typeof statusLabels]}
-            </Badge>
+    <div
+      data-testid={`card-anime-${id}`}
+      className={`relative flex flex-col rounded-none overflow-hidden border bg-card cursor-pointer select-none
+        transition-all duration-300 group
+        ${isHovered ? `${cfg.border} -translate-y-1 scale-[1.02] z-10` : "border-border/40"}
+      `}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      {/* ── Poster image ── */}
+      <div className="aspect-[3/4] relative overflow-hidden bg-muted">
+        {coverImage ? (
+          <img
+            src={coverImage}
+            alt={title}
+            loading="lazy"
+            className={`w-full h-full object-cover transition-transform duration-500 ${isHovered ? "scale-110" : "scale-100"}`}
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-card">
+            <span className="text-5xl opacity-20">📺</span>
           </div>
-        </div>
-      </CardHeader>
-      <CardContent className="p-4 space-y-3">
-        <div>
-          <h3 className="font-bold text-lg line-clamp-2 text-foreground">{title}</h3>
-          <p className="text-sm text-muted-foreground">Season {seasonNumber}</p>
-        </div>
-        
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Progress</span>
-            <span className="font-semibold text-foreground">
-              {episodesWatched}{totalEpisodes ? ` / ${totalEpisodes}` : ""} eps
-            </span>
-          </div>
-          {totalEpisodes && (
-            <Progress value={progress} className="h-2 bg-muted" />
-          )}
+        )}
+
+        {/* Gradient overlay — always visible at bottom */}
+        <div className="poster-overlay absolute inset-0" />
+
+        {/* Status badge — top left */}
+        <div className="absolute top-2 left-2 z-10">
+          <span className={`inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded-none ${cfg.badge}`}>
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${cfg.dot}`} />
+            {cfg.label}
+          </span>
         </div>
 
+        {/* Rating — top right */}
         {rating && (
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Rating:</span>
-            <div className="flex items-center gap-1">
-              <span className="text-lg font-bold text-primary">⭐</span>
-              <span className="font-semibold text-foreground">{rating}/10</span>
-            </div>
+          <div className="absolute top-2 right-2 z-10 flex items-center gap-0.5 bg-black/60 backdrop-blur-sm border border-primary/30 rounded-none px-1.5 py-0.5">
+            <Star className="w-2.5 h-2.5 text-primary fill-primary" />
+            <span className="text-[10px] font-bold text-primary">{rating}</span>
           </div>
         )}
-      </CardContent>
-      <CardFooter className="p-4 pt-0 gap-2">
-        {status !== "completed" && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onStatusChange(id, "completed")}
-            className="flex-1 border-primary/50 hover:bg-primary hover:text-primary-foreground transition-smooth"
+
+        {/* Action buttons — reveal on hover */}
+        <div className={`absolute inset-0 z-20 flex items-center justify-center gap-2 transition-opacity duration-200 bg-black/50 backdrop-blur-[2px] ${isHovered ? "opacity-100" : "opacity-0 pointer-events-none"}`}>
+          {status !== "completed" && (
+            <button
+              data-testid={`button-complete-${id}`}
+              onClick={(e) => { e.stopPropagation(); onStatusChange(id, "completed"); }}
+              title="Mark completed"
+              className="w-9 h-9 rounded-none bg-emerald-500/90 hover:bg-emerald-400 border border-emerald-400/60 flex items-center justify-center transition-colors"
+            >
+              <CheckCircle2 className="w-4 h-4 text-white" />
+            </button>
+          )}
+          <button
+            data-testid={`button-edit-${id}`}
+            onClick={(e) => { e.stopPropagation(); onEdit(id); }}
+            title="Edit"
+            className="w-9 h-9 rounded-none bg-primary/90 hover:bg-primary border border-primary/60 flex items-center justify-center transition-colors"
           >
-            <CheckCircle2 className="w-4 h-4 mr-1" />
-            Complete
-          </Button>
-        )}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onEdit(id)}
-          className="flex-1 hover:bg-accent transition-smooth"
-        >
-          <Pencil className="w-4 h-4 mr-1" />
-          Edit
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => onDelete(id)}
-          className="border-destructive/50 hover:bg-destructive hover:text-destructive-foreground transition-smooth"
-        >
-          <Trash2 className="w-4 h-4" />
-        </Button>
-      </CardFooter>
-    </Card>
+            <Pencil className="w-4 h-4 text-black" />
+          </button>
+          <button
+            data-testid={`button-delete-${id}`}
+            onClick={(e) => { e.stopPropagation(); onDelete(id); }}
+            title="Delete"
+            className="w-9 h-9 rounded-none bg-destructive/90 hover:bg-destructive border border-destructive/60 flex items-center justify-center transition-colors"
+          >
+            <Trash2 className="w-4 h-4 text-white" />
+          </button>
+        </div>
+
+        {/* Bottom info overlay */}
+        <div className="absolute bottom-0 left-0 right-0 z-10 px-2.5 pb-2.5 pt-6">
+          <h3 className="text-[12px] font-bold leading-tight line-clamp-2 text-white drop-shadow-lg mb-1.5">{title}</h3>
+
+          {/* Progress bar */}
+          <div className="space-y-0.5">
+            <div className="flex justify-between items-center">
+              <span className="text-[9px] text-white/60 uppercase tracking-wider">
+                {seasonNumber > 1 ? `S${seasonNumber} · ` : ""}{episodesWatched}{totalEpisodes ? `/${totalEpisodes}` : ""} eps
+              </span>
+              {totalEpisodes && (
+                <span className="text-[9px] text-white/60">{Math.round(progress)}%</span>
+              )}
+            </div>
+            {totalEpisodes ? (
+              <div className="h-0.5 w-full bg-white/20 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-300"
+                  style={{
+                    width: `${progress}%`,
+                    background: status === "completed"
+                      ? "hsl(142 70% 50%)"
+                      : status === "watching"
+                      ? "hsl(268 88% 62%)"
+                      : "hsl(var(--primary))",
+                  }}
+                />
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 

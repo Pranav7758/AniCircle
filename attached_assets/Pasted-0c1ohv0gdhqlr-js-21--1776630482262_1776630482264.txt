@@ -1,0 +1,135 @@
+0c1ohv0gdhqlr.js:21 
+      /////////////////////
+   ///////////////////////////
+  ////////@@@@@@@//////////////
+  ////////@@@@@@@//////////////
+  ////////@@@@@@@//////////////        Curious and driven?
+  ///////////////@@@@@@@///////        Work with us!
+  ///////////////@@@@@@@///////
+  ///////////////@@@@@@@///////        https://join.replit.com/hack.with.us
+  ////////@@@@@@@//////////////
+  ////////@@@@@@@//////////////
+  ////////@@@@@@#//////////////
+   ///////////////////////////
+      /////////////////////
+      
+0c1ohv0gdhqlr.js:21 Download the Apollo DevTools for a better development experience: https://chrome.google.com/webstore/detail/apollo-client-developer-t/jdkknkkbebbapilgoeccciglkfbmbnfm
+0c1ohv0gdhqlr.js:21 [LaunchDarkly] LaunchDarkly client initialized
+/import:1 Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner.
+dotdevproxy.janeway.replit.dev/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.janeway.replit.dev/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.janeway.replit.dev/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.kirk.replit.dev/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+0c1ohv0gdhqlr.js:21 Cache data may be lost when replacing the authorizations field of a Customer object.
+
+This could cause additional (usually avoidable) network requests to fetch data that were otherwise cached.
+
+To address this problem (which is not a bug in Apollo Client), either ensure all objects of type CustomerAuthorizations have an ID or a custom merge function, or define a custom merge function for the Customer.authorizations field, so InMemoryCache can safely merge these objects:
+
+  existing: {"__typename":"CustomerAuthorizations","createWorkspace":{"__typename":"CustomerAuthorization","isAuthorized":false,"code":"requires_active_subscription"}}
+  incoming: {"__typename":"CustomerAuthorizations","viewSubscription":{"__typename":"CustomerAuthorization","isAuthorized":true,"message":"You are able to view the subscription."},"viewSeats":{"__typename":"CustomerAuthorization","isAuthorized":false,"message":"You must have an active subscription to view seats."},"viewUsage":{"__typename":"CustomerAuthorization","isAuthorized":false,"message":"You must have an active subscription to view usage."},"editUsageLimit":{"__typename":"CustomerAuthorization","isAuthorized":true,"message":"You are able to edit the usage limit."},"editSettings":{"__typename":"CustomerAuthorization","isAuthorized":false,"message":"You must have an active subscription to edit the settings."},"enableScim":{"__typename":"CustomerAuthorization","isAuthorized":false,"message":"This feature requires an enterprise plan. Contact the sales team to enable SCIM provisioning."}}
+
+For more information about these options, please refer to the documentation:
+
+  * Ensuring entity objects have IDs: https://go.apollo.dev/c/generating-unique-identifiers
+  * Defining custom merge functions: https://go.apollo.dev/c/merging-non-normalized-objects
+
+(anonymous) @ 0c1ohv0gdhqlr.js:21
+0c1ohv0gdhqlr.js:21 If you do not provide children, you must specify an aria-label for accessibility
+(anonymous) @ 0c1ohv0gdhqlr.js:21
+dotdevproxy.kirk.replit.dev/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+0c1ohv0gdhqlr.js:21 If you do not provide children, you must specify an aria-label for accessibility
+(anonymous) @ 0c1ohv0gdhqlr.js:21
+0c1ohv0gdhqlr.js:21 If you do not provide children, you must specify an aria-label for accessibility
+(anonymous) @ 0c1ohv0gdhqlr.js:21
+0c1ohv0gdhqlr.js:21 If you do not provide children, you must specify an aria-label for accessibility
+(anonymous) @ 0c1ohv0gdhqlr.js:21
+dotdevproxy.kirk.replit.dev/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.picard.replit.dev/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.picard.replit.dev/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.picard.replit.dev/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.pike.replit.dev/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.pike.replit.dev/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.pike.replit.dev/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.riker.replit.dev/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.riker.replit.dev/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.riker.replit.dev/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.sisko.replit.dev/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+0c1ohv0gdhqlr.js:21 If you do not provide children, you must specify an aria-label for accessibility
+(anonymous) @ 0c1ohv0gdhqlr.js:21
+dotdevproxy.sisko.replit.dev/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+0c1ohv0gdhqlr.js:21 If you do not provide children, you must specify an aria-label for accessibility
+(anonymous) @ 0c1ohv0gdhqlr.js:21
+dotdevproxy.sisko.replit.dev/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.spock.replit.dev/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+Error while parsing the 'sandbox' attribute: 'allow-downloads-without-user-activation' is an invalid sandbox flag.
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'ambient-light-sensor'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'battery'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'execution-while-not-rendered'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'execution-while-out-of-viewport'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'layout-animations'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'legacy-image-formats'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'navigation-override'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'oversized-images'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'publickey-credentials'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'speaker-selection'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'unoptimized-images'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'unsized-media'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Unrecognized feature: 'pointer-lock'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Allow attribute will take precedence over 'allowfullscreen'.
+C @ 0i8wy8tbht2ow.js:2
+0i8wy8tbht2ow.js:2 Allow attribute will take precedence over 'allowpaymentrequest'.
+C @ 0i8wy8tbht2ow.js:2
+gravatar.com/avatar/6b0a437286a4afc11501fd30c08f0674?d=404:1  Failed to load resource: the server responded with a status of 404 ()
+ [OrgSwitcher] splitLink routing "preConnect" → org, selectedOrgId=none
+ [OrgSwitcher] org link headers: {"hasAuth":true,"hasCookie":false,"hasOrgHeader":false,"orgId":"none"}
+ createNativeOauthConnect [object Object]
+ Opening OAuth popup window [object Object]
+ adding message event listener
+dotdevproxy.spock.replit.dev/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.spock.replit.dev/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.worf.replit.dev/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.worf.replit.dev/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.worf.replit.dev/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.janeway.repl.co/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.janeway.repl.co/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.janeway.repl.co/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.kirk.repl.co/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.kirk.repl.co/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.kirk.repl.co/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.picard.repl.co/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.picard.repl.co/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.picard.repl.co/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.riker.repl.co/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.riker.repl.co/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.riker.repl.co/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.spock.repl.co/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.spock.repl.co/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.spock.repl.co/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.worf.repl.co/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.worf.repl.co/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+dotdevproxy.worf.repl.co/__reachability:1  Failed to load resource: net::ERR_NAME_NOT_RESOLVED
+(index):1 Unsafe attempt to load URL https://bcdb3685-6280-4c12-8b01-58d90bd2de44-00-i9dkcs1ucabv.worf.replit.dev/__replco/workspace_iframe.html?initialPath=%2F&id=default-start-application from frame with URL chrome-error://chromewebdata/. Domains, protocols and ports must match.
+

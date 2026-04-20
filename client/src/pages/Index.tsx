@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, startTransition } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { getAnimeList, createAnime, updateAnime, deleteAnime, logActivity, upsertUserPresence, getFriends, getFriendsUserPresence, type AnimeData } from "@/services/supabaseData";
@@ -6,7 +6,7 @@ import { fetchAniList, GET_ANALYTICS_QUERY } from "@/services/anilist";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LogOut, Plus, Search, Sparkles, Trophy, Users, Settings, PieChart, Play, CheckCircle2, Clock, ArrowUpDown, Tag, Compass, Share2, Loader2, Inbox } from "lucide-react";
+import { LogOut, Plus, Search, Sparkles, Trophy, Users, Settings, PieChart, Play, CheckCircle2, Clock, ArrowUpDown, Tag, Share2, Loader2, Inbox, Compass } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import AnimeRanking from "@/components/AnimeRanking";
@@ -23,6 +23,9 @@ import Watch from "@/components/Watch";
 import Footer from "@/components/Footer";
 import SuggestionPopup from "@/components/SuggestionPopup";
 import FloatingSocialBar from "@/components/FloatingSocialBar";
+import ThemePicker from "@/components/ThemePicker";
+import { useTheme } from "@/hooks/use-theme";
+import remSadImg from "@assets/re-zero-sad-kawaii-rem-sticker_1776671137105.png";
 
 interface Anime {
   id: string;
@@ -38,6 +41,8 @@ interface Anime {
   malId: number | null;
   ranking: number | null;
   isHentai: boolean | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 }
 
 const SkeletonCard = () => (
@@ -57,24 +62,42 @@ const StatsBar = ({ animeList }: { animeList: Anime[] }) => {
   const uniqueTitles = new Set(animeList.map(a => a.title)).size;
 
   const stats = [
-    { icon: Play, label: "Watching", value: watching, color: "text-primary" },
-    { icon: CheckCircle2, label: "Completed", value: completed, color: "text-emerald-400" },
-    { icon: Trophy, label: "Total Shows", value: uniqueTitles, color: "text-amber-400" },
-    { icon: Clock, label: "Episodes", value: totalEps.toLocaleString(), color: "text-blue-400" },
+    {
+      icon: Play, label: "Watching", value: watching,
+      color: "text-violet-400", iconBg: "bg-violet-500/15 border-violet-500/30",
+      glow: "shadow-[0_0_18px_hsl(268_88%_62%/0.18)]", glowStyle: {},
+    },
+    {
+      icon: CheckCircle2, label: "Completed", value: completed,
+      color: "text-emerald-400", iconBg: "bg-emerald-500/15 border-emerald-500/30",
+      glow: "shadow-[0_0_18px_hsl(142_70%_50%/0.15)]", glowStyle: {},
+    },
+    {
+      icon: Trophy, label: "Total Shows", value: uniqueTitles,
+      color: "text-amber-400", iconBg: "bg-amber-500/15 border-amber-500/30",
+      glow: "shadow-[0_0_18px_hsl(45_90%_56%/0.15)]", glowStyle: {},
+    },
+    {
+      icon: Clock, label: "Episodes", value: totalEps.toLocaleString(),
+      color: "text-primary", iconBg: "bg-primary/15 border-primary/30",
+      glow: "", glowStyle: { boxShadow: "0 0 18px hsl(var(--primary) / 0.15)" },
+    },
   ];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-      {stats.map(({ icon: Icon, label, value, color }, i) => (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-5">
+      {stats.map(({ icon: Icon, label, value, color, iconBg, glow, glowStyle }, i) => (
         <div
           key={label}
-          className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-muted/30 border border-border/40 holo-glass animate-stagger-in"
-          style={{ animationDelay: `${i * 80}ms` }}
+          className={`flex items-center gap-3 px-3.5 py-3 rounded-none border border-border/30 bg-card/60 backdrop-blur-sm animate-stagger-in ${glow} transition-all duration-200 hover:-translate-y-0.5`}
+          style={{ animationDelay: `${i * 80}ms`, ...glowStyle }}
         >
-          <Icon className={`w-4 h-4 shrink-0 ${color}`} />
+          <div className={`shrink-0 w-9 h-9 rounded-none border flex items-center justify-center ${iconBg}`}>
+            <Icon className={`w-4 h-4 ${color}`} />
+          </div>
           <div className="min-w-0">
-            <p className={`text-base font-black leading-none ${color} animate-stagger-in`} style={{ animationDelay: `${i * 80 + 100}ms` }}>{value}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{label}</p>
+            <p className={`text-xl font-black leading-none tabular-nums ${color}`}>{value}</p>
+            <p className="text-[10px] text-muted-foreground/70 mt-0.5 uppercase tracking-wider">{label}</p>
           </div>
         </div>
       ))}
@@ -85,6 +108,8 @@ const StatsBar = ({ animeList }: { animeList: Anime[] }) => {
 const Index = () => {
   const [, setLocation] = useLocation();
   const { user, logout, updateUsername } = useAuth();
+  const { theme } = useTheme();
+  const isRemTheme = theme.name === "Rem";
   const [animeList, setAnimeList] = useState<Anime[]>([]);
   const [filteredAnimeList, setFilteredAnimeList] = useState<Anime[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -102,7 +127,8 @@ const Index = () => {
   const [prefilledSearchQuery, setPrefilledSearchQuery] = useState("");
   const [editingAnime, setEditingAnime] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("list");
+  const [activeTab, setActiveTab] = useState("watch");
+  const [mountedTab, setMountedTab] = useState("watch");
   const [onlineFriendsCount, setOnlineFriendsCount] = useState(0);
   const [gridSize, setGridSize] = useState<string>(() => {
     const saved = localStorage.getItem("animeGridSize");
@@ -122,6 +148,15 @@ const Index = () => {
       fetchAnimeList();
     }
   }, [user, activeTab]);
+
+  useEffect(() => {
+    if (mountedTab === activeTab) return;
+    const raf = requestAnimationFrame(() => {
+      // Defer heavy panel mount to keep tab click INP low.
+      setMountedTab(activeTab);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [activeTab, mountedTab]);
 
   useEffect(() => {
     if (!user) {
@@ -192,8 +227,9 @@ const Index = () => {
   }, [user?.id]);
 
   useEffect(() => {
+    if (activeTab !== "list") return;
     filterAnimeList();
-  }, [searchQuery, statusFilter, hentaiFilter, rankingFilter, genreFilter, animeList, genreMap]);
+  }, [activeTab, searchQuery, statusFilter, hentaiFilter, rankingFilter, genreFilter, animeList, genreMap]);
 
   // Fetch genres from AniList for all anime that have anilistIds
   useEffect(() => {
@@ -300,6 +336,7 @@ const Index = () => {
   }, [animeList]);
 
   const groupedAnime = useMemo(() => {
+    if (activeTab !== "list") return {};
     const groups = (filteredAnimeList || []).reduce((acc, anime) => {
       const title = anime.title;
       if (!acc[title]) acc[title] = [];
@@ -308,6 +345,13 @@ const Index = () => {
     }, {} as Record<string, Anime[]>);
 
     const entries = Object.entries(groups);
+    const getRecentTs = (seasons: Anime[]) =>
+      Math.max(
+        ...seasons.map((s) => {
+          const t = Date.parse(s.createdAt || s.updatedAt || "");
+          return Number.isFinite(t) ? t : 0;
+        }),
+      );
 
     switch (sortBy) {
       case "title-asc":
@@ -337,11 +381,12 @@ const Index = () => {
         break;
       }
       default:
+        entries.sort(([, seasonsA], [, seasonsB]) => getRecentTs(seasonsB) - getRecentTs(seasonsA));
         break;
     }
 
     return Object.fromEntries(entries);
-  }, [filteredAnimeList, sortBy]);
+  }, [activeTab, filteredAnimeList, sortBy]);
 
   const handleAddAnime = async (data: AnimeFormData) => {
     if (data.seasons && data.seasons.length > 0) {
@@ -546,7 +591,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <header className="sticky top-0 z-50 border-b border-border/40 glass bg-glow">
+      <header className="sticky top-0 z-50 border-b border-border/40 premium-shell bg-glow">
         <div className="header-accent-strip" />
         <div className="container mx-auto px-4 py-2.5">
           <div className="flex items-center justify-between gap-2">
@@ -598,7 +643,7 @@ const Index = () => {
                 size="icon"
                 onClick={() => setActiveTab("friends")}
                 title="Friends Activity"
-                className="relative h-8 w-8 hover:bg-muted/50 text-muted-foreground hover:text-foreground rounded-xl"
+                className="relative h-8 w-8 hover:bg-primary/10 text-muted-foreground hover:text-foreground rounded-none border border-transparent hover:border-primary/40"
                 data-testid="button-friends-quick"
               >
                 <Users className="w-4 h-4" />
@@ -608,12 +653,13 @@ const Index = () => {
                   </span>
                 )}
               </Button>
+              <ThemePicker />
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => setIsSettingsOpen(true)}
                 title="Settings"
-                className="h-8 w-8 hover:bg-muted/50 text-muted-foreground hover:text-foreground rounded-xl"
+                className="h-8 w-8 hover:bg-primary/10 text-muted-foreground hover:text-foreground rounded-none border border-transparent hover:border-primary/40"
               >
                 <Settings className="w-4 h-4" />
               </Button>
@@ -642,43 +688,43 @@ const Index = () => {
       </header>
 
       <main className="container mx-auto px-4 pt-8 pb-8 flex-1">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs value={activeTab} onValueChange={(next) => startTransition(() => setActiveTab(next))} className="w-full">
           <div className="mb-6 space-y-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <TabsList className="h-10 bg-muted/40 border border-border/40 rounded-xl p-1 gap-0.5 overflow-x-auto flex-nowrap">
+              <TabsList className="h-12 premium-section p-1 gap-0.5 overflow-x-auto flex-nowrap shadow-[0_0_14px_rgba(212,175,55,0.12)]">
+                <TabsTrigger value="watch" data-testid="tab-watch"
+                  className="rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1">
+                  <Play className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Watch</span>
+                </TabsTrigger>
                 <TabsTrigger value="list" data-testid="tab-list"
-                  className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium">
+                  className="rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium">
                   My List
                 </TabsTrigger>
                 <TabsTrigger value="radar" data-testid="tab-radar"
-                  className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium gap-1">
+                  className="rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1">
                   <Sparkles className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Radar</span>
                 </TabsTrigger>
                 <TabsTrigger value="ranking" data-testid="tab-ranking"
-                  className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium gap-1">
+                  className="rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1">
                   <Trophy className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Rankings</span>
                 </TabsTrigger>
                 <TabsTrigger value="analytics" data-testid="tab-analytics"
-                  className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium gap-1">
+                  className="rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1">
                   <PieChart className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Analytics</span>
                 </TabsTrigger>
                 <TabsTrigger value="friends" data-testid="tab-friends"
-                  className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium gap-1">
+                  className="rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1">
                   <Users className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Friends</span>
                 </TabsTrigger>
                 <TabsTrigger value="discover" data-testid="tab-discover"
-                  className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium gap-1">
+                  className="rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1">
                   <Compass className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Discover</span>
-                </TabsTrigger>
-                <TabsTrigger value="watch" data-testid="tab-watch"
-                  className="rounded-lg text-xs sm:text-sm px-2.5 sm:px-4 data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-neon font-medium gap-1">
-                  <Play className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Watch</span>
                 </TabsTrigger>
               </TabsList>
 
@@ -712,97 +758,202 @@ const Index = () => {
             </div>
           </div>
 
+          <TabsContent value="watch" className="pt-4 animate-tab-in">
+            {activeTab === "watch" && mountedTab === "watch" && (
+              <Watch
+                animeList={animeList}
+                onAutoProgress={handleWatchAutoProgress}
+              />
+            )}
+          </TabsContent>
+
+          <TabsContent value="discover" className="pt-4 animate-tab-in">
+            {activeTab === "discover" && mountedTab === "discover" && (
+              <Discover
+                animeList={animeList}
+                onAddAnime={handleAddAnime}
+                showMature={hentaiFilter !== "hide"}
+              />
+            )}
+          </TabsContent>
+
           <TabsContent value="list" className="space-y-4 animate-tab-in">
+            {activeTab === "list" && mountedTab === "list" && (
+              <>
             {user && <NewEpisodesBanner userId={user.id} />}
 
             {animeList.length > 0 && <StatsBar animeList={animeList} />}
 
-            <div className="mb-4">
-              <div className="flex flex-col md:flex-row gap-3">
+            {/* ── Status legend quick-filter pills ── */}
+            {animeList.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {[
+                  { key: "all", label: "All", count: new Set(animeList.map(a => a.title)).size, color: "#888", bg: "rgba(255,255,255,0.06)", border: "rgba(255,255,255,0.12)" },
+                  { key: "watching", label: "Watching", count: statusCounts.watching || 0, color: "#a78bfa", bg: "rgba(88,28,220,0.18)", border: "rgba(124,58,237,0.45)" },
+                  { key: "completed", label: "Completed", count: statusCounts.completed || 0, color: "#6ee7b7", bg: "rgba(4,120,87,0.18)", border: "rgba(16,185,129,0.45)" },
+                  { key: "plan_to_watch", label: "Plan", count: statusCounts.plan_to_watch || 0, color: "#93c5fd", bg: "rgba(29,78,216,0.18)", border: "rgba(59,130,246,0.45)" },
+                  { key: "on_hold", label: "On Hold", count: statusCounts.on_hold || 0, color: "#fcd34d", bg: "rgba(146,64,14,0.18)", border: "rgba(245,158,11,0.45)" },
+                  { key: "dropped", label: "Dropped", count: statusCounts.dropped || 0, color: "#fca5a5", bg: "rgba(153,27,27,0.18)", border: "rgba(239,68,68,0.45)" },
+                ].filter(s => s.key === "all" || s.count > 0).map(s => (
+                  <button
+                    key={s.key}
+                    onClick={() => setStatusFilter(s.key)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold tracking-wide transition-all duration-200 hover:scale-105"
+                    style={{
+                      background: statusFilter === s.key ? s.bg : "rgba(255,255,255,0.04)",
+                      border: `1px solid ${statusFilter === s.key ? s.border : "rgba(255,255,255,0.08)"}`,
+                      color: statusFilter === s.key ? s.color : "rgba(255,255,255,0.4)",
+                      boxShadow: statusFilter === s.key ? `0 0 12px ${s.border}` : "none",
+                    }}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: s.color, opacity: statusFilter === s.key ? 1 : 0.4 }} />
+                    {s.label}
+                    <span className="font-mono text-[10px] opacity-60">{s.count}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="mb-4 premium-section p-3 sm:p-4">
+              <div className="flex flex-col sm:flex-row gap-2.5">
                 <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
                   <Input
                     placeholder="Search your anime..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 h-10 rounded-xl border-border/50 bg-muted/30 text-sm focus:border-primary/40"
+                    className="pl-9 h-9 rounded-none border-border/40 bg-black/30 text-sm focus:border-primary/50 text-foreground placeholder:text-muted-foreground/40"
                     data-testid="input-search"
                   />
                 </div>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="h-10 w-full md:w-48 rounded-xl border-border/50 bg-muted/30 text-sm" data-testid="select-status-filter">
-                    <SelectValue placeholder="Filter by status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status ({animeList.length})</SelectItem>
-                    <SelectItem value="watching">Watching ({statusCounts.watching || 0})</SelectItem>
-                    <SelectItem value="completed">Completed ({statusCounts.completed || 0})</SelectItem>
-                    <SelectItem value="plan_to_watch">Plan to Watch ({statusCounts.plan_to_watch || 0})</SelectItem>
-                    <SelectItem value="on_hold">On Hold ({statusCounts.on_hold || 0})</SelectItem>
-                    <SelectItem value="dropped">Dropped ({statusCounts.dropped || 0})</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={sortBy} onValueChange={(v) => { setSortBy(v); localStorage.setItem("animeSortBy", v); }}>
-                  <SelectTrigger className="h-10 w-full md:w-44 rounded-xl border-border/50 bg-muted/30 text-sm" data-testid="select-sort">
-                    <ArrowUpDown className="w-3.5 h-3.5 mr-1.5 text-muted-foreground/60" />
-                    <SelectValue placeholder="Sort by" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="default">Recently Added</SelectItem>
-                    <SelectItem value="title-asc">Title A → Z</SelectItem>
-                    <SelectItem value="title-desc">Title Z → A</SelectItem>
-                    <SelectItem value="rating-desc">Highest Rated</SelectItem>
-                    <SelectItem value="progress-desc">Most Watched</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={genreFilter} onValueChange={setGenreFilter}>
-                  <SelectTrigger className="h-10 w-full md:w-44 rounded-xl border-border/50 bg-muted/30 text-sm" data-testid="select-genre">
-                    <Tag className="w-3.5 h-3.5 mr-1.5 text-muted-foreground/60" />
-                    <SelectValue placeholder="Genre" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Genres</SelectItem>
-                    {allGenres.map(g => (
-                      <SelectItem key={g} value={g}>{g}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2 flex-wrap sm:flex-nowrap">
+                  <Select value={sortBy} onValueChange={(v) => { setSortBy(v); localStorage.setItem("animeSortBy", v); }}>
+                    <SelectTrigger className="h-9 w-full sm:w-40 rounded-none border-border/40 bg-black/30 text-xs" data-testid="select-sort">
+                      <ArrowUpDown className="w-3 h-3 mr-1.5 text-muted-foreground/50" />
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default">Recently Added</SelectItem>
+                      <SelectItem value="title-asc">Title A → Z</SelectItem>
+                      <SelectItem value="title-desc">Title Z → A</SelectItem>
+                      <SelectItem value="rating-desc">Highest Rated</SelectItem>
+                      <SelectItem value="progress-desc">Most Watched</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {allGenres.length > 0 && (
+                    <Select value={genreFilter} onValueChange={setGenreFilter}>
+                      <SelectTrigger className="h-9 w-full sm:w-36 rounded-none border-border/40 bg-black/30 text-xs" data-testid="select-genre">
+                        <Tag className="w-3 h-3 mr-1.5 text-muted-foreground/50" />
+                        <SelectValue placeholder="Genre" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Genres</SelectItem>
+                        {allGenres.map(g => (
+                          <SelectItem key={g} value={g}>{g}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
               </div>
             </div>
 
             {filteredAnimeList.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-24 gap-5 animate-fade-in">
-                <div className="relative">
-                  <div className="w-24 h-24 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
-                    <span className="text-4xl opacity-60">📺</span>
+              <div className="premium-section flex flex-col items-center justify-center py-20 gap-5 animate-fade-in overflow-hidden relative">
+                {isRemTheme && !searchQuery && statusFilter === "all" && rankingFilter === "all" ? (
+                  /* ── Rem special empty state ── */
+                  <div className="flex flex-col items-center gap-4">
+                    {/* Sad Rem sticker */}
+                    <div className="relative" style={{ animation: "rem-float 4s ease-in-out infinite" }}>
+                      <img
+                        src={remSadImg}
+                        alt="Rem is waiting..."
+                        style={{
+                          width: "160px",
+                          height: "auto",
+                          filter: "drop-shadow(0 0 20px rgba(80,140,255,0.5)) drop-shadow(0 0 40px rgba(80,140,255,0.2))",
+                        }}
+                      />
+                    </div>
+
+                    <div className="text-center space-y-2 max-w-xs">
+                      <h2 className="text-2xl font-black tracking-wide"
+                        style={{ color: "#93c5fd", textShadow: "0 0 30px rgba(147,197,253,0.5)" }}>
+                        Your list is empty…
+                      </h2>
+                      <p className="text-sm leading-relaxed italic"
+                        style={{ color: "rgba(147,197,253,0.55)" }}>
+                        "Rem will keep waiting, no matter how many times the world resets…"
+                      </p>
+                      <p className="text-[10px] tracking-[0.22em] uppercase"
+                        style={{ color: "rgba(147,197,253,0.28)" }}>
+                        — Re:Zero ❄
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => setIsAddDialogOpen(true)}
+                      className="flex items-center gap-2 px-7 py-2.5 text-sm font-bold tracking-wider transition-all duration-200"
+                      style={{
+                        background: "linear-gradient(135deg, rgba(29,78,216,0.75), rgba(59,130,246,0.55))",
+                        border: "1px solid rgba(100,160,255,0.5)",
+                        color: "#93c5fd",
+                        boxShadow: "0 0 24px rgba(80,140,255,0.3), inset 0 1px 0 rgba(147,197,253,0.15)",
+                        backdropFilter: "blur(8px)",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.boxShadow = "0 0 36px rgba(80,140,255,0.5), inset 0 1px 0 rgba(147,197,253,0.2)";
+                        e.currentTarget.style.background = "linear-gradient(135deg, rgba(29,78,216,0.9), rgba(59,130,246,0.7))";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.boxShadow = "0 0 24px rgba(80,140,255,0.3), inset 0 1px 0 rgba(147,197,253,0.15)";
+                        e.currentTarget.style.background = "linear-gradient(135deg, rgba(29,78,216,0.75), rgba(59,130,246,0.55))";
+                      }}
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Your First Anime ❄
+                    </button>
                   </div>
-                  <div className="absolute -top-1 -right-1 w-7 h-7 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center">
-                    <Sparkles className="w-3.5 h-3.5 text-primary" />
-                  </div>
-                </div>
-                <div className="text-center space-y-2 max-w-xs">
-                  <h2 className="text-xl font-bold text-foreground">
-                    {searchQuery || statusFilter !== "all" || rankingFilter !== "all" ? "No results found" : "Your list is empty"}
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    {searchQuery || statusFilter !== "all" || rankingFilter !== "all"
-                      ? "Try adjusting your search or filters"
-                      : "Start building your anime collection — add your first title!"}
-                  </p>
-                </div>
-                {!searchQuery && statusFilter === "all" && rankingFilter === "all" && (
-                  <Button onClick={() => setIsAddDialogOpen(true)}
-                    className="gradient-primary shadow-neon rounded-xl text-sm font-semibold px-6">
-                    <Plus className="w-4 h-4 mr-2" /> Add Your First Anime
-                  </Button>
+                ) : (
+                  /* ── Default empty state ── */
+                  <>
+                    <div className="relative">
+                      <div className="w-24 h-24 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
+                        <span className="text-4xl opacity-60">📺</span>
+                      </div>
+                      <div className="absolute -top-1 -right-1 w-7 h-7 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center">
+                        <Sparkles className="w-3.5 h-3.5 text-primary" />
+                      </div>
+                    </div>
+                    <div className="text-center space-y-2 max-w-xs">
+                      <h2 className="text-xl font-bold text-foreground">
+                        {searchQuery || statusFilter !== "all" || rankingFilter !== "all" ? "No results found" : "Your list is empty"}
+                      </h2>
+                      <p className="text-sm text-muted-foreground">
+                        {searchQuery || statusFilter !== "all" || rankingFilter !== "all"
+                          ? "Try adjusting your search or filters"
+                          : "Start building your anime collection — add your first title!"}
+                      </p>
+                    </div>
+                    {!searchQuery && statusFilter === "all" && rankingFilter === "all" && (
+                      <Button onClick={() => setIsAddDialogOpen(true)}
+                        className="gradient-primary shadow-neon rounded-xl text-sm font-semibold px-6">
+                        <Plus className="w-4 h-4 mr-2" /> Add Your First Anime
+                      </Button>
+                    )}
+                  </>
                 )}
               </div>
             ) : (
               <>
-                <p className="text-xs text-muted-foreground mb-1">
-                  {Object.keys(groupedAnime).length} title{Object.keys(groupedAnime).length !== 1 ? "s" : ""}
-                  {filteredAnimeList.length !== animeList.length ? ` (filtered from ${new Set(animeList.map(a => a.title)).size})` : ""}
-                </p>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="h-px flex-1 bg-white/5" />
+                  <span className="text-[10px] text-muted-foreground/40 uppercase tracking-[0.2em] shrink-0">
+                    {Object.keys(groupedAnime).length} title{Object.keys(groupedAnime).length !== 1 ? "s" : ""}
+                    {filteredAnimeList.length !== animeList.length ? ` · filtered` : ""}
+                  </span>
+                  <div className="h-px flex-1 bg-white/5" />
+                </div>
                 <div className={`grid gap-3 sm:gap-4 ${gridClass}`}>
                   {Object.entries(groupedAnime).map(([title, seasons], cardIndex) => (
                     <div key={title} className="animate-stagger-in" style={{ animationDelay: `${Math.min(cardIndex * 40, 600)}ms` }}>
@@ -831,10 +982,12 @@ const Index = () => {
                 </div>
               </>
             )}
+              </>
+            )}
           </TabsContent>
 
           <TabsContent value="radar" className="pt-2 animate-tab-in">
-            {user && (
+            {activeTab === "radar" && mountedTab === "radar" && user && (
               <Radar
                 userId={user.id}
                 animeList={animeList}
@@ -844,6 +997,8 @@ const Index = () => {
           </TabsContent>
 
           <TabsContent value="ranking" className="space-y-4 animate-tab-in">
+            {activeTab === "ranking" && mountedTab === "ranking" && (
+              <>
             <div className="mb-6">
               <div className="flex items-center gap-2 mb-1">
                 <Trophy className="w-5 h-5 text-amber-400" />
@@ -852,22 +1007,16 @@ const Index = () => {
               <p className="text-sm text-muted-foreground">Drag to reorder your all-time favourite anime.</p>
             </div>
             {user && <AnimeRanking userId={user.id} isOwnProfile={true} />}
+              </>
+            )}
           </TabsContent>
 
           <TabsContent value="friends" className="space-y-4 animate-tab-in">
-            {user && <Friends currentUserId={user.id} />}
+            {activeTab === "friends" && mountedTab === "friends" && user && <Friends currentUserId={user.id} />}
           </TabsContent>
 
           <TabsContent value="analytics" className="space-y-4 pt-4 animate-tab-in">
-            <AnalyticsDashboard />
-          </TabsContent>
-
-          <TabsContent value="discover" className="pt-4">
-            <Discover animeList={animeList} onAddAnime={handleAddAnime} showMature={hentaiFilter !== "hide"} />
-          </TabsContent>
-
-          <TabsContent value="watch" className="pt-4 animate-tab-in">
-            <Watch animeList={animeList} onAutoProgress={handleWatchAutoProgress} />
+            {activeTab === "analytics" && mountedTab === "analytics" && <AnalyticsDashboard />}
           </TabsContent>
         </Tabs>
       </main>

@@ -17,6 +17,9 @@ import {
   Clock, Brain, CalendarDays, Search, X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import Watch from "@/components/Watch";
+import type { AnimeData } from "@/services/supabaseData";
 
 interface AnimeItem {
   id: string;
@@ -34,6 +37,7 @@ interface Props {
   animeList: AnimeItem[];
   onAddAnime: (data: any) => Promise<void>;
   showMature?: boolean;
+  onAutoProgress?: (event: { action: "created" | "updated"; anime: AnimeData }) => void;
 }
 
 const GENRES = [
@@ -83,16 +87,21 @@ function getCurrentSeason(): { season: string; seasonYear: number } {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function AnimeCard({ anime, isInList, onAdd, adding, rank }: {
-  anime: any; isInList: boolean; onAdd: () => void; adding: boolean; rank?: number;
+function AnimeCard({ anime, isInList, onAdd, onPlay, adding, rank }: {
+  anime: any; isInList: boolean; onAdd: () => void; onPlay?: (anime: any) => void; adding: boolean; rank?: number;
 }) {
   const title = anime.title?.english || anime.title?.romaji;
   const score = anime.averageScore ? (anime.averageScore / 10).toFixed(1) : null;
   const st = STATUS_MAP[anime.status] || null;
 
   return (
-    <div className="group relative flex-shrink-0 w-[130px] sm:w-[144px] md:w-full" data-testid={`card-anime-${anime.id}`}>
-      <div className="relative aspect-[2/3] rounded-lg overflow-hidden bg-muted/30">
+    <button
+      type="button"
+      className="group relative flex-shrink-0 w-[130px] sm:w-[144px] md:w-full text-left"
+      data-testid={`card-anime-${anime.id}`}
+      onClick={() => onPlay?.(anime)}
+    >
+      <div className="relative aspect-[2/3] rounded-none overflow-hidden bg-muted/30 border border-primary/30">
         {anime.coverImage?.large || anime.coverImage?.extraLarge ? (
           <img
             src={anime.coverImage.extraLarge || anime.coverImage.large}
@@ -106,12 +115,12 @@ function AnimeCard({ anime, isInList, onAdd, adding, rank }: {
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/10 to-transparent" />
         {rank !== undefined && (
-          <div className="absolute top-2 left-2 w-6 h-6 rounded-full bg-black/70 backdrop-blur-sm flex items-center justify-center text-[10px] font-black text-white">
+          <div className="absolute top-2 left-2 w-6 h-6 rounded-none bg-black/80 border border-primary/50 backdrop-blur-sm flex items-center justify-center text-[10px] font-black text-white">
             {rank}
           </div>
         )}
         {score && (
-          <div className="absolute top-2 right-2 flex items-center gap-0.5 bg-black/70 backdrop-blur-sm rounded-full px-1.5 py-0.5 text-[10px] font-bold text-amber-400">
+          <div className="absolute top-2 right-2 flex items-center gap-0.5 bg-black/80 border border-primary/45 backdrop-blur-sm rounded-none px-1.5 py-0.5 text-[10px] font-bold text-amber-300">
             <Star className="w-2.5 h-2.5 fill-amber-400" />{score}
           </div>
         )}
@@ -121,7 +130,7 @@ function AnimeCard({ anime, isInList, onAdd, adding, rank }: {
         </div>
         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/25">
           {isInList ? (
-            <div className="bg-emerald-500 rounded-full px-3 py-1.5 flex items-center gap-1 text-white text-xs font-bold shadow-lg">
+            <div className="bg-emerald-500 rounded-none border border-emerald-300/70 px-3 py-1.5 flex items-center gap-1 text-white text-xs font-bold shadow-lg">
               <Check className="w-3 h-3" /> In List
             </div>
           ) : (
@@ -129,7 +138,7 @@ function AnimeCard({ anime, isInList, onAdd, adding, rank }: {
               onClick={(e) => { e.stopPropagation(); onAdd(); }}
               disabled={adding}
               data-testid={`button-add-${anime.id}`}
-              className="bg-white text-black rounded-full px-3 py-1.5 flex items-center gap-1 text-xs font-bold hover:bg-white/90 transition-colors shadow-lg"
+              className="bg-[#D4AF37] border border-[#F4DE9A] text-black rounded-none px-3 py-1.5 flex items-center gap-1 text-xs font-bold hover:bg-[#f0d98c] transition-colors shadow-lg"
             >
               {adding ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
               Add
@@ -137,7 +146,7 @@ function AnimeCard({ anime, isInList, onAdd, adding, rank }: {
           )}
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -183,8 +192,8 @@ function SkeletonRow() {
   );
 }
 
-function Hero({ animes, allKnownIds, onAdd, addingId }: {
-  animes: any[]; allKnownIds: Set<number>; onAdd: (a: any) => void; addingId: number | null;
+function Hero({ animes, allKnownIds, onAdd, onPlay, addingId }: {
+  animes: any[]; allKnownIds: Set<number>; onAdd: (a: any) => void; onPlay?: (a: any) => void; addingId: number | null;
 }) {
   const [idx, setIdx] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -211,7 +220,14 @@ function Hero({ animes, allKnownIds, onAdd, addingId }: {
   const go = (i: number) => { setIdx(i); reset(); };
 
   return (
-    <div className="relative rounded-xl overflow-hidden border border-border/30" style={{ height: 260 }}>
+    <div
+      className="relative premium-section overflow-hidden cursor-pointer interactive-lift"
+      style={{ height: 260 }}
+      onClick={() => onPlay?.(a)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onPlay?.(a); }}
+    >
       {bg && <img key={a.id} src={bg} alt="" className="absolute inset-0 w-full h-full object-cover" />}
       <div className="absolute inset-0 bg-gradient-to-r from-black/95 via-black/80 to-black/20" />
       <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
@@ -247,7 +263,7 @@ function Hero({ animes, allKnownIds, onAdd, addingId }: {
                 <Check className="w-3 h-3" /> In Your List
               </Button>
             ) : (
-              <Button size="sm" onClick={() => onAdd(a)} disabled={adding} data-testid={`button-hero-add-${a.id}`}
+              <Button size="sm" onClick={(e) => { e.stopPropagation(); onAdd(a); }} disabled={adding} data-testid={`button-hero-add-${a.id}`}
                 className="text-xs gap-1.5 h-7 px-3 rounded-full gradient-primary shadow-neon font-semibold">
                 {adding ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
                 Add to List
@@ -274,11 +290,12 @@ function Hero({ animes, allKnownIds, onAdd, addingId }: {
 
 // ── Find Similar Picker ───────────────────────────────────────────────────────
 
-function FindSimilar({ animeList, allKnownIds, showMature, onAdd, addingId }: {
+function FindSimilar({ animeList, allKnownIds, showMature, onAdd, onPlay, addingId }: {
   animeList: AnimeItem[];
   allKnownIds: Set<number>;
   showMature: boolean;
   onAdd: (a: any) => void;
+  onPlay?: (a: any) => void;
   addingId: number | null;
 }) {
   const [query, setQuery] = useState("");
@@ -429,6 +446,7 @@ function FindSimilar({ animeList, allKnownIds, showMature, onAdd, addingId }: {
                 anime={anime}
                 isInList={allKnownIds.has(anime.id)}
                 onAdd={() => onAdd(anime)}
+                onPlay={onPlay}
                 adding={addingId === anime.id}
                 rank={i + 1}
               />
@@ -442,7 +460,7 @@ function FindSimilar({ animeList, allKnownIds, showMature, onAdd, addingId }: {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export default function Discover({ animeList, onAddAnime, showMature = false }: Props) {
+export function DiscoverSections({ animeList, onAddAnime, showMature = false, onAutoProgress }: Props) {
   const [trending, setTrending] = useState<any[]>([]);
   const [loadingTrending, setLoadingTrending] = useState(true);
   const [seasonPicks, setSeasonPicks] = useState<any[]>([]);
@@ -595,21 +613,81 @@ export default function Discover({ animeList, onAddAnime, showMature = false }: 
   const seasonLabel = season.charAt(0) + season.slice(1).toLowerCase() + " " + seasonYear;
   const genreInfo = userTopGenre ? (GENRE_META[userTopGenre] || { emoji: "🎯" }) : null;
   const hasRatedAnime = animeList.some(a => a.status === "completed" && a.rating);
+  const [watchSearch, setWatchSearch] = useState("");
+  const [watchQuery, setWatchQuery] = useState("");
+  const [watchNonce, setWatchNonce] = useState(0);
+
+  const triggerPlay = (anime: any) => {
+    const title = anime?.title?.english || anime?.title?.romaji || anime?.title || "";
+    const clean = String(title).trim();
+    if (!clean) return;
+    setWatchQuery(clean);
+    setWatchNonce(Date.now());
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const submitWatchSearch = () => {
+    const q = watchSearch.trim();
+    if (!q) return;
+    setWatchQuery(q);
+    setWatchNonce(Date.now());
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   return (
     <div className="space-y-8 pb-8">
+      <section>
+        <div className="flex items-center gap-2 mb-2">
+          <Play className="w-4 h-4 text-primary" />
+          <span className="text-sm font-bold text-foreground">Watch Search</span>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-2 max-w-xl">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/70" />
+            <Input
+              value={watchSearch}
+              onChange={(e) => setWatchSearch(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") submitWatchSearch(); }}
+              placeholder="Search anime to watch now..."
+              className="pl-9 h-9 rounded-xl border-border/50 bg-muted/30 text-sm"
+              data-testid="input-discover-watch-search"
+            />
+          </div>
+          <Button
+            type="button"
+            onClick={submitWatchSearch}
+            disabled={!watchSearch.trim()}
+            className="h-9 px-4 rounded-xl"
+            data-testid="button-discover-watch-search"
+          >
+            <Search className="w-3.5 h-3.5 mr-1.5" />
+            Watch
+          </Button>
+        </div>
+      </section>
+
+      {watchQuery && (
+        <section className="rounded-2xl border border-border/45 bg-card/70 backdrop-blur-sm p-3 sm:p-4">
+          <Watch
+            animeList={animeList}
+            onAutoProgress={onAutoProgress}
+            externalQuery={watchQuery}
+            externalQueryNonce={watchNonce}
+          />
+        </section>
+      )}
 
       {/* ── Hero ── */}
       {loadingTrending ? (
         <div className="rounded-xl bg-muted/30 animate-pulse" style={{ height: 260 }} />
       ) : (
-        <Hero animes={trending.slice(0, 5)} allKnownIds={allKnownIds} onAdd={handleAdd} addingId={addingId} />
+        <Hero animes={trending.slice(0, 5)} allKnownIds={allKnownIds} onAdd={handleAdd} onPlay={triggerPlay} addingId={addingId} />
       )}
 
       {/* ── Genre Browser ── */}
-      <section>
+      <section className="premium-section p-4">
         <div className="mb-3">
-          <span className="text-sm font-bold text-foreground">Browse Genres</span>
+          <span className="text-sm font-bold text-foreground deco-divider">Browse Genres</span>
           <p className="text-xs text-muted-foreground mt-0.5">Pick a genre — we'll show the best anime you haven't seen yet</p>
         </div>
         <div className="flex flex-wrap gap-2 mb-5">
@@ -643,6 +721,7 @@ export default function Discover({ animeList, onAddAnime, showMature = false }: 
                 anime={anime}
                 isInList={allKnownIds.has(anime.id)}
                 onAdd={() => handleAdd(anime)}
+                onPlay={triggerPlay}
                 adding={addingId === anime.id}
                 rank={i + 1}
               />
@@ -652,17 +731,20 @@ export default function Discover({ animeList, onAddAnime, showMature = false }: 
       </section>
 
       {/* ── Find Similar ── */}
-      <FindSimilar
-        animeList={animeList}
-        allKnownIds={allKnownIds}
-        showMature={showMature}
-        onAdd={handleAdd}
-        addingId={addingId}
-      />
+      <div className="premium-section p-4">
+        <FindSimilar
+          animeList={animeList}
+          allKnownIds={allKnownIds}
+          showMature={showMature}
+          onAdd={handleAdd}
+          onPlay={triggerPlay}
+          addingId={addingId}
+        />
+      </div>
 
       {/* ── Personalized Genre Row ── */}
       {(genreInfo || loadingGenre) && (
-        <section>
+        <section className="premium-section p-4">
           <div className="flex items-center gap-2 mb-0.5">
             <span className="text-sm">{genreInfo?.emoji ?? "🎯"}</span>
             <span className="text-sm font-bold text-foreground">{userTopGenre ? `More ${userTopGenre} for You` : "Your Taste"}</span>
@@ -673,7 +755,7 @@ export default function Discover({ animeList, onAddAnime, showMature = false }: 
             <Row>
               {genreAnime.map((anime, i) => (
                 <AnimeCard key={anime.id} anime={anime} isInList={allKnownIds.has(anime.id)}
-                  onAdd={() => handleAdd(anime)} adding={addingId === anime.id} rank={i + 1} />
+                  onAdd={() => handleAdd(anime)} onPlay={triggerPlay} adding={addingId === anime.id} rank={i + 1} />
               ))}
             </Row>
           )}
@@ -682,7 +764,7 @@ export default function Discover({ animeList, onAddAnime, showMature = false }: 
 
       {/* ── Handpicked Recommendations ── */}
       {(hasRatedAnime || loadingRecs) && (
-        <section>
+        <section className="premium-section p-4">
           <div className="flex items-center gap-2 mb-0.5">
             <Brain className="w-4 h-4 text-primary" />
             <span className="text-sm font-bold text-foreground">Handpicked for You</span>
@@ -699,7 +781,7 @@ export default function Discover({ animeList, onAddAnime, showMature = false }: 
                   <Row>
                     {items.map(anime => (
                       <AnimeCard key={anime.id} anime={anime} isInList={allKnownIds.has(anime.id)}
-                        onAdd={() => handleAdd(anime)} adding={addingId === anime.id} />
+                        onAdd={() => handleAdd(anime)} onPlay={triggerPlay} adding={addingId === anime.id} />
                     ))}
                   </Row>
                 </div>
@@ -710,7 +792,7 @@ export default function Discover({ animeList, onAddAnime, showMature = false }: 
       )}
 
       {/* ── Trending Now ── */}
-      <section>
+        <section className="premium-section p-4">
         <div className="flex items-center gap-2 mb-0.5">
           <Flame className="w-4 h-4 text-orange-400" />
           <span className="text-sm font-bold text-foreground">Trending Now</span>
@@ -721,14 +803,14 @@ export default function Discover({ animeList, onAddAnime, showMature = false }: 
           <Row>
             {trending.map((anime, i) => (
               <AnimeCard key={anime.id} anime={anime} isInList={allKnownIds.has(anime.id)}
-                onAdd={() => handleAdd(anime)} adding={addingId === anime.id} rank={i + 1} />
+                onAdd={() => handleAdd(anime)} onPlay={triggerPlay} adding={addingId === anime.id} rank={i + 1} />
             ))}
           </Row>
         )}
       </section>
 
       {/* ── Season Picks ── */}
-      <section>
+      <section className="premium-section p-4">
         <div className="flex items-center gap-2 mb-0.5">
           <CalendarDays className="w-4 h-4 text-sky-400" />
           <span className="text-sm font-bold text-foreground">{seasonLabel} Picks</span>
@@ -738,7 +820,7 @@ export default function Discover({ animeList, onAddAnime, showMature = false }: 
           <Row>
             {seasonPicks.map(anime => (
               <AnimeCard key={anime.id} anime={anime} isInList={allKnownIds.has(anime.id)}
-                onAdd={() => handleAdd(anime)} adding={addingId === anime.id} />
+                onAdd={() => handleAdd(anime)} onPlay={triggerPlay} adding={addingId === anime.id} />
             ))}
           </Row>
         )}
@@ -746,4 +828,8 @@ export default function Discover({ animeList, onAddAnime, showMature = false }: 
 
     </div>
   );
+}
+
+export default function Discover(props: Props) {
+  return <DiscoverSections {...props} />;
 }
