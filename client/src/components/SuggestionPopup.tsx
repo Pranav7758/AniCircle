@@ -14,6 +14,8 @@ const SuggestionPopup = () => {
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") || "";
+  const feedbackEndpoint = `${apiBase}/api/feedback`;
 
   useEffect(() => {
     const alreadyShown = localStorage.getItem(STORAGE_KEY);
@@ -36,7 +38,7 @@ const SuggestionPopup = () => {
 
     setSubmitting(true);
     try {
-      const res = await fetch("/api/feedback", {
+      const res = await fetch(feedbackEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -51,7 +53,11 @@ const SuggestionPopup = () => {
         localStorage.setItem(STORAGE_KEY, "true");
         setOpen(false);
       } else {
-        toast.error("Failed to send. Please try again.");
+        if (res.status === 404 || res.status === 405) {
+          toast.error("Suggestion API is unavailable. Check Vercel API routing or set `VITE_API_BASE_URL`.");
+        } else {
+          toast.error("Failed to send. Please try again.");
+        }
       }
     } catch {
       toast.error("Failed to send. Please try again.");

@@ -611,7 +611,7 @@ const Index = () => {
       <div className={`min-h-screen flex flex-col bg-background ${remRootClass}`}>
         <header className={`sticky top-0 z-50 border-b border-border/40 glass bg-glow ${isRemTheme ? "rem-nav" : ""}`}>
           <div className="header-accent-strip" />
-          <div className="container mx-auto px-4 py-2.5">
+          <div className="container mx-auto px-3 sm:px-4 py-2.5">
             <div className="flex items-center gap-2.5">
               <div className="relative">
                 <div className="absolute inset-0 rounded-full bg-primary/25 blur-md animate-glow-pulse" />
@@ -621,7 +621,7 @@ const Index = () => {
             </div>
           </div>
         </header>
-        <main className="container mx-auto px-4 pt-8 pb-8 flex-1">
+        <main className="container mx-auto px-3 sm:px-4 pt-5 sm:pt-8 pb-6 sm:pb-8 flex-1">
           <div className="mb-6 h-10 w-80 rounded-xl animate-shimmer" />
           <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[1,2,3,4].map(i => <div key={i} className="h-14 rounded-xl animate-shimmer" />)}
@@ -638,7 +638,7 @@ const Index = () => {
     <div className={`min-h-screen flex flex-col bg-background ${remRootClass}`}>
       <header className={`sticky top-0 z-50 border-b border-border/40 premium-shell bg-glow ${isRemTheme ? "rem-nav" : ""}`}>
         <div className="header-accent-strip" />
-        <div className="container mx-auto px-4 py-2.5">
+        <div className="container mx-auto px-3 sm:px-4 py-2.5">
           <div className={`flex items-center justify-between gap-2 ${isRemTheme ? "rem-nav-inner" : ""}`}>
             <div className="flex items-center gap-2.5">
               <div className="relative">
@@ -732,42 +732,42 @@ const Index = () => {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 pt-8 pb-8 flex-1">
+      <main className="container mx-auto px-3 sm:px-4 pt-5 sm:pt-8 pb-6 sm:pb-8 flex-1">
         <Tabs value={activeTab} onValueChange={(next) => startTransition(() => setActiveTab(next))} className="w-full">
           <div className="mb-6 space-y-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
-              <TabsList className={`h-12 premium-section p-1 gap-0.5 overflow-x-auto flex-nowrap shadow-[0_0_14px_rgba(212,175,55,0.12)] ${isRemTheme ? "rem-tabs-shell" : ""}`}>
+              <TabsList className={`h-11 sm:h-12 premium-section p-1 gap-0.5 overflow-x-auto flex-nowrap shadow-[0_0_14px_rgba(212,175,55,0.12)] ${isRemTheme ? "rem-tabs-shell" : ""}`}>
                 <TabsTrigger value="watch" data-testid="tab-watch"
-                  className={`rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1 ${isRemTheme ? "rem-tab-trigger" : ""}`}>
+                  className={`rounded-none whitespace-nowrap text-[11px] sm:text-sm px-2 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1 ${isRemTheme ? "rem-tab-trigger" : ""}`}>
                   <Play className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Watch</span>
                 </TabsTrigger>
                 <TabsTrigger value="list" data-testid="tab-list"
-                  className={`rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium ${isRemTheme ? "rem-tab-trigger" : ""}`}>
+                  className={`rounded-none whitespace-nowrap text-[11px] sm:text-sm px-2 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium ${isRemTheme ? "rem-tab-trigger" : ""}`}>
                   My List
                 </TabsTrigger>
                 <TabsTrigger value="radar" data-testid="tab-radar"
-                  className={`rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1 ${isRemTheme ? "rem-tab-trigger" : ""}`}>
+                  className={`rounded-none whitespace-nowrap text-[11px] sm:text-sm px-2 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1 ${isRemTheme ? "rem-tab-trigger" : ""}`}>
                   <Sparkles className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Radar</span>
                 </TabsTrigger>
                 <TabsTrigger value="ranking" data-testid="tab-ranking"
-                  className={`rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1 ${isRemTheme ? "rem-tab-trigger" : ""}`}>
+                  className={`rounded-none whitespace-nowrap text-[11px] sm:text-sm px-2 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1 ${isRemTheme ? "rem-tab-trigger" : ""}`}>
                   <Trophy className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Rankings</span>
                 </TabsTrigger>
                 <TabsTrigger value="analytics" data-testid="tab-analytics"
-                  className={`rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1 ${isRemTheme ? "rem-tab-trigger" : ""}`}>
+                  className={`rounded-none whitespace-nowrap text-[11px] sm:text-sm px-2 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1 ${isRemTheme ? "rem-tab-trigger" : ""}`}>
                   <PieChart className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Analytics</span>
                 </TabsTrigger>
                 <TabsTrigger value="friends" data-testid="tab-friends"
-                  className={`rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1 ${isRemTheme ? "rem-tab-trigger" : ""}`}>
+                  className={`rounded-none whitespace-nowrap text-[11px] sm:text-sm px-2 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1 ${isRemTheme ? "rem-tab-trigger" : ""}`}>
                   <Users className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Friends</span>
                 </TabsTrigger>
                 <TabsTrigger value="discover" data-testid="tab-discover"
-                  className={`rounded-none text-xs sm:text-sm px-2.5 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1 ${isRemTheme ? "rem-tab-trigger" : ""}`}>
+                  className={`rounded-none whitespace-nowrap text-[11px] sm:text-sm px-2 sm:px-4 border border-transparent data-[state=active]:border-primary/80 data-[state=active]:bg-primary data-[state=active]:text-black data-[state=active]:shadow-neon font-medium gap-1 ${isRemTheme ? "rem-tab-trigger" : ""}`}>
                   <Compass className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Discover</span>
                 </TabsTrigger>

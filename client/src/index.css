@@ -1018,3 +1018,41 @@ input[type="text"] {
   pointer-events: none;
   opacity: 0.15;
 }
+
+/* ── Mobile responsiveness baseline ── */
+@media (max-width: 640px) {
+  h1, h2, h3, h4, h5, h6 {
+    letter-spacing: 0.08em;
+  }
+
+  .premium-shell,
+  .premium-section,
+  .deco-card,
+  .holo-glass,
+  .glass,
+  .glass-light {
+    padding: 0.8rem !important;
+  }
+
+  [role="tablist"] {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  [role="tablist"]::-webkit-scrollbar {
+    display: none;
+  }
+
+  [role="tab"] {
+    min-height: 2.25rem;
+    font-size: 0.72rem;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  button,
+  input,
+  textarea,
+  [role="combobox"] {
+    min-height: 2.25rem;
+  }
+}

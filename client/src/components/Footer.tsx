@@ -51,7 +51,7 @@ const Footer = () => {
   return (
     <footer className="border-t border-primary/30 bg-background/80 backdrop-blur-lg mt-auto">
       <div className="container mx-auto px-4 py-10">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 lg:gap-10 premium-section p-6 sm:p-7">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8 lg:gap-10 premium-section p-4 sm:p-6 lg:p-7">
 
           {/* About + Social */}
           <div className="space-y-4">
