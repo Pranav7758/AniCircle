@@ -780,56 +780,77 @@ const Index = () => {
 
             {animeList.length > 0 && <StatsBar animeList={animeList} />}
 
+            {/* ── Status legend quick-filter pills ── */}
+            {animeList.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {[
+                  { key: "all", label: "All", count: new Set(animeList.map(a => a.title)).size, color: "#888", bg: "rgba(255,255,255,0.06)", border: "rgba(255,255,255,0.12)" },
+                  { key: "watching", label: "Watching", count: statusCounts.watching || 0, color: "#a78bfa", bg: "rgba(88,28,220,0.18)", border: "rgba(124,58,237,0.45)" },
+                  { key: "completed", label: "Completed", count: statusCounts.completed || 0, color: "#6ee7b7", bg: "rgba(4,120,87,0.18)", border: "rgba(16,185,129,0.45)" },
+                  { key: "plan_to_watch", label: "Plan", count: statusCounts.plan_to_watch || 0, color: "#93c5fd", bg: "rgba(29,78,216,0.18)", border: "rgba(59,130,246,0.45)" },
+                  { key: "on_hold", label: "On Hold", count: statusCounts.on_hold || 0, color: "#fcd34d", bg: "rgba(146,64,14,0.18)", border: "rgba(245,158,11,0.45)" },
+                  { key: "dropped", label: "Dropped", count: statusCounts.dropped || 0, color: "#fca5a5", bg: "rgba(153,27,27,0.18)", border: "rgba(239,68,68,0.45)" },
+                ].filter(s => s.key === "all" || s.count > 0).map(s => (
+                  <button
+                    key={s.key}
+                    onClick={() => setStatusFilter(s.key)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold tracking-wide transition-all duration-200 hover:scale-105"
+                    style={{
+                      background: statusFilter === s.key ? s.bg : "rgba(255,255,255,0.04)",
+                      border: `1px solid ${statusFilter === s.key ? s.border : "rgba(255,255,255,0.08)"}`,
+                      color: statusFilter === s.key ? s.color : "rgba(255,255,255,0.4)",
+                      boxShadow: statusFilter === s.key ? `0 0 12px ${s.border}` : "none",
+                    }}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: s.color, opacity: statusFilter === s.key ? 1 : 0.4 }} />
+                    {s.label}
+                    <span className="font-mono text-[10px] opacity-60">{s.count}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="mb-4 premium-section p-3 sm:p-4">
-              <div className="flex flex-col md:flex-row gap-3">
+              <div className="flex flex-col sm:flex-row gap-2.5">
                 <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
                   <Input
                     placeholder="Search your anime..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 h-10 rounded-xl border-border/50 bg-muted/30 text-sm focus:border-primary/40"
+                    className="pl-9 h-9 rounded-none border-border/40 bg-black/30 text-sm focus:border-primary/50 text-foreground placeholder:text-muted-foreground/40"
                     data-testid="input-search"
                   />
                 </div>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger className="h-10 w-full md:w-48 rounded-xl border-border/50 bg-muted/30 text-sm" data-testid="select-status-filter">
-                    <SelectValue placeholder="Filter by status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Status ({animeList.length})</SelectItem>
-                    <SelectItem value="watching">Watching ({statusCounts.watching || 0})</SelectItem>
-                    <SelectItem value="completed">Completed ({statusCounts.completed || 0})</SelectItem>
-                    <SelectItem value="plan_to_watch">Plan to Watch ({statusCounts.plan_to_watch || 0})</SelectItem>
-                    <SelectItem value="on_hold">On Hold ({statusCounts.on_hold || 0})</SelectItem>
-                    <SelectItem value="dropped">Dropped ({statusCounts.dropped || 0})</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={sortBy} onValueChange={(v) => { setSortBy(v); localStorage.setItem("animeSortBy", v); }}>
-                  <SelectTrigger className="h-10 w-full md:w-44 rounded-xl border-border/50 bg-muted/30 text-sm" data-testid="select-sort">
-                    <ArrowUpDown className="w-3.5 h-3.5 mr-1.5 text-muted-foreground/60" />
-                    <SelectValue placeholder="Sort by" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="default">Recently Added</SelectItem>
-                    <SelectItem value="title-asc">Title A → Z</SelectItem>
-                    <SelectItem value="title-desc">Title Z → A</SelectItem>
-                    <SelectItem value="rating-desc">Highest Rated</SelectItem>
-                    <SelectItem value="progress-desc">Most Watched</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={genreFilter} onValueChange={setGenreFilter}>
-                  <SelectTrigger className="h-10 w-full md:w-44 rounded-xl border-border/50 bg-muted/30 text-sm" data-testid="select-genre">
-                    <Tag className="w-3.5 h-3.5 mr-1.5 text-muted-foreground/60" />
-                    <SelectValue placeholder="Genre" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Genres</SelectItem>
-                    {allGenres.map(g => (
-                      <SelectItem key={g} value={g}>{g}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2 flex-wrap sm:flex-nowrap">
+                  <Select value={sortBy} onValueChange={(v) => { setSortBy(v); localStorage.setItem("animeSortBy", v); }}>
+                    <SelectTrigger className="h-9 w-full sm:w-40 rounded-none border-border/40 bg-black/30 text-xs" data-testid="select-sort">
+                      <ArrowUpDown className="w-3 h-3 mr-1.5 text-muted-foreground/50" />
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default">Recently Added</SelectItem>
+                      <SelectItem value="title-asc">Title A → Z</SelectItem>
+                      <SelectItem value="title-desc">Title Z → A</SelectItem>
+                      <SelectItem value="rating-desc">Highest Rated</SelectItem>
+                      <SelectItem value="progress-desc">Most Watched</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {allGenres.length > 0 && (
+                    <Select value={genreFilter} onValueChange={setGenreFilter}>
+                      <SelectTrigger className="h-9 w-full sm:w-36 rounded-none border-border/40 bg-black/30 text-xs" data-testid="select-genre">
+                        <Tag className="w-3 h-3 mr-1.5 text-muted-foreground/50" />
+                        <SelectValue placeholder="Genre" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Genres</SelectItem>
+                        {allGenres.map(g => (
+                          <SelectItem key={g} value={g}>{g}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -862,10 +883,14 @@ const Index = () => {
               </div>
             ) : (
               <>
-                <p className="text-xs text-muted-foreground mb-1 deco-divider w-fit">
-                  {Object.keys(groupedAnime).length} title{Object.keys(groupedAnime).length !== 1 ? "s" : ""}
-                  {filteredAnimeList.length !== animeList.length ? ` (filtered from ${new Set(animeList.map(a => a.title)).size})` : ""}
-                </p>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="h-px flex-1 bg-white/5" />
+                  <span className="text-[10px] text-muted-foreground/40 uppercase tracking-[0.2em] shrink-0">
+                    {Object.keys(groupedAnime).length} title{Object.keys(groupedAnime).length !== 1 ? "s" : ""}
+                    {filteredAnimeList.length !== animeList.length ? ` · filtered` : ""}
+                  </span>
+                  <div className="h-px flex-1 bg-white/5" />
+                </div>
                 <div className={`grid gap-3 sm:gap-4 ${gridClass}`}>
                   {Object.entries(groupedAnime).map(([title, seasons], cardIndex) => (
                     <div key={title} className="animate-stagger-in" style={{ animationDelay: `${Math.min(cardIndex * 40, 600)}ms` }}>
