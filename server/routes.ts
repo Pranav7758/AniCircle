@@ -748,16 +748,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post("/api/feedback", async (req, res) => {
+    const { type, name, email, message } = req.body || {};
+    if (!message || !type) {
+      return res.status(400).json({ error: "Message and type are required" });
+    }
+
+    const payload = {
+      type: String(type),
+      name: name ? String(name) : null,
+      email: email ? String(email) : null,
+      message: String(message),
+    };
+
+    // Primary write path: Drizzle/Postgres
     try {
-      const { type, name, email, message } = req.body;
-      if (!message || !type) {
-        return res.status(400).json({ error: "Message and type are required" });
-      }
-      const saved = await storage.saveFeedback({ type, name: name || null, email: email || null, message });
-      res.json({ success: true, id: saved.id });
+      const saved = await storage.saveFeedback(payload);
+      return res.json({ success: true, id: saved.id });
     } catch (err: any) {
-      console.error("Feedback error:", err?.message);
-      res.status(500).json({ error: "Failed to save feedback" });
+      console.error("Feedback DB error (primary):", err?.message || err);
+    }
+
+    // Fallback write path: Supabase service-role REST insert
+    try {
+      if (!supabase) {
+        return res.status(500).json({ error: "Failed to save feedback" });
+      }
+      const { data, error } = await supabase
+        .from("feedback")
+        .insert(payload)
+        .select("id")
+        .single();
+
+      if (error) {
+        console.error("Feedback DB error (fallback):", error.message);
+        return res.status(500).json({ error: "Failed to save feedback" });
+      }
+
+      return res.json({ success: true, id: data?.id ?? null, via: "fallback" });
+    } catch (err: any) {
+      console.error("Feedback error:", err?.message || err);
+      return res.status(500).json({ error: "Failed to save feedback" });
     }
   });
 
