@@ -7,7 +7,7 @@ import {
   type Feedback, type InsertFeedback
 } from "../shared/schema";
 import { db } from "./db";
-import { eq, or, and, desc, asc, inArray } from "drizzle-orm";
+import { eq, or, and, desc, asc, inArray, sql } from "drizzle-orm";
 
 export interface IStorage {
   getProfile(id: string): Promise<Profile | undefined>;
@@ -41,6 +41,23 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  private feedbackTableReady = false;
+
+  private async ensureFeedbackTable(): Promise<void> {
+    if (this.feedbackTableReady) return;
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS feedback (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        type text NOT NULL,
+        name text,
+        email text,
+        message text NOT NULL,
+        created_at timestamp DEFAULT now() NOT NULL
+      )
+    `);
+    this.feedbackTableReady = true;
+  }
+
   async getProfile(id: string): Promise<Profile | undefined> {
     const [profile] = await db.select().from(profiles).where(eq(profiles.id, id));
     return profile || undefined;
@@ -231,8 +248,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async saveFeedback(data: InsertFeedback): Promise<Feedback> {
-    const [result] = await db.insert(feedback).values(data).returning();
-    return result;
+    try {
+      const [result] = await db.insert(feedback).values(data).returning();
+      return result;
+    } catch (error: any) {
+      const message = String(error?.message || "");
+      if (message.includes("relation \"feedback\" does not exist")) {
+        await this.ensureFeedbackTable();
+        const [result] = await db.insert(feedback).values(data).returning();
+        return result;
+      }
+      throw error;
+    }
   }
 
   async getAllFeedback(): Promise<Feedback[]> {

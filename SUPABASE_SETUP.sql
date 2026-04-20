@@ -57,6 +57,16 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
 );
 
+-- Create feedback table if it doesn't exist
+CREATE TABLE IF NOT EXISTS feedback (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  type TEXT NOT NULL,
+  name TEXT,
+  email TEXT,
+  message TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_anime_user_id ON anime(user_id);
 CREATE INDEX IF NOT EXISTS idx_anime_status ON anime(status);
