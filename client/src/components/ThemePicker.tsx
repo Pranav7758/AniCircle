@@ -3,8 +3,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { THEME_PRESETS, useTheme } from "@/hooks/use-theme";
 import { Check, Palette } from "lucide-react";
 import { toast } from "sonner";
-
-const REM_IMAGE = "https://static.wikia.nocookie.net/rezero/images/4/4f/Rem_Anime.png";
+import remStickerImg from "@assets/re-zero-sad-kawaii-rem-sticker_1776671137105.png";
 
 export default function ThemePicker() {
   const { theme, setTheme, setCustomColor } = useTheme();
@@ -131,14 +130,10 @@ export default function ThemePicker() {
                     boxShadow: "0 0 10px rgba(80,140,255,0.3)",
                   }}>
                   <img
-                    src={REM_IMAGE}
+                    src={remStickerImg}
                     alt="Rem"
-                    className="w-full h-full object-cover"
-                    style={{ objectPosition: "top center" }}
-                    onError={(e) => {
-                      const el = e.currentTarget.parentElement!;
-                      el.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:rgba(29,78,216,0.3);font-size:20px">💙</div>';
-                    }}
+                    className="w-full h-full object-contain"
+                    style={{ objectPosition: "center bottom" }}
                   />
                   {theme.name === "Rem" && (
                     <div className="absolute inset-0 flex items-center justify-center"
