@@ -85,6 +85,17 @@ export const activityFeed = pgTable("activity_feed", {
   index("idx_activity_feed_created_at").on(table.createdAt),
 ]);
 
+export const onboardingState = pgTable("onboarding_state", {
+  userId: uuid("user_id").primaryKey().references(() => profiles.id, { onDelete: "cascade" }),
+  status: text("status").default("not_started").notNull(),
+  onboardingVersion: integer("onboarding_version").default(1).notNull(),
+  completedAt: timestamp("completed_at"),
+  skippedAt: timestamp("skipped_at"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_onboarding_state_status").on(table.status),
+]);
+
 export const profilesRelations = relations(profiles, ({ many }) => ({
   anime: many(anime),
   sentFriendRequests: many(friends, { relationName: "sentRequests" }),
@@ -159,6 +170,10 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
   createdAt: true,
 });
 
+export const insertOnboardingStateSchema = createInsertSchema(onboardingState).omit({
+  updatedAt: true,
+});
+
 export type Profile = typeof profiles.$inferSelect;
 export type InsertProfile = z.infer<typeof insertProfileSchema>;
 export type Anime = typeof anime.$inferSelect;
@@ -169,3 +184,5 @@ export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type Feedback = typeof feedback.$inferSelect;
 export type InsertFeedback = z.infer<typeof insertFeedbackSchema>;
+export type OnboardingState = typeof onboardingState.$inferSelect;
+export type InsertOnboardingState = z.infer<typeof insertOnboardingStateSchema>;

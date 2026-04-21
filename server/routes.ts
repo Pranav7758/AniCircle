@@ -156,6 +156,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/onboarding", requireAuth, async (req: any, res) => {
+    try {
+      const state = await storage.getOnboardingState(req.userId);
+      if (!state) {
+        return res.json({
+          status: "not_started",
+          onboardingVersion: 1,
+          completedAt: null,
+          skippedAt: null,
+        });
+      }
+      return res.json(state);
+    } catch (error: any) {
+      console.error("Error fetching onboarding state:", error);
+      return res.status(500).json({ error: "Failed to fetch onboarding state" });
+    }
+  });
+
+  app.patch("/api/onboarding", requireAuth, async (req: any, res) => {
+    try {
+      const status = req.body?.status;
+      const onboardingVersion = Number(req.body?.onboardingVersion ?? 1);
+      if (!["not_started", "skipped", "completed"].includes(status)) {
+        return res.status(400).json({ error: "Invalid onboarding status" });
+      }
+      const updated = await storage.upsertOnboardingState(req.userId, {
+        status,
+        onboardingVersion: Number.isFinite(onboardingVersion) ? onboardingVersion : 1,
+      });
+      return res.json(updated);
+    } catch (error: any) {
+      console.error("Error updating onboarding state:", error);
+      return res.status(500).json({ error: "Failed to update onboarding state" });
+    }
+  });
+
   app.get("/api/friends", requireAuth, async (req: any, res) => {
     try {
       const friendsList = await storage.getFriends(req.userId);

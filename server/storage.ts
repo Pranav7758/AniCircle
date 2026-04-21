@@ -1,10 +1,11 @@
 import { 
-  profiles, anime, friends, notifications, activityFeed, feedback,
+  profiles, anime, friends, notifications, activityFeed, feedback, onboardingState,
   type Profile, type InsertProfile, 
   type Anime, type InsertAnime,
   type Friend, type InsertFriend,
   type Notification, type InsertNotification,
-  type Feedback, type InsertFeedback
+  type Feedback, type InsertFeedback,
+  type OnboardingState
 } from "../shared/schema";
 import { db } from "./db";
 import { eq, or, and, desc, asc, inArray, sql } from "drizzle-orm";
@@ -38,10 +39,16 @@ export interface IStorage {
 
   saveFeedback(data: InsertFeedback): Promise<Feedback>;
   getAllFeedback(): Promise<Feedback[]>;
+  getOnboardingState(userId: string): Promise<OnboardingState | undefined>;
+  upsertOnboardingState(
+    userId: string,
+    data: { status: "not_started" | "skipped" | "completed"; onboardingVersion: number }
+  ): Promise<OnboardingState>;
 }
 
 export class DatabaseStorage implements IStorage {
   private feedbackTableReady = false;
+  private onboardingTableReady = false;
 
   private async ensureFeedbackTable(): Promise<void> {
     if (this.feedbackTableReady) return;
@@ -56,6 +63,21 @@ export class DatabaseStorage implements IStorage {
       )
     `);
     this.feedbackTableReady = true;
+  }
+
+  private async ensureOnboardingTable(): Promise<void> {
+    if (this.onboardingTableReady) return;
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS onboarding_state (
+        user_id uuid PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
+        status text NOT NULL DEFAULT 'not_started',
+        onboarding_version integer NOT NULL DEFAULT 1,
+        completed_at timestamp,
+        skipped_at timestamp,
+        updated_at timestamp NOT NULL DEFAULT now()
+      )
+    `);
+    this.onboardingTableReady = true;
   }
 
   async getProfile(id: string): Promise<Profile | undefined> {
@@ -264,6 +286,67 @@ export class DatabaseStorage implements IStorage {
 
   async getAllFeedback(): Promise<Feedback[]> {
     return db.select().from(feedback).orderBy(desc(feedback.createdAt));
+  }
+
+  async getOnboardingState(userId: string): Promise<OnboardingState | undefined> {
+    try {
+      const [result] = await db
+        .select()
+        .from(onboardingState)
+        .where(eq(onboardingState.userId, userId));
+      return result || undefined;
+    } catch (error: any) {
+      if (String(error?.message || "").includes("relation \"onboarding_state\" does not exist")) {
+        await this.ensureOnboardingTable();
+        const [result] = await db
+          .select()
+          .from(onboardingState)
+          .where(eq(onboardingState.userId, userId));
+        return result || undefined;
+      }
+      throw error;
+    }
+  }
+
+  async upsertOnboardingState(
+    userId: string,
+    data: { status: "not_started" | "skipped" | "completed"; onboardingVersion: number }
+  ): Promise<OnboardingState> {
+    const now = new Date();
+    const values = {
+      userId,
+      status: data.status,
+      onboardingVersion: data.onboardingVersion,
+      completedAt: data.status === "completed" ? now : null,
+      skippedAt: data.status === "skipped" ? now : null,
+      updatedAt: now,
+    };
+
+    try {
+      const [result] = await db
+        .insert(onboardingState)
+        .values(values)
+        .onConflictDoUpdate({
+          target: onboardingState.userId,
+          set: values,
+        })
+        .returning();
+      return result;
+    } catch (error: any) {
+      if (String(error?.message || "").includes("relation \"onboarding_state\" does not exist")) {
+        await this.ensureOnboardingTable();
+        const [result] = await db
+          .insert(onboardingState)
+          .values(values)
+          .onConflictDoUpdate({
+            target: onboardingState.userId,
+            set: values,
+          })
+          .returning();
+        return result;
+      }
+      throw error;
+    }
   }
 }
 

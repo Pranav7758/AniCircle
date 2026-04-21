@@ -8,7 +8,7 @@ import { toast } from "sonner";
 
 const STORAGE_KEY = "anicircle_suggestion_shown";
 
-const SuggestionPopup = () => {
+const SuggestionPopup = ({ disabled = false }: { disabled?: boolean }) => {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -18,6 +18,10 @@ const SuggestionPopup = () => {
   const feedbackEndpoint = `${apiBase}/api/feedback`;
 
   useEffect(() => {
+    if (disabled) {
+      setOpen(false);
+      return;
+    }
     const alreadyShown = localStorage.getItem(STORAGE_KEY);
     if (!alreadyShown) {
       const timer = setTimeout(() => {
@@ -25,7 +29,7 @@ const SuggestionPopup = () => {
       }, 8000);
       return () => clearTimeout(timer);
     }
-  }, []);
+  }, [disabled]);
 
   const handleDismiss = () => {
     localStorage.setItem(STORAGE_KEY, "true");

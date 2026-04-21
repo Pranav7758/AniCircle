@@ -6,7 +6,7 @@ import { fetchAniList, GET_ANALYTICS_QUERY } from "@/services/anilist";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LogOut, Plus, Search, Sparkles, Trophy, Users, Settings, PieChart, Play, CheckCircle2, Clock, ArrowUpDown, Tag, Share2, Loader2, Inbox, Compass } from "lucide-react";
+import { LogOut, Plus, Search, Sparkles, Trophy, Users, Settings, PieChart, Play, CheckCircle2, Clock, ArrowUpDown, Tag, Share2, Loader2, Inbox, Compass, GraduationCap } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import AnimeRanking from "@/components/AnimeRanking";
@@ -25,6 +25,8 @@ import SuggestionPopup from "@/components/SuggestionPopup";
 import FloatingSocialBar from "@/components/FloatingSocialBar";
 import ThemePicker from "@/components/ThemePicker";
 import { useTheme } from "@/hooks/use-theme";
+import { useOnboardingTour } from "@/hooks/use-onboarding-tour";
+import OnboardingTour from "@/components/OnboardingTour";
 import remSadImg from "@assets/re-zero-sad-kawaii-rem-sticker_1776671137105.webp";
 
 interface Anime {
@@ -171,6 +173,13 @@ const Index = () => {
   const [gridSize, setGridSize] = useState<string>(() => {
     const saved = localStorage.getItem("animeGridSize");
     return saved || "medium";
+  });
+
+  const onboarding = useOnboardingTour({
+    userId: user?.id,
+    activeTab,
+    mountedTab,
+    setActiveTab,
   });
 
   useEffect(() => {
@@ -1199,6 +1208,32 @@ const Index = () => {
               </div>
             </div>
 
+            <div className="space-y-4">
+              <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Guide</h4>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-border/50 bg-background/50 holo-glass">
+                <div className="space-y-1">
+                  <span className="text-sm font-semibold text-foreground block">New User Walkthrough</span>
+                  <span className="text-xs text-muted-foreground block leading-relaxed">
+                    Replay the interactive guide anytime to revisit all features quickly.
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0"
+                  onClick={() => {
+                    onboarding.replay();
+                    setIsSettingsOpen(false);
+                  }}
+                  data-testid="button-replay-guide"
+                >
+                  <GraduationCap className="w-4 h-4" />
+                  Replay Guide
+                </Button>
+              </div>
+            </div>
+
             {isRemTheme && (
               <div className="space-y-4">
                 <h4 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Customize Rem</h4>
@@ -1295,8 +1330,21 @@ const Index = () => {
       </Dialog>
 
       <Footer />
-      <SuggestionPopup />
+      <SuggestionPopup disabled={onboarding.onboardingActive} />
       <FloatingSocialBar />
+      <OnboardingTour
+        isWelcomeOpen={onboarding.isWelcomeOpen}
+        isTourOpen={onboarding.isTourOpen}
+        currentStep={onboarding.currentStep}
+        stepIndex={onboarding.stepIndex}
+        totalSteps={onboarding.steps.length}
+        targetRect={onboarding.targetRect}
+        targetVisible={onboarding.targetVisible}
+        onStart={onboarding.start}
+        onSkip={onboarding.skip}
+        onBack={onboarding.back}
+        onNext={onboarding.next}
+      />
     </div>
   );
 };

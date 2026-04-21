@@ -67,6 +67,16 @@ CREATE TABLE IF NOT EXISTS feedback (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
 );
 
+-- Create onboarding state table if it doesn't exist
+CREATE TABLE IF NOT EXISTS onboarding_state (
+  user_id UUID PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'not_started',
+  onboarding_version INTEGER NOT NULL DEFAULT 1,
+  completed_at TIMESTAMP WITH TIME ZONE,
+  skipped_at TIMESTAMP WITH TIME ZONE,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_anime_user_id ON anime(user_id);
 CREATE INDEX IF NOT EXISTS idx_anime_status ON anime(status);
